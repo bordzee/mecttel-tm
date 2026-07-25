@@ -1,0 +1,88 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function eventIsPublic(tournamentId, eventId) {
+      return exists(/databases/$(database)/documents/tournaments/$(tournamentId)/events/$(eventId))
+        && get(/databases/$(database)/documents/tournaments/$(tournamentId)/events/$(eventId)).data.status in ['upcoming', 'ongoing'];
+    }
+
+    match /profiles/{userId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if isAdmin() || resource.data.public_visible == true;
+      allow write: if isAdmin();
+
+      match /events/{eventId} {
+        allow read: if resource.data.status in ['upcoming', 'ongoing'] || isAdmin();
+        allow write: if isAdmin();
+      }
+    }
+
+    match /teams/{docId} {
+      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /team_players/{docId} {
+      allow read: if isAdmin() || (
+        exists(/databases/$(database)/documents/teams/$(resource.data.team_id))
+        && eventIsPublic(
+          get(/databases/$(database)/documents/teams/$(resource.data.team_id)).data.tournament_id,
+          get(/databases/$(database)/documents/teams/$(resource.data.team_id)).data.event_id
+        )
+      );
+      allow write: if isAdmin();
+    }
+
+    match /players/{docId} {
+      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /pairs/{docId} {
+      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /tournament_entries/{docId} {
+      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /groups/{docId} {
+      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /group_members/{docId} {
+      allow read: if isAdmin() || (
+        exists(/databases/$(database)/documents/groups/$(resource.data.group_id))
+        && eventIsPublic(
+          get(/databases/$(database)/documents/groups/$(resource.data.group_id)).data.tournament_id,
+          get(/databases/$(database)/documents/groups/$(resource.data.group_id)).data.event_id
+        )
+      );
+      allow write: if isAdmin();
+    }
+
+    match /group_matches/{docId} {
+      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /knockout_matches/{docId} {
+      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}
