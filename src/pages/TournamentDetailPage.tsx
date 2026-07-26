@@ -11,7 +11,7 @@ import {
   PageTitle,
   SubsectionTitle,
 } from '../components/ui/primitives'
-import { fetchTournament, fetchEvents } from '../lib/tournamentService'
+import { fetchTournament, fetchPublicEvents } from '../lib/tournamentService'
 import type { Tournament, TournamentEvent } from '../types'
 
 export function TournamentDetailPage() {
@@ -22,10 +22,10 @@ export function TournamentDetailPage() {
 
   useEffect(() => {
     if (!tournamentId) return
-    Promise.all([fetchTournament(tournamentId), fetchEvents(tournamentId)])
+    Promise.all([fetchTournament(tournamentId), fetchPublicEvents(tournamentId)])
       .then(([t, e]) => {
         setTournament(t)
-        setEvents(e.filter((ev) => ev.status === 'upcoming' || ev.status === 'ongoing'))
+        setEvents(e)
       })
       .catch((e) =>
         setError(

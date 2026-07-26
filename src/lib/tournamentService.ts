@@ -94,6 +94,17 @@ export async function fetchEvents(tournamentId: string): Promise<TournamentEvent
   )
 }
 
+export async function fetchPublicEvents(tournamentId: string): Promise<TournamentEvent[]> {
+  const snap = await getDocs(
+    query(eventsRef(tournamentId), where('status', 'in', ['upcoming', 'ongoing'])),
+  )
+  return snap.docs
+    .map((d) =>
+      withId(d.id, { tournament_id: tournamentId, ...d.data() } as Omit<TournamentEvent, 'id'>),
+    )
+    .sort((a, b) => a.sort_order - b.sort_order)
+}
+
 export async function fetchEvent(tournamentId: string, eventId: string): Promise<TournamentEvent> {
   const snap = await getDoc(doc(db, 'tournaments', tournamentId, 'events', eventId))
   if (!snap.exists()) throw new Error('Event not found')
@@ -103,14 +114,14 @@ export async function fetchEvent(tournamentId: string, eventId: string): Promise
 export async function fetchPublicTournaments(): Promise<
   (Tournament & { events: TournamentEvent[] })[]
 > {
-  const snap = await getDocs(collection(db, 'tournaments'))
+  const snap = await getDocs(
+    query(collection(db, 'tournaments'), where('public_visible', '==', true)),
+  )
   const results: (Tournament & { events: TournamentEvent[] })[] = []
 
   for (const d of snap.docs) {
     const tournament = withId(d.id, d.data() as Omit<Tournament, 'id'>)
-    if (tournament.public_visible === false) continue
-    const events = await fetchEvents(tournament.id)
-    const publicEvents = events.filter((e) => e.status === 'upcoming' || e.status === 'ongoing')
+    const publicEvents = await fetchPublicEvents(tournament.id)
     if (publicEvents.length) {
       results.push({ ...tournament, events: publicEvents })
     }
