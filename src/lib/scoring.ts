@@ -32,7 +32,12 @@ export function calculateTieFromRubbers(
     if (played.length >= maxRubbers) {
       return { scoreA, scoreB, valid: false, error: 'Tie must have a winner after all rubbers played' }
     }
-    return { scoreA, scoreB, valid: true }
+    return {
+      scoreA,
+      scoreB,
+      valid: false,
+      error: 'Tie is not complete — a team must reach the win threshold',
+    }
   }
 
   const winnerScore = Math.max(scoreA, scoreB)
@@ -54,6 +59,13 @@ export function validateSetScore(
   scoreB: number,
   bestOf: 3 | 5 | 7,
 ): { valid: boolean; error?: string } {
+  if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB)) {
+    return { valid: false, error: 'Scores must be whole numbers' }
+  }
+  if (scoreA < 0 || scoreB < 0) {
+    return { valid: false, error: 'Scores cannot be negative' }
+  }
+
   const winsNeeded = Math.ceil(bestOf / 2)
   const winner = Math.max(scoreA, scoreB)
   const loser = Math.min(scoreA, scoreB)

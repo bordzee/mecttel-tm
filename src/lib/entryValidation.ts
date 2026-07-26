@@ -104,10 +104,64 @@ export type NewEntryInput =
       player_b: string
     }
 
+export interface ValidateNewEntryOptions {
+  rosterSize?: number
+  /** Normalized player names from other teams' rosters. */
+  otherTeamRosterNames?: string[]
+}
+
+function playerNameTaken(entries: TournamentEntry[], name: string): TournamentEntry | null {
+  const key = normalizeEntryName(name)
+  if (!key) return null
+  for (const entry of entries) {
+    if (entry.entry_type === 'player' && entry.player) {
+      if (normalizeEntryName(entry.player.name) === key) return entry
+    }
+    if (entry.entry_type === 'pair' && entry.pair) {
+      if (
+        normalizeEntryName(entry.pair.player_a) === key ||
+        normalizeEntryName(entry.pair.player_b) === key
+      ) {
+        return entry
+      }
+    }
+  }
+  return null
+}
+
+/** Cross-team roster collisions (same person on two team rosters). */
+export function rosterNameCollisionWarnings(
+  entries: TournamentEntry[],
+  rostersByTeamId: Map<string, string[]>,
+): string[] {
+  const nameToTeams = new Map<string, Set<string>>()
+  for (const entry of entries) {
+    if (entry.entry_type !== 'team' || !entry.team_id || !entry.team) continue
+    const roster = rostersByTeamId.get(entry.team_id) ?? []
+    for (const player of roster) {
+      const key = normalizeEntryName(player)
+      if (!key) continue
+      const teams = nameToTeams.get(key) ?? new Set<string>()
+      teams.add(entry.team.name)
+      nameToTeams.set(key, teams)
+    }
+  }
+  const warnings: string[] = []
+  for (const [name, teams] of nameToTeams) {
+    if (teams.size > 1) {
+      warnings.push(
+        `Player "${name}" appears on rosters of ${[...teams].join(' and ')} — each player may only be on one team`,
+      )
+    }
+  }
+  return warnings
+}
+
 export function validateNewEntry(
   entries: TournamentEntry[],
   _eventType: EventType,
   input: NewEntryInput,
+  options?: ValidateNewEntryOptions,
 ): string | null {
   if (input.type === 'player') {
     const name = normalizeEntryName(input.name)
@@ -133,11 +187,29 @@ export function validateNewEntry(
   if (input.type === 'team') {
     const name = normalizeEntryName(input.name)
     if (!name) return 'Team name is required'
+    if (!input.roster.length) return 'Add at least one roster player'
+    if (options?.rosterSize != null && input.roster.length !== options.rosterSize) {
+      return `Roster must have exactly ${options.rosterSize} players`
+    }
+    const rosterKeys = input.roster.map((n) => normalizeEntryName(n)).filter(Boolean)
+    if (new Set(rosterKeys).size !== rosterKeys.length) {
+      return 'Roster cannot include duplicate player names'
+    }
     for (const entry of entries) {
       if (entry.entry_type === 'team' && entry.team) {
         if (normalizeEntryName(entry.team.name) === name) {
           return `Duplicate team: "${input.name.trim()}" is already registered`
         }
+      }
+    }
+    for (const player of input.roster) {
+      const key = normalizeEntryName(player)
+      if (options?.otherTeamRosterNames?.includes(key)) {
+        return `"${player.trim()}" is already on another team's roster`
+      }
+      const taken = playerNameTaken(entries, player)
+      if (taken) {
+        return `"${player.trim()}" is already registered in this division`
       }
     }
     return null
@@ -160,6 +232,12 @@ export function validateNewEntry(
           .join('|')
         if (existingKey === pairKey) {
           return `This pair is already registered`
+        }
+        for (const p of [entry.pair.player_a, entry.pair.player_b]) {
+          const pn = normalizeEntryName(p)
+          if (pn === a || pn === b) {
+            return `"${pn === a ? input.player_a : input.player_b}" is already registered in another doubles pair`
+          }
         }
       }
       if (entry.entry_type === 'player' && entry.player) {
@@ -186,7 +264,15 @@ export function validateNewEntry(
   return null
 }
 
-/** Block starting if duplicate names exist. */
-export function hasBlockingDuplicates(entries: TournamentEntry[], _eventType: EventType): boolean {
-  return findDuplicateGroups(entries).length > 0
+/** Block starting if duplicate names exist (including cross-team roster names when provided). */
+export function hasBlockingDuplicates(
+  entries: TournamentEntry[],
+  _eventType: EventType,
+  rostersByTeamId?: Map<string, string[]>,
+): boolean {
+  if (findDuplicateGroups(entries).length > 0) return true
+  if (rostersByTeamId && rosterNameCollisionWarnings(entries, rostersByTeamId).length > 0) {
+    return true
+  }
+  return false
 }

@@ -1,10 +1,11 @@
 import type { KnockoutMatch, KnockoutRound } from '../types'
 import { getEntryDisplayName } from '../lib/displayNames'
-import { SubsectionTitle } from './ui/primitives'
+import { PanelSectionTitle } from './ui/primitives'
+import { MatchCard } from './MatchCard'
 
 function roundLabel(round: KnockoutRound): string {
-  if (round === 'quarter') return 'Quarters'
-  if (round === 'semi') return 'Semis'
+  if (round === 'quarter') return 'Quarterfinals'
+  if (round === 'semi') return 'Semifinals'
   return 'Final'
 }
 
@@ -12,35 +13,80 @@ function entryName(match: KnockoutMatch, side: 'a' | 'b'): string {
   const entry = side === 'a' ? match.entry_a : match.entry_b
   if (entry) return getEntryDisplayName(entry)
   if (side === 'b' && match.outcome === 'bye') return 'BYE'
+  if (side === 'a' && !entry && match.pending_odd_round) return 'Winner play-in'
+  if (side === 'b' && !entry && match.pending_odd_round) return 'TBD'
   return 'TBD'
 }
 
-function MatchRow({ match }: { match: KnockoutMatch }) {
+export function knockoutMatchLabel(match: KnockoutMatch, index: number): string {
+  if (match.is_odd_play_in) {
+    return match.status === 'completed' ? 'PLAY-IN · COMPLETED' : 'PLAY-IN · PENDING'
+  }
+
+  const roundPrefix =
+    match.round === 'final' ? 'FINAL' : match.round === 'semi' ? 'SEMIFINAL' : 'QUARTERFINAL'
+
+  if (match.outcome === 'bye') return `${roundPrefix} ${index + 1} · BYE`
+  if (match.pending_odd_round) return `${roundPrefix} ${index + 1} · AWAITING`
+  return `${roundPrefix} ${index + 1}`
+}
+
+function MatchRow({ match, index }: { match: KnockoutMatch; index: number }) {
+  const label = knockoutMatchLabel(match, index)
   const aWon = match.winner_entry_id === match.entry_a_id
   const bWon = match.winner_entry_id === match.entry_b_id
   const isBye = match.outcome === 'bye'
+  const completed = match.status === 'completed' && !isBye
+  const awaiting = match.pending_odd_round && match.status !== 'completed'
+
+  if (completed) {
+    return (
+      <MatchCard
+        label={label}
+        homeName={entryName(match, 'a')}
+        awayName={entryName(match, 'b')}
+        scoreA={match.score_a}
+        scoreB={match.score_b}
+        homeWon={aWon}
+        awayWon={bWon}
+      />
+    )
+  }
+
+  const labelClass = isBye
+    ? 'text-winner'
+    : awaiting
+      ? 'text-text-steel'
+      : 'text-text-steel'
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-3 space-y-1">
+    <div
+      className={`bg-card rounded-xl border p-3.5 space-y-2.5 ${
+        awaiting ? 'border-border' : 'border-border'
+      }`}
+    >
+      <p className={`text-[11px] font-bold uppercase tracking-wide ${labelClass}`}>{label}</p>
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-sm font-medium truncate ${aWon ? 'text-winner' : 'text-slate-900'}`}>
+        <span
+          className={`text-sm font-semibold truncate ${
+            awaiting ? 'text-text-steel' : 'text-text-bluewhite'
+          }`}
+        >
           {entryName(match, 'a')}
         </span>
-        {!isBye && match.score_a != null && (
-          <span className="text-sm font-bold text-slate-900 tabular-nums">{match.score_a}</span>
+        {!isBye && !awaiting && match.score_a != null && (
+          <span className="text-lg font-extrabold text-text-primary tabular-nums">{match.score_a}</span>
         )}
+        {awaiting && <span className="text-lg font-extrabold text-text-steel tabular-nums">–</span>}
       </div>
+      <div className="h-px bg-border" />
       <div className="flex items-center justify-between gap-2">
-        <span className={`text-sm font-medium truncate ${bWon ? 'text-winner' : 'text-slate-900'}`}>
-          {entryName(match, 'b')}
-        </span>
-        {!isBye && match.score_b != null && (
-          <span className="text-sm font-bold text-slate-900 tabular-nums">{match.score_b}</span>
+        <span className="text-sm font-semibold truncate text-text-steel">{entryName(match, 'b')}</span>
+        {!isBye && !awaiting && match.score_b != null && (
+          <span className="text-lg font-extrabold text-text-steel tabular-nums">{match.score_b}</span>
         )}
+        {awaiting && <span className="text-lg font-extrabold text-text-steel tabular-nums">–</span>}
       </div>
-      {isBye && <p className="text-xs text-slate-400">Bye</p>}
-      {match.is_odd_play_in && <p className="text-xs text-slate-400">Play-in</p>}
-      {match.pending_odd_round && <p className="text-xs text-slate-400">Pending play-in</p>}
     </div>
   )
 }
@@ -48,23 +94,29 @@ function MatchRow({ match }: { match: KnockoutMatch }) {
 export function KnockoutBracket({
   matches,
   round,
+  hideRoundTitle = false,
 }: {
   matches: KnockoutMatch[]
   round?: KnockoutRound
+  hideRoundTitle?: boolean
 }) {
   if (matches.length === 0) {
-    return <p className="text-sm text-slate-500">Knockout bracket not generated yet.</p>
+    return <p className="text-sm text-text-steel">Knockout bracket not generated yet.</p>
   }
+
+  const list = (
+    <div className="space-y-2.5">
+      {matches.map((match, index) => (
+        <MatchRow key={match.id} match={match} index={index} />
+      ))}
+    </div>
+  )
 
   if (round) {
     return (
-      <section>
-        <SubsectionTitle>{roundLabel(round)}</SubsectionTitle>
-        <div className="space-y-2 mt-3">
-          {matches.map((match) => (
-            <MatchRow key={match.id} match={match} />
-          ))}
-        </div>
+      <section className={hideRoundTitle ? undefined : 'space-y-3'}>
+        {!hideRoundTitle && <PanelSectionTitle>{roundLabel(round)}</PanelSectionTitle>}
+        {list}
       </section>
     )
   }
@@ -77,11 +129,11 @@ export function KnockoutBracket({
   return (
     <div className="space-y-6">
       {grouped.map(({ round: r, items }) => (
-        <section key={r}>
-          <SubsectionTitle>{roundLabel(r)}</SubsectionTitle>
-          <div className="space-y-2 mt-3">
-            {items.map((match) => (
-              <MatchRow key={match.id} match={match} />
+        <section key={r} className="space-y-3">
+          {!hideRoundTitle && <PanelSectionTitle>{roundLabel(r)}</PanelSectionTitle>}
+          <div className="space-y-2.5">
+            {items.map((match, index) => (
+              <MatchRow key={match.id} match={match} index={index} />
             ))}
           </div>
         </section>

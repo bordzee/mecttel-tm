@@ -9,5 +9,8 @@ export function generateRoundRobinPairs<T>(items: T[]): [T, T][] {
 }
 
 export function groupLabels(count: number): string[] {
-  return Array.from({ length: count }, (_, i) => String.fromCharCode(65 + i))
+  return Array.from({ length: count }, (_, i) => {
+    if (i < 26) return String.fromCharCode(65 + i)
+    return `G${i + 1}`
+  })
 }

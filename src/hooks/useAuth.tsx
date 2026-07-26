@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { User } from 'firebase/auth'
 import {
   onAuthStateChanged,
@@ -14,7 +14,7 @@ interface AuthContextValue {
   profile: Profile | null
   loading: boolean
   isAdmin: boolean
-  signIn: (email: string, password: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<Profile | null>
   signOut: () => Promise<void>
 }
 
@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const profileFetchGen = useRef(0)
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -38,13 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     return onAuthStateChanged(auth, async (nextUser) => {
+      const gen = ++profileFetchGen.current
       setUser(nextUser)
       if (nextUser) {
         try {
           const p = await fetchProfile(nextUser.uid)
-          setProfile(p)
+          if (gen === profileFetchGen.current) setProfile(p)
         } catch {
-          setProfile(null)
+          if (gen === profileFetchGen.current) setProfile(null)
         }
       } else {
         setProfile(null)
@@ -55,12 +57,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const credential = await signInWithEmailAndPassword(auth, email, password)
+    const gen = ++profileFetchGen.current
     const p = await fetchProfile(credential.user.uid)
-    setUser(credential.user)
-    setProfile(p)
+    if (gen === profileFetchGen.current) {
+      setUser(credential.user)
+      setProfile(p)
+    }
+    if (p?.role !== 'admin') {
+      await firebaseSignOut(auth)
+      setUser(null)
+      setProfile(null)
+      throw new Error('This account does not have admin access')
+    }
+    return p
   }
 
   const signOut = async () => {
+    profileFetchGen.current++
     await firebaseSignOut(auth)
     setProfile(null)
   }

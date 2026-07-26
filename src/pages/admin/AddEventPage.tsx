@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AdminLayout } from '../../components/AdminLayout'
+import { FirebaseSetupBanner } from '../../components/FirebaseSetupBanner'
 import {
   DivisionConfigForm,
   createDivisionDraft,
   divisionDraftToEventInput,
 } from '../../components/DivisionConfigForm'
 import {
-  AdminPageTitle,
+  EventPageTitle,
   BackLink,
   Button,
-  ErrorMessage,
+  EmptyMessage,
+  ErrorBanner,
+  InlineError,
 } from '../../components/ui/primitives'
 import { createEvent, fetchTournament } from '../../lib/tournamentService'
 import type { Tournament } from '../../types'
@@ -21,11 +24,18 @@ export function AddEventPage() {
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [draft, setDraft] = useState(createDivisionDraft())
   const [saving, setSaving] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!tournamentId) return
-    fetchTournament(tournamentId).then(setTournament).catch(console.error)
+    setPageLoading(true)
+    setLoadError('')
+    fetchTournament(tournamentId)
+      .then(setTournament)
+      .catch((e) => setLoadError(e instanceof Error ? e.message : 'Tournament not found'))
+      .finally(() => setPageLoading(false))
   }, [tournamentId])
 
   const handleCreate = async () => {
@@ -46,14 +56,34 @@ export function AddEventPage() {
     }
   }
 
+  if (pageLoading) {
+    return (
+      <AdminLayout>
+        <EmptyMessage>Loading…</EmptyMessage>
+      </AdminLayout>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <AdminLayout>
+        <BackLink to="/admin">Dashboard</BackLink>
+        <ErrorBanner>{loadError}</ErrorBanner>
+      </AdminLayout>
+    )
+  }
+
   return (
     <AdminLayout>
-      <BackLink to={`/admin/tournaments/${tournamentId}`}>← {tournament?.name ?? 'Tournament'}</BackLink>
-      <AdminPageTitle>Add division</AdminPageTitle>
+      <div className="space-y-4">
+        <FirebaseSetupBanner />
+        <BackLink to={`/admin/tournaments/${tournamentId}`}>{tournament?.name ?? 'Tournament'}</BackLink>
+        <EventPageTitle>Add division</EventPageTitle>
 
-      <div className="mt-6 space-y-4">
         <DivisionConfigForm draft={draft} onChange={setDraft} />
-        {error && <ErrorMessage>{error}</ErrorMessage>}
+
+        {error && <InlineError>{error}</InlineError>}
+
         <Button onClick={handleCreate} disabled={saving} fullWidth>
           {saving ? 'Adding…' : 'Add division'}
         </Button>

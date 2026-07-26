@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { AppLayout } from '../components/AppLayout'
 import { GroupStandingsTable } from '../components/GroupStandingsTable'
 import { GroupStageNavigator } from '../components/GroupStageNavigator'
 import { KnockoutBracket } from '../components/KnockoutBracket'
-import { BackLink, CenteredState, EmptyMessage, ErrorMessage } from '../components/ui/primitives'
+import { BackLink, CenteredState, EmptyMessage, ErrorMessage, PageTitle } from '../components/ui/primitives'
 import {
   fetchTournament,
   fetchEvent,
@@ -18,13 +18,8 @@ import { resolveGroupStandings } from '../lib/standings'
 import { getEventDisplayName } from '../lib/displayNames'
 import { buildKnockoutStageTabs, isKnockoutStage, knockoutRoundFromStageId } from '../lib/knockoutTabs'
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent'
-import type { Tournament, TournamentEvent, Group, GroupMatch, KnockoutMatch, TournamentEntry, KnockoutRound } from '../types'
-
-function roundShortLabel(round: KnockoutRound): string {
-  if (round === 'quarter') return 'Quarters'
-  if (round === 'semi') return 'Semis'
-  return 'Final'
-}
+import { isFirebaseConfigured } from '../lib/firebase'
+import type { Tournament, TournamentEvent, Group, GroupMatch, KnockoutMatch, TournamentEntry } from '../types'
 
 export function LivePage() {
   const { tournamentId, eventId } = useParams<{ tournamentId: string; eventId: string }>()
@@ -36,6 +31,7 @@ export function LivePage() {
   const [entries, setEntries] = useState<TournamentEntry[]>([])
   const [members, setMembers] = useState<{ group_id: string; entry_id: string }[]>([])
   const [activeStage, setActiveStage] = useState('')
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const loadSeq = useRef(0)
 
@@ -69,13 +65,30 @@ export function LivePage() {
   }, [tournamentId, eventId])
 
   useEffect(() => {
-    fetchEventData()
+    if (!isFirebaseConfigured) {
+      setError('Firebase is not configured')
+      setLoading(false)
+      return
+    }
+    if (!tournamentId || !eventId) {
+      setError('Division not found')
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    setTournament(null)
+    setEvent(null)
+    fetchEventData().finally(() => setLoading(false))
     return () => {
       loadSeq.current++
     }
-  }, [fetchEventData])
+  }, [fetchEventData, tournamentId, eventId])
 
-  useRealtimeEvent(eventId, fetchEventData)
+  useRealtimeEvent(
+    isFirebaseConfigured && eventId ? eventId : undefined,
+    fetchEventData,
+    (msg) => setError(msg),
+  )
 
   const entryMap = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries])
 
@@ -119,7 +132,7 @@ export function LivePage() {
       <AppLayout>
         <CenteredState>
           <ErrorMessage>{error}</ErrorMessage>
-          <p className="text-sm text-slate-500">This division may have ended or is not public yet.</p>
+          <p className="text-sm text-text-steel">This division may have ended or is not public yet.</p>
         </CenteredState>
       </AppLayout>
     )
@@ -128,44 +141,74 @@ export function LivePage() {
   if (!tournament || !event) {
     return (
       <AppLayout>
-        <EmptyMessage>Loading…</EmptyMessage>
+        <EmptyMessage>{loading ? 'Loading…' : 'Division not found'}</EmptyMessage>
+      </AppLayout>
+    )
+  }
+
+  if (event.status !== 'ongoing') {
+    return (
+      <AppLayout>
+        <CenteredState>
+          <PageTitle>{getEventDisplayName(event)}</PageTitle>
+          <p className="text-sm text-text-steel">
+            This division is not live yet. Check back when it has started.
+          </p>
+          <Link
+            to={`/tournaments/${tournamentId}/events/${eventId}`}
+            className="text-sm font-semibold text-brand-500 hover:underline"
+          >
+            View division details
+          </Link>
+        </CenteredState>
       </AppLayout>
     )
   }
 
   const eventName = getEventDisplayName(event)
-  const subtitle = activeKnockoutRound
-    ? `${eventName} · ${roundShortLabel(activeKnockoutRound)}`
-    : eventName
+  const isKnockoutView = !!activeKnockoutRound
 
   return (
     <AppLayout bleed>
-      <div className="px-4 pt-2 pb-6 space-y-0">
-        <div className="space-y-1 py-2">
+      <div className="px-4 pt-2 pb-6 space-y-4">
+        <BackLink to={`/tournaments/${tournamentId}/events/${eventId}`}>{eventName}</BackLink>
+
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-tt-pulse shrink-0" aria-hidden />
-            <h1 className="font-heading text-lg font-bold text-slate-900">{tournament.name}</h1>
+            <span className="w-2 h-2 rounded-full bg-live animate-tt-pulse shrink-0" aria-hidden />
+            <span className="text-xs font-bold text-live uppercase tracking-wide">Live</span>
           </div>
-          <p className="text-sm text-slate-500">{subtitle}</p>
-          <BackLink to={`/tournaments/${tournamentId}/events/${eventId}`}>← {eventName}</BackLink>
+          <PageTitle>{eventName}</PageTitle>
+          {isKnockoutView && (
+            <p className="text-sm text-text-steel">{tournament.name}</p>
+          )}
         </div>
 
         {stageTabs.length > 0 && (
           <GroupStageNavigator tabs={stageTabs} activeId={activeStage} onChange={setActiveStage} />
         )}
 
-        <div className="space-y-4 pt-4">
+        <div className="space-y-4">
           {activeGroupStage && (
             <GroupStandingsTable
               label={activeGroupStage.group.label}
               rows={activeGroupStage.rows}
               manualRanks={activeGroupStage.hasManualRanks}
               manualRankNote={activeGroupStage.group.manual_rank_note}
+              externalHeader
             />
           )}
 
           {activeKnockoutRound && activeKnockoutMatches.length > 0 && (
-            <KnockoutBracket matches={activeKnockoutMatches} round={activeKnockoutRound} />
+            <KnockoutBracket
+              matches={activeKnockoutMatches}
+              round={activeKnockoutRound}
+              hideRoundTitle
+            />
+          )}
+
+          {activeKnockoutRound && activeKnockoutMatches.length === 0 && (
+            <EmptyMessage>No knockout matches in this round yet.</EmptyMessage>
           )}
 
           {stageTabs.length === 0 && (

@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { AdminLayout } from '../../components/AdminLayout'
+import { FirebaseSetupBanner } from '../../components/FirebaseSetupBanner'
+import { DivisionRow } from '../../components/DivisionRow'
 import {
   AdminPageTitle,
+  AddDivisionLink,
   BackLink,
   Button,
-  DestructiveTextButton,
+  DeleteConfirmPanel,
   ErrorMessage,
-  MetaText,
-  SubsectionTitle,
-  SuccessMessage,
+  IconActionButton,
+  MetaIconsRow,
+  PanelSectionTitle,
+  ScreenSectionTitle,
+  SuccessBanner,
   TextInput,
 } from '../../components/ui/primitives'
 import {
@@ -17,10 +22,7 @@ import {
   fetchEvents,
   updateTournament,
   deleteTournament,
-  deleteEvent,
 } from '../../lib/tournamentService'
-import { getEventDisplayName } from '../../lib/displayNames'
-import { STATUS_LABELS } from '../../lib/constants'
 import type { Tournament, TournamentEvent } from '../../types'
 
 export function AdminTournamentHubPage() {
@@ -33,8 +35,11 @@ export function AdminTournamentHubPage() {
   const [editVenue, setEditVenue] = useState('')
   const [editDate, setEditDate] = useState('')
   const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const load = async () => {
     if (!tournamentId) return
@@ -47,7 +52,11 @@ export function AdminTournamentHubPage() {
   }
 
   useEffect(() => {
-    load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
+    setPageLoading(true)
+    setLoadError('')
+    load()
+      .catch((e) => setLoadError(e instanceof Error ? e.message : 'Failed to load'))
+      .finally(() => setPageLoading(false))
   }, [tournamentId])
 
   const handleSave = async () => {
@@ -61,7 +70,7 @@ export function AdminTournamentHubPage() {
         start_date: editDate,
       })
       setEditing(false)
-      setMessage('Tournament updated')
+      setMessage('Changes saved.')
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update')
@@ -72,7 +81,6 @@ export function AdminTournamentHubPage() {
 
   const handleDeleteTournament = async () => {
     if (!tournament) return
-    if (!confirm(`Delete "${tournament.name}" and all divisions? This cannot be undone.`)) return
     setLoading(true)
     try {
       await deleteTournament(tournament.id)
@@ -80,111 +88,98 @@ export function AdminTournamentHubPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete')
       setLoading(false)
+      setShowDeleteConfirm(false)
     }
   }
 
-  const handleDeleteEvent = async (event: TournamentEvent) => {
-    if (!tournamentId) return
-    if (!confirm(`Delete division "${getEventDisplayName(event)}" and all its data?`)) return
-    setLoading(true)
-    try {
-      await deleteEvent(tournamentId, event.id)
-      setMessage('Division removed')
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete division')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (!tournament) {
+  if (pageLoading) {
     return (
       <AdminLayout>
-        <p className="text-slate-500">Loading…</p>
+        <p className="text-text-steel">Loading…</p>
+      </AdminLayout>
+    )
+  }
+
+  if (loadError || !tournament) {
+    return (
+      <AdminLayout>
+        <BackLink to="/admin">Dashboard</BackLink>
+        <ErrorMessage>{loadError || 'Tournament not found'}</ErrorMessage>
       </AdminLayout>
     )
   }
 
   return (
     <AdminLayout>
-      <BackLink to="/admin">← Dashboard</BackLink>
+      <div className="space-y-4">
+        <FirebaseSetupBanner />
+        <BackLink to="/admin">Dashboard</BackLink>
 
-      <div className="flex items-start justify-between gap-2 mt-4">
-        <div>
-          <AdminPageTitle>{tournament.name}</AdminPageTitle>
-          {tournament.venue && <MetaText className="mt-1 block">{tournament.venue}</MetaText>}
-          {tournament.start_date && <MetaText>{tournament.start_date}</MetaText>}
-        </div>
-        <div className="flex gap-1 items-center">
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            className="text-sm text-brand-600 font-medium hover:text-brand-700 px-2 py-1"
-          >
-            {editing ? 'Cancel' : 'Edit'}
-          </button>
-          <DestructiveTextButton onClick={handleDeleteTournament}>Delete</DestructiveTextButton>
-        </div>
-      </div>
-
-      {message && <SuccessMessage>{message}</SuccessMessage>}
-      {error && <ErrorMessage>{error}</ErrorMessage>}
-
-      {editing && (
-        <div className="mt-4 bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-sm">
-          <TextInput value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Tournament name" />
-          <TextInput value={editVenue} onChange={(e) => setEditVenue(e.target.value)} placeholder="Venue" />
-          <TextInput type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
-          <Button onClick={handleSave} disabled={loading} fullWidth>
-            Save changes
-          </Button>
-        </div>
-      )}
-
-      <section className="mt-8 space-y-3">
-        <div className="flex items-center justify-between">
-          <SubsectionTitle>Divisions / events</SubsectionTitle>
-          <Link
-            to={`/admin/tournaments/${tournamentId}/events/new`}
-            className="text-sm text-brand-600 font-medium hover:text-brand-700"
-          >
-            + Add division
-          </Link>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-2">
+            <AdminPageTitle>{tournament.name}</AdminPageTitle>
+            <MetaIconsRow date={tournament.start_date} venue={tournament.venue} />
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <IconActionButton onClick={() => setEditing((v) => !v)}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 20h9" /><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z" />
+              </svg>
+            </IconActionButton>
+            <IconActionButton variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              </svg>
+            </IconActionButton>
+          </div>
         </div>
 
-        {events.length === 0 ? (
-          <p className="text-sm text-slate-500">No divisions yet. Add one to get started.</p>
-        ) : (
-          <div className="space-y-2">
-            {events.map((event) => (
-              <div
-                key={event.id}
-                className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between gap-3"
-              >
-                <Link
-                  to={`/admin/tournaments/${tournamentId}/events/${event.id}`}
-                  className="flex-1 min-w-0 hover:text-brand-600"
-                >
-                  <div className="font-medium">{getEventDisplayName(event)}</div>
-                  <div className="text-sm text-slate-500 mt-0.5 capitalize">
-                    {STATUS_LABELS[event.status]}
-                  </div>
-                </Link>
-                {event.status === 'draft' && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteEvent(event)}
-                    className="text-xs text-red-600 shrink-0"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            ))}
+        {message && <SuccessBanner>{message}</SuccessBanner>}
+        {error && <ErrorMessage>{error}</ErrorMessage>}
+
+        {editing && (
+          <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
+            <PanelSectionTitle>Edit tournament</PanelSectionTitle>
+            <TextInput value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Tournament name" />
+            <TextInput value={editVenue} onChange={(e) => setEditVenue(e.target.value)} placeholder="Venue" />
+            <TextInput type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+            <Button onClick={handleSave} disabled={loading} fullWidth>
+              Save changes
+            </Button>
           </div>
         )}
-      </section>
+
+        {showDeleteConfirm && (
+          <DeleteConfirmPanel
+            title="Delete this tournament?"
+            description="This permanently removes the tournament and all its divisions."
+            onCancel={() => setShowDeleteConfirm(false)}
+            onConfirm={handleDeleteTournament}
+            confirming={loading}
+          />
+        )}
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <ScreenSectionTitle>Divisions</ScreenSectionTitle>
+            {tournamentId && <AddDivisionLink to={`/admin/tournaments/${tournamentId}/events/new`} />}
+          </div>
+
+          {events.length === 0 ? (
+            <p className="text-sm text-text-steel">No divisions yet. Add one to get started.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {events.map((event) => (
+                <DivisionRow
+                  key={event.id}
+                  event={event}
+                  to={`/admin/tournaments/${tournamentId}/events/${event.id}`}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </AdminLayout>
   )
 }

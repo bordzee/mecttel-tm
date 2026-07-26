@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { StandingRow } from '../types'
-import { Button, CaptionText, Card, FormLabel, SelectInput, SubsectionTitle, TextInput } from './ui/primitives'
+import {
+  Button,
+  CaptionText,
+  FormLabel,
+  PanelSectionTitle,
+  SelectInput,
+  SuccessBanner,
+  TextActionButton,
+  TextInput,
+} from './ui/primitives'
 
 interface Props {
   groupLabel: string
@@ -10,6 +19,8 @@ interface Props {
   onSave: (orderedEntryIds: string[], note: string | null) => Promise<void>
   onClear?: () => Promise<void>
   saving?: boolean
+  disabled?: boolean
+  diffLabel?: string
 }
 
 function initialRanks(rows: StandingRow[], manualRankOrder?: string[] | null): Record<string, number> {
@@ -34,6 +45,8 @@ export function GroupRankEditor({
   onSave,
   onClear,
   saving = false,
+  disabled = false,
+  diffLabel = 'sets',
 }: Props) {
   const [ranks, setRanks] = useState<Record<string, number>>(() => initialRanks(rows, manualRankOrder))
   const [note, setNote] = useState(manualRankNote ?? '')
@@ -69,76 +82,75 @@ export function GroupRankEditor({
   }
 
   return (
-    <Card className="p-4 space-y-3">
-      <div>
-        <SubsectionTitle>Set group ranks — Group {groupLabel}</SubsectionTitle>
-        <CaptionText>
-          If paper head-to-head changes the order, pick rank 1, 2, 3… here and save before generating
-          knockout. W/L and +/− stay from match scores.
-        </CaptionText>
-      </div>
+    <div className="space-y-3">
+      <div className="bg-card border border-amber rounded-2xl p-4 space-y-3.5">
+        <div>
+          <PanelSectionTitle>Set group ranks — Group {groupLabel}</PanelSectionTitle>
+          <CaptionText className="mt-1">
+            Tie-break needed — set the final order when wins and point difference are equal.
+          </CaptionText>
+        </div>
 
-      <div className="space-y-2">
-        {rows.map((row) => (
-          <div
-            key={row.entryId}
-            className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2"
-          >
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-900 truncate">{row.name}</p>
-              <p className="text-xs text-slate-500">
-                {row.wins}W–{row.losses}L · {row.diff > 0 ? `+${row.diff}` : row.diff} sets
-              </p>
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <div
+              key={row.entryId}
+              className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card-raised px-3 py-2"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-text-bluewhite truncate">{row.name}</p>
+                <p className="text-xs text-text-steel">
+                  {row.wins}W–{row.losses}L · {row.diff > 0 ? `+${row.diff}` : row.diff} {diffLabel}
+                </p>
+              </div>
+              <div className="shrink-0 w-20">
+                <SelectInput
+                  value={ranks[row.entryId] ?? row.rank}
+                  onChange={(e) =>
+                    setRanks((prev) => ({
+                      ...prev,
+                      [row.entryId]: parseInt(e.target.value, 10),
+                    }))
+                  }
+                  aria-label={`Rank for ${row.name}`}
+                >
+                  {rankOptions.map((rank) => (
+                    <option key={rank} value={rank}>
+                      #{rank}
+                    </option>
+                  ))}
+                </SelectInput>
+              </div>
             </div>
-            <div className="shrink-0 w-20">
-              <SelectInput
-                value={ranks[row.entryId] ?? row.rank}
-                onChange={(e) =>
-                  setRanks((prev) => ({
-                    ...prev,
-                    [row.entryId]: parseInt(e.target.value, 10),
-                  }))
-                }
-                aria-label={`Rank for ${row.name}`}
-              >
-                {rankOptions.map((rank) => (
-                  <option key={rank} value={rank}>
-                    #{rank}
-                  </option>
-                ))}
-              </SelectInput>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      <div>
-        <FormLabel>Note for viewers (optional)</FormLabel>
-        <TextInput
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="e.g. Head-to-head on paper — Martin over Bordz"
-          maxLength={280}
-        />
-        <CaptionText>Shown on the live page when manual ranks are saved.</CaptionText>
-      </div>
+        <div>
+          <FormLabel>Note for viewers (optional)</FormLabel>
+          <TextInput
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Head-to-head on paper — Martin over Bordz"
+            maxLength={280}
+          />
+        </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-live">{error}</p>}
 
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={handleSave} disabled={saving}>
+        <Button type="button" onClick={handleSave} disabled={saving || disabled} fullWidth>
           {saving ? 'Saving…' : 'Save ranks'}
         </Button>
+
         {hasManualSaved && onClear && (
-          <Button type="button" variant="secondary" onClick={onClear} disabled={saving}>
+          <TextActionButton onClick={onClear} disabled={saving} className="w-full">
             Reset to auto
-          </Button>
+          </TextActionButton>
         )}
       </div>
 
       {hasManualSaved && (
-        <CaptionText>Manual ranks saved — knockout uses these positions.</CaptionText>
+        <SuccessBanner>Saved. The knockout will use these positions.</SuccessBanner>
       )}
-    </Card>
+    </div>
   )
 }

@@ -17,7 +17,7 @@ export function GroupStageNavigator({
 
   return (
     <nav
-      className="sticky top-[52px] z-[5] -mx-4 px-4 py-2 bg-slate-50/95 backdrop-blur border-y border-slate-200"
+      className="sticky top-[52px] z-[5] -mx-4 px-4 py-2 bg-navy/95 backdrop-blur border-y border-border"
       aria-label="Stage navigator"
     >
       <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-none">
@@ -30,13 +30,13 @@ export function GroupStageNavigator({
               onClick={() => onChange(tab.id)}
               className={`shrink-0 snap-start inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[13px] transition-colors ${
                 active
-                  ? 'border-brand-600 bg-white text-brand-600 font-semibold shadow-sm'
-                  : 'border-slate-200 bg-white text-slate-500 font-normal hover:border-slate-300'
+                  ? 'border-brand-500 bg-brand-100 text-brand-500 font-bold'
+                  : 'border-border bg-card text-text-steel font-normal hover:border-border-strong hover:text-text-bluewhite'
               }`}
             >
               {tab.label}
               {tab.pendingCount != null && tab.pendingCount > 0 && (
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-soft text-amber">
                   {tab.pendingCount}
                 </span>
               )}

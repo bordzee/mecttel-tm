@@ -2,18 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AdminLayout } from '../../components/AdminLayout'
 import {
-  AdminPageTitle,
+  AddEntryButton,
   BackLink,
   Button,
   CaptionText,
-  Card,
-  DestructiveTextButton,
+  DeleteDivisionButton,
   ErrorMessage,
-  MutedPanel,
+  EventAdminTitle,
+  FormLabel,
+  PanelSectionTitle,
   Pill,
-  SubsectionTitle,
-  SuccessMessage,
+  SectionHeaderRow,
+  SuccessBanner,
   TextInput,
+  WarningBanner,
 } from '../../components/ui/primitives'
 import { GroupStandingsTable } from '../../components/GroupStandingsTable'
 import { GroupRankEditor } from '../../components/GroupRankEditor'
@@ -23,6 +25,7 @@ import { MatchScoreEntry } from '../../components/MatchScoreEntry'
 import { EntryRow } from '../../components/EntryRow'
 import { ConflictWarnings } from '../../components/ConflictWarnings'
 import { SeededSelect } from '../../components/SeededSelect'
+import { StartLayoutPicker } from '../../components/StartLayoutPicker'
 import {
   fetchTournament,
   fetchEvent,
@@ -33,7 +36,7 @@ import {
   addTeamEntry,
   addPlayerEntry,
   addPairEntry,
-  setupGroupsAndMatches,
+  startDivision,
   fetchGroups,
   fetchGroupMembers,
   fetchGroupMatches,
@@ -43,19 +46,22 @@ import {
   clearGroupRankOrder,
   regenerateKnockoutFromRanks,
   saveKnockoutMatchResult,
-  propagateKnockoutWinners,
+  fetchTeamRosters,
 } from '../../lib/tournamentService'
 import { assignEntriesToGroups } from '../../lib/groupAssignment'
 import { getStartLayoutOptions, parseSeededValue } from '../../lib/groupLayout'
 import { buildKnockoutStageTabs, isKnockoutStage, knockoutRoundFromStageId } from '../../lib/knockoutTabs'
-import { computeStandings, resolveGroupStandings } from '../../lib/standings'
+import { computeStandings, resolveGroupStandings, needsManualRankResolution } from '../../lib/standings'
 import { validateTournamentStart } from '../../lib/matchOutcomes'
 import { getEntryDisplayName, getEventDisplayName, isPlayerEventType } from '../../lib/displayNames'
 import {
   duplicateEntryWarnings,
   hasBlockingDuplicates,
+  normalizeEntryName,
+  rosterNameCollisionWarnings,
   validateNewEntry,
 } from '../../lib/entryValidation'
+import { FirebaseSetupBanner } from '../../components/FirebaseSetupBanner'
 import { STATUS_LABELS } from '../../lib/constants'
 import { useRealtimeEvent } from '../../hooks/useRealtimeEvent'
 import type { Tournament, TournamentEvent, TournamentEntry, Group } from '../../types'
@@ -79,49 +85,66 @@ export function AdminEventPage() {
   const [members, setMembers] = useState<{ group_id: string; entry_id: string }[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [refreshError, setRefreshError] = useState('')
+  const [rosterWarnings, setRosterWarnings] = useState<string[]>([])
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [activeStage, setActiveStage] = useState<string>('')
   const [startLayoutKey, setStartLayoutKey] = useState<string>()
   const loadSeq = useRef(0)
-  const knockoutSynced = useRef<string | null>(null)
+  const isInitialLoad = useRef(true)
 
   const fetchEventData = useCallback(async () => {
     if (!tournamentId || !eventId) return
     const seq = ++loadSeq.current
-    const [t, ev, e, g, gm, km] = await Promise.all([
-      fetchTournament(tournamentId),
-      fetchEvent(tournamentId, eventId),
-      fetchEntries(eventId),
-      fetchGroups(eventId),
-      fetchGroupMatches(eventId),
-      fetchKnockoutMatches(eventId),
-    ])
-    if (seq !== loadSeq.current) return
-    const m = g.length ? await fetchGroupMembers(eventId, g.map((x) => x.id)) : []
-    setTournament(t)
-    setEvent(ev)
-    setEntries(e)
-    setGroups(g)
-    setGroupMatches(gm)
-    setKnockoutMatches(km)
-    setMembers(m.map((x) => ({ group_id: x.group_id, entry_id: x.entry_id })))
+    try {
+      const [t, ev, e, g, gm, km] = await Promise.all([
+        fetchTournament(tournamentId),
+        fetchEvent(tournamentId, eventId),
+        fetchEntries(eventId),
+        fetchGroups(eventId),
+        fetchGroupMatches(eventId),
+        fetchKnockoutMatches(eventId),
+      ])
+      if (seq !== loadSeq.current) return
+      const m = g.length ? await fetchGroupMembers(eventId, g.map((x) => x.id)) : []
+      if (seq !== loadSeq.current) return
+      setTournament(t)
+      setEvent(ev)
+      setEntries(e)
+      setGroups(g)
+      setGroupMatches(gm)
+      setKnockoutMatches(km)
+      setMembers(m.map((x) => ({ group_id: x.group_id, entry_id: x.entry_id })))
+      setLoadError('')
+      setRefreshError('')
+    } catch (e) {
+      if (seq !== loadSeq.current) return
+      const msg = e instanceof Error ? e.message : 'Failed to load division'
+      if (isInitialLoad.current) {
+        setLoadError(msg)
+      } else {
+        setRefreshError(msg)
+      }
+    }
   }, [tournamentId, eventId])
 
   useEffect(() => {
     let cancelled = false
     async function init() {
-      setError('')
+      setLoadError('')
+      setPageLoading(true)
       try {
         await fetchEventData()
-        if (cancelled || !eventId) return
-        if (knockoutSynced.current !== eventId) {
-          knockoutSynced.current = eventId
-          await propagateKnockoutWinners(eventId)
-          if (!cancelled) await fetchEventData()
-        }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load')
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Failed to load')
+      } finally {
+        if (!cancelled) {
+          isInitialLoad.current = false
+          setPageLoading(false)
+        }
       }
     }
     init()
@@ -131,7 +154,40 @@ export function AdminEventPage() {
     }
   }, [eventId, fetchEventData])
 
-  useRealtimeEvent(eventId, fetchEventData)
+  const handleRealtimeError = useCallback((msg: string) => {
+    setError(msg)
+  }, [])
+
+  useRealtimeEvent(eventId, fetchEventData, handleRealtimeError)
+
+  useEffect(() => {
+    if (!event || event.event_type !== 'team') {
+      setRosterWarnings([])
+      return
+    }
+    const teamIds = entries.filter((e) => e.team_id).map((e) => e.team_id!)
+    if (!teamIds.length) {
+      setRosterWarnings([])
+      return
+    }
+    let cancelled = false
+    fetchTeamRosters(teamIds).then((rosters) => {
+      if (cancelled) return
+      const map = new Map<string, string[]>()
+      for (const entry of entries) {
+        if (entry.team_id) {
+          map.set(
+            entry.team_id,
+            rosters.filter((r) => r.team_id === entry.team_id).map((r) => r.name),
+          )
+        }
+      }
+      setRosterWarnings(rosterNameCollisionWarnings(entries, map))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [entries, event])
 
   const entryMap = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries])
 
@@ -200,7 +256,10 @@ export function AdminEventPage() {
     return validateTournamentStart(entries.length, event.config, startLayoutKey)
   }, [event, entries.length, startLayoutKey])
 
-  const duplicateWarnings = useMemo(() => duplicateEntryWarnings(entries), [entries])
+  const duplicateWarnings = useMemo(
+    () => [...duplicateEntryWarnings(entries), ...rosterWarnings],
+    [entries, rosterWarnings],
+  )
 
   const assignmentWarnings = useMemo(() => {
     let groupCount: number | undefined
@@ -217,9 +276,6 @@ export function AdminEventPage() {
     return w.map((x) => x.message)
   }, [entries, event, startPreview])
 
-  const canManageEntries =
-    event?.status === 'draft' || event?.status === 'upcoming'
-
   const handleAddEntry = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!tournamentId || !eventId || !event) return
@@ -229,10 +285,17 @@ export function AdminEventPage() {
     setError('')
     try {
       const seeded = parseSeededValue(form.get('seeded'))
+      let wrote = false
       if (event.event_type === 'team') {
         const roster = (form.get('roster') as string).split(',').map((s) => s.trim()).filter(Boolean)
         const name = form.get('name') as string
-        const dup = validateNewEntry(entries, event.event_type, { type: 'team', name, roster })
+        const teamIds = entries.filter((e) => e.team_id).map((e) => e.team_id!)
+        const existingRosters = teamIds.length ? await fetchTeamRosters(teamIds) : []
+        const otherTeamRosterNames = existingRosters.map((r) => normalizeEntryName(r.name))
+        const dup = validateNewEntry(entries, event.event_type, { type: 'team', name, roster }, {
+          rosterSize: event.config.roster_size,
+          otherTeamRosterNames,
+        })
         if (dup) {
           setError(dup)
           return
@@ -243,6 +306,7 @@ export function AdminEventPage() {
           seeded,
           roster,
         })
+        wrote = true
       } else if (isPlayerEventType(event.event_type)) {
         const name = form.get('name') as string
         const dup = validateNewEntry(entries, event.event_type, { type: 'player', name })
@@ -255,6 +319,7 @@ export function AdminEventPage() {
           organization: form.get('organization') as string,
           seeded,
         })
+        wrote = true
       } else if (event.event_type === 'doubles') {
         const pairInput = {
           type: 'pair' as const,
@@ -272,7 +337,12 @@ export function AdminEventPage() {
           organization: form.get('organization') as string,
           seeded,
         })
+        wrote = true
+      } else {
+        setError('Unsupported event type')
+        return
       }
+      if (!wrote) return
       formEl.reset()
       setMessage('Entry added')
       await fetchEventData()
@@ -327,10 +397,14 @@ export function AdminEventPage() {
     note: string | null,
   ) => {
     if (!tournamentId || !eventId) return
+    if (knockoutHasScores) {
+      setError('Cannot change group ranks — knockout matches are already scored')
+      return
+    }
     setLoading(true)
     setError('')
     try {
-      await saveGroupRankOrder(groupId, orderedEntryIds, note)
+      await saveGroupRankOrder(groupId, orderedEntryIds, note, { eventId })
       setMessage('Group ranks saved')
       await fetchEventData()
       const km = await fetchKnockoutMatches(eventId)
@@ -347,10 +421,14 @@ export function AdminEventPage() {
 
   const handleClearGroupRanks = async (groupId: string) => {
     if (!tournamentId || !eventId) return
+    if (knockoutHasScores) {
+      setError('Cannot reset group ranks — knockout matches are already scored')
+      return
+    }
     setLoading(true)
     setError('')
     try {
-      await clearGroupRankOrder(groupId)
+      await clearGroupRankOrder(groupId, { eventId })
       setMessage('Ranks reset to automatic tie-break')
       await fetchEventData()
       const km = await fetchKnockoutMatches(eventId)
@@ -367,6 +445,18 @@ export function AdminEventPage() {
 
   const handleGenerateKnockout = async () => {
     if (!tournamentId || !eventId) return
+    const unresolved = groupStageData.filter(
+      (g) =>
+        g.groupPlayComplete &&
+        needsManualRankResolution(g.computedRows) &&
+        !g.group.manual_rank_order?.length,
+    )
+    if (unresolved.length) {
+      setError(
+        `Set manual ranks for group${unresolved.length === 1 ? '' : 's'} ${unresolved.map((g) => g.group.label).join(', ')} before generating knockout`,
+      )
+      return
+    }
     setLoading(true)
     setError('')
     try {
@@ -386,32 +476,50 @@ export function AdminEventPage() {
     try {
       let statusMessage = `Status updated to ${status}`
       if (status === 'ongoing') {
+        const freshEvent = await fetchEvent(tournamentId, event.id)
         const freshEntries = await fetchEntries(event.id)
-        if (hasBlockingDuplicates(freshEntries, event.event_type)) {
+        let rostersByTeamId: Map<string, string[]> | undefined
+        if (freshEvent.event_type === 'team') {
+          const teamIds = freshEntries.filter((e) => e.team_id).map((e) => e.team_id!)
+          const rosters = teamIds.length ? await fetchTeamRosters(teamIds) : []
+          rostersByTeamId = new Map<string, string[]>()
+          for (const entry of freshEntries) {
+            if (entry.team_id) {
+              rostersByTeamId.set(
+                entry.team_id,
+                rosters.filter((r) => r.team_id === entry.team_id).map((r) => r.name),
+              )
+            }
+          }
+        }
+        if (hasBlockingDuplicates(freshEntries, freshEvent.event_type, rostersByTeamId)) {
           setError('Remove duplicate entries before starting this division')
           return
         }
-        const check = validateTournamentStart(freshEntries.length, event.config, startLayoutKey)
+        const check = validateTournamentStart(freshEntries.length, freshEvent.config, startLayoutKey)
         if (!check.ok) {
           setError(check.error ?? 'Cannot start')
           return
         }
-        const { group_sizes: _prev, ...configBase } = event.config
+        const { group_sizes: _prev, ...configBase } = freshEvent.config
         const updatedConfig = {
           ...configBase,
           entries_per_group: check.entriesPerGroup!,
           group_count: check.groupCount!,
           ...(check.groupSizes ? { group_sizes: check.groupSizes } : {}),
         }
-        const updated = await updateEvent(tournamentId, event.id, { config: updatedConfig })
-        await setupGroupsAndMatches(tournamentId, { ...updated, config: updatedConfig }, freshEntries)
-        await updateEvent(tournamentId, event.id, { status: 'ongoing' })
+        await startDivision(
+          tournamentId,
+          freshEvent,
+          freshEntries,
+          updatedConfig,
+        )
         const layoutLabel = check.uneven
           ? `${check.groupCount} groups (${check.groupSizes!.join('+')})`
           : `${check.groupCount} groups × ${check.entriesPerGroup}`
         statusMessage = `Started with ${freshEntries.length} entries → ${layoutLabel}`
       } else if (status === 'ended') {
-        if (!confirm('End this division? All its data will be deleted.')) return
+        if (!confirm('Delete this division and all its data? This cannot be undone.')) return
         await updateEvent(tournamentId, event.id, { status: 'ended' })
         navigate(`/admin/tournaments/${tournamentId}`)
         return
@@ -427,54 +535,80 @@ export function AdminEventPage() {
     }
   }
 
-  if (!tournament || !event) {
+  if (pageLoading) {
     return (
       <AdminLayout>
-        <p className="text-slate-500">Loading…</p>
+        <p className="text-text-steel">Loading…</p>
+      </AdminLayout>
+    )
+  }
+
+  if (loadError || !tournament || !event) {
+    return (
+      <AdminLayout>
+        <BackLink to={tournamentId ? `/admin/tournaments/${tournamentId}` : '/admin'}>
+          {tournament?.name ?? 'Tournament'}
+        </BackLink>
+        <ErrorMessage>{loadError || 'Division not found'}</ErrorMessage>
       </AdminLayout>
     )
   }
 
   const cfg = event.config
+  const canEditEntries = event.status === 'draft' || event.status === 'upcoming'
   const rosterSize = cfg.roster_size ?? 3
   const startDisabled =
     loading ||
     entries.length < 2 ||
     hasBlockingDuplicates(entries, event.event_type) ||
+    rosterWarnings.length > 0 ||
     !startPreview?.ok
 
   return (
     <AdminLayout>
       <div className="space-y-4">
-        <BackLink to={`/admin/tournaments/${tournamentId}`}>← {tournament.name}</BackLink>
+        <FirebaseSetupBanner />
+        <BackLink to={`/admin/tournaments/${tournamentId}`}>{tournament.name}</BackLink>
 
-        <div className="flex items-start justify-between gap-2">
-          <AdminPageTitle>{getEventDisplayName(event)}</AdminPageTitle>
-          <Pill variant={statusPillVariant(event.status)}>
-            {event.status === 'ongoing' ? 'Live' : STATUS_LABELS[event.status]}
-          </Pill>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2.5">
+            <EventAdminTitle>{getEventDisplayName(event)}</EventAdminTitle>
+            <Pill variant={statusPillVariant(event.status)}>
+              {event.status === 'ongoing' ? 'Live' : STATUS_LABELS[event.status]}
+            </Pill>
+          </div>
+          <p className="inline-flex items-center gap-1.5 text-xs text-text-steel font-medium">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9" /><path d="M18 6v12" /><path d="M6 9a9 9 0 0 0 9 9" />
+            </svg>
+            Knockout type — {cfg.knockout_bracket === 'cross' ? 'Cross' : 'Block'}
+          </p>
         </div>
 
-        <CaptionText>
-          Knockout: {(cfg.knockout_bracket ?? 'cross') === 'block' ? 'Block (A vs B, C vs D)' : 'Cross'}
-        </CaptionText>
-
-        {(event.status === 'draft' || event.status === 'upcoming') && (
-          <DestructiveTextButton onClick={handleDeleteEvent}>Delete division</DestructiveTextButton>
-        )}
-
-        {event.status === 'ongoing' && (
-          <DestructiveTextButton onClick={() => changeStatus('ended')}>End division</DestructiveTextButton>
-        )}
-
-        {message && <SuccessMessage>{message}</SuccessMessage>}
+        {message && <SuccessBanner>{message}</SuccessBanner>}
+        {refreshError && <WarningBanner>{refreshError}</WarningBanner>}
         {error && <ErrorMessage>{error}</ErrorMessage>}
         <ConflictWarnings warnings={[...duplicateWarnings, ...assignmentWarnings, ...warnings]} />
 
-        {event.status === 'draft' && (
-          <Button disabled={loading} onClick={() => changeStatus('upcoming')} fullWidth>
-            Publish
-          </Button>
+        {event.status === 'upcoming' && entries.length >= 2 && (
+          <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
+            <p className="text-sm font-extrabold text-text-primary">Ready to start</p>
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="font-semibold text-text-steel">Entries</span>
+              <span className="font-bold text-text-bluewhite tabular-nums">
+                {entries.length} / {cfg.total_slots}
+              </span>
+            </div>
+            {startPreview?.ok ? (
+              <StartLayoutPicker
+                options={startLayoutOptions}
+                selectedKey={startLayoutKey}
+                onSelect={setStartLayoutKey}
+              />
+            ) : (
+              startPreview && <p className="text-sm text-live">{startPreview.error}</p>
+            )}
+          </div>
         )}
 
         {event.status === 'upcoming' && (
@@ -483,7 +617,7 @@ export function AdminEventPage() {
             onClick={() => changeStatus('ongoing')}
             fullWidth
             title={
-              hasBlockingDuplicates(entries, event.event_type)
+              hasBlockingDuplicates(entries, event.event_type) || rosterWarnings.length > 0
                 ? 'Remove duplicate entries first'
                 : undefined
             }
@@ -492,85 +626,71 @@ export function AdminEventPage() {
           </Button>
         )}
 
-        {event.status === 'upcoming' && entries.length >= 2 && (
-          <MutedPanel>
-            <p className="text-sm font-medium text-slate-900">Ready to start</p>
-            {entries.length < cfg.total_slots && (
-              <p className="text-[13px] text-slate-600">
-                {entries.length} of {cfg.total_slots} slots filled — groups based on registered entries
-              </p>
-            )}
-            {startPreview?.ok ? (
-              <>
-                <p className="text-xs text-slate-400">
-                  Layout preview:{' '}
-                  {startPreview.uneven
-                    ? `${startPreview.groupCount} groups (${startPreview.groupSizes!.join('+')})`
-                    : `${startPreview.groupCount} groups × ${startPreview.entriesPerGroup}`}
-                  {startPreview.adjusted && ' (adjusted)'}
-                </p>
-                {startLayoutOptions.length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    {startLayoutOptions.map((opt) => (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        onClick={() => setStartLayoutKey(opt.key)}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg border text-[13px] ${
-                          startLayoutKey === opt.key
-                            ? 'border-brand-600 bg-brand-50 text-slate-900'
-                            : 'border-slate-200 bg-white text-slate-900'
-                        }`}
-                      >
-                        {opt.label}
-                        {opt.uneven && (
-                          <span className="text-xs text-slate-500 ml-2">uneven groups</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              startPreview && <p className="text-sm text-red-600">{startPreview.error}</p>
-            )}
-          </MutedPanel>
-        )}
-
-      {canManageEntries && (
-        <section className="mt-8 space-y-3">
-          <SubsectionTitle>
-            Add entries ({entries.length}/{cfg.total_slots})
-          </SubsectionTitle>
-          <CaptionText>Max {cfg.total_slots} slots — publish empty and add entries as they register.</CaptionText>
-          <form onSubmit={handleAddEntry} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-sm">
+      {canEditEntries && (
+        <section className="space-y-3">
+          <SectionHeaderRow
+            title="Add entries"
+            trailing={
+              <span className="text-[13px] font-bold text-text-steel tabular-nums">
+                {entries.length} / {cfg.total_slots}
+              </span>
+            }
+          />
+          <form onSubmit={handleAddEntry} className="bg-card border border-border rounded-2xl p-4 space-y-3">
             {event.event_type === 'team' && (
               <>
-                <TextInput name="name" placeholder="Team name" required />
-                <TextInput name="organization" placeholder="Organization (e.g. Mecttel)" />
-                <TextInput name="roster" placeholder={`Roster names, comma-separated (e.g. 3–${rosterSize} players)`} required />
+                <div>
+                  <FormLabel>Team name</FormLabel>
+                  <TextInput name="name" placeholder="Enter team name" required />
+                </div>
+                <div>
+                  <FormLabel>Organization</FormLabel>
+                  <TextInput name="organization" placeholder="Enter organization" />
+                </div>
+                <div>
+                  <FormLabel>Roster</FormLabel>
+                  <TextInput name="roster" placeholder={`Roster names, comma-separated (e.g. 3–${rosterSize} players)`} required />
+                </div>
                 <SeededSelect />
               </>
             )}
             {isPlayerEventType(event.event_type) && (
               <>
-                <TextInput name="name" placeholder="Player name" required />
-                <TextInput name="organization" placeholder="Organization (e.g. Mecttel)" required />
+                <div>
+                  <FormLabel>Player name</FormLabel>
+                  <TextInput name="name" placeholder="Enter player name" required />
+                </div>
+                <div>
+                  <FormLabel>Organization *</FormLabel>
+                  <TextInput name="organization" placeholder="Enter organization" required />
+                </div>
                 <SeededSelect />
               </>
             )}
             {event.event_type === 'doubles' && (
               <>
-                <TextInput name="pair_name" placeholder="Pair name (optional)" />
-                <TextInput name="player_a" placeholder="Player A" required />
-                <TextInput name="player_b" placeholder="Player B" required />
-                <TextInput name="organization" placeholder="Organization (optional)" />
+                <div>
+                  <FormLabel>Pair name</FormLabel>
+                  <TextInput name="pair_name" placeholder="Pair name (optional)" />
+                </div>
+                <div>
+                  <FormLabel>Player A</FormLabel>
+                  <TextInput name="player_a" placeholder="Player A" required />
+                </div>
+                <div>
+                  <FormLabel>Player B</FormLabel>
+                  <TextInput name="player_b" placeholder="Player B" required />
+                </div>
+                <div>
+                  <FormLabel>Organization</FormLabel>
+                  <TextInput name="organization" placeholder="Organization (optional)" />
+                </div>
                 <SeededSelect />
               </>
             )}
-            <Button type="submit" disabled={loading || entries.length >= cfg.total_slots} fullWidth>
+            <AddEntryButton type="submit" disabled={loading || entries.length >= cfg.total_slots} fullWidth>
               {loading ? 'Adding…' : 'Add entry'}
-            </Button>
+            </AddEntryButton>
           </form>
 
           <div className="space-y-2">
@@ -578,7 +698,23 @@ export function AdminEventPage() {
               <EntryRow key={entry.id} entry={entry} onRemove={() => handleDeleteEntry(entry)} />
             ))}
           </div>
+
+          {event.status === 'draft' && (
+            <Button disabled={loading} onClick={() => changeStatus('upcoming')} fullWidth>
+              Publish division
+            </Button>
+          )}
+
+          <DeleteDivisionButton onClick={handleDeleteEvent} disabled={loading}>
+            Delete division
+          </DeleteDivisionButton>
         </section>
+      )}
+
+      {event.status === 'ongoing' && groups.length === 0 && (
+        <WarningBanner>
+          Group stage data is missing. End this division and start it again if setup failed.
+        </WarningBanner>
       )}
 
       {event.status === 'ongoing' && groups.length > 0 && (
@@ -587,6 +723,7 @@ export function AdminEventPage() {
 
           {activeGroupStage && (
             <section className="space-y-4">
+              <PanelSectionTitle>Group {activeGroupStage.group.label} standings</PanelSectionTitle>
               <GroupStandingsTable
                 label={activeGroupStage.group.label}
                 rows={activeGroupStage.rows}
@@ -594,13 +731,17 @@ export function AdminEventPage() {
                 manualRankNote={activeGroupStage.group.manual_rank_note}
               />
 
-              {activeGroupStage.groupPlayComplete && (
+              {activeGroupStage.groupPlayComplete &&
+                (activeGroupStage.hasManualRanks ||
+                  needsManualRankResolution(activeGroupStage.computedRows)) && (
                 <GroupRankEditor
                   groupLabel={activeGroupStage.group.label}
                   rows={activeGroupStage.computedRows}
                   manualRankOrder={activeGroupStage.group.manual_rank_order}
                   manualRankNote={activeGroupStage.group.manual_rank_note}
                   saving={loading}
+                  disabled={knockoutHasScores}
+                  diffLabel={event.event_type === 'team' ? 'rubbers' : 'sets'}
                   onSave={(orderedEntryIds, note) =>
                     handleSaveGroupRanks(activeGroupStage.group.id, orderedEntryIds, note)
                   }
@@ -610,8 +751,8 @@ export function AdminEventPage() {
 
               {activeGroupStage.pending.length > 0 && (
                 <div>
-                  <SubsectionTitle>To score ({activeGroupStage.pending.length})</SubsectionTitle>
-                  <div className="space-y-3">
+                  <PanelSectionTitle>To score ({activeGroupStage.pending.length})</PanelSectionTitle>
+                  <div className="space-y-3 mt-3">
                     {activeGroupStage.pending.map((m) => (
                       <MatchScoreEntry
                         key={m.id}
@@ -630,21 +771,26 @@ export function AdminEventPage() {
               )}
 
               {activeGroupStage.completed.length > 0 && (
-                <details className="mt-4 group">
-                  <summary className="text-sm font-medium text-slate-500 cursor-pointer list-none flex items-center gap-1">
-                    <span className="group-open:rotate-90 transition-transform">▸</span>
-                    Completed ({activeGroupStage.completed.length})
+                <details className="group">
+                  <summary className="flex items-center justify-between bg-card rounded-xl border border-border px-3.5 py-3 cursor-pointer list-none">
+                    <span className="text-sm font-bold text-text-bluewhite">
+                      Completed ({activeGroupStage.completed.length})
+                    </span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-steel group-open:rotate-180 transition-transform" aria-hidden>
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
                   </summary>
                   <div className="mt-2 space-y-2">
                     {activeGroupStage.completed.map((m) => (
-                      <MatchScoreEntry
-                        key={m.id}
-                        eventType={event.event_type}
-                        config={cfg}
-                        match={m}
-                        stage="group"
-                        onSave={async () => {}}
-                      />
+                      <div key={m.id} className="rounded-[10px] border border-border bg-[#0C284780] px-3.5 py-2.5">
+                        <MatchScoreEntry
+                          eventType={event.event_type}
+                          config={cfg}
+                          match={m}
+                          stage="group"
+                          onSave={async () => {}}
+                        />
+                      </div>
                     ))}
                   </div>
                 </details>
@@ -653,40 +799,39 @@ export function AdminEventPage() {
           )}
 
           {allGroupPlayComplete && (
-            <Card className="p-4 space-y-3">
-              <SubsectionTitle>Knockout stage</SubsectionTitle>
-              {knockoutMatches.length === 0 ? (
-                <>
-                  <CaptionText>
-                    Knockout does not generate automatically. Score all group matches first. If any group
-                    needs head-to-head ranks from paper, set and save ranks on each group tab, then generate
-                    the bracket below.
-                  </CaptionText>
+            <div className="space-y-3">
+              <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
+                <PanelSectionTitle>Knockout stage</PanelSectionTitle>
+                <CaptionText>
+                  The knockout is not generated automatically. Save any manual group ranks first, then
+                  generate the bracket from the final positions.
+                </CaptionText>
+                {knockoutMatches.length === 0 ? (
                   <Button type="button" onClick={handleGenerateKnockout} disabled={loading} fullWidth>
                     Generate knockout bracket
                   </Button>
-                </>
-              ) : (
-                <>
-                  <CaptionText>
-                    {knockoutHasScores
-                      ? 'Knockout matches are already scored — group ranks can no longer update the bracket.'
-                      : 'Update group ranks above, then refresh the bracket before scoring knockout matches.'}
-                  </CaptionText>
-                  {!knockoutHasScores && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={handleGenerateKnockout}
-                      disabled={loading}
-                      fullWidth
-                    >
-                      Regenerate knockout from ranks
-                    </Button>
-                  )}
-                </>
+                ) : (
+                  <>
+                    {!knockoutHasScores && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleGenerateKnockout}
+                        disabled={loading}
+                        fullWidth
+                      >
+                        Regenerate knockout from ranks
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+              {knockoutMatches.length > 0 && (
+                <WarningBanner>
+                  Once knockout scoring starts, ranks can no longer update the bracket.
+                </WarningBanner>
               )}
-            </Card>
+            </div>
           )}
 
           {activeKnockoutRound && activeKnockoutMatches.length > 0 && (() => {
@@ -700,57 +845,60 @@ export function AdminEventPage() {
               <section className="space-y-4">
                 <KnockoutBracket matches={activeKnockoutMatches} round={activeKnockoutRound} />
                 {scorable.length > 0 && (
-                  <div>
-                    <SubsectionTitle>
-                      Pending{' '}
-                      {activeKnockoutRound === 'final'
-                        ? 'final'
-                        : activeKnockoutRound === 'semi'
-                          ? 'semifinals'
-                          : 'quarterfinals'}
-                    </SubsectionTitle>
-                    <div className="mt-3 space-y-3">
-                      {scorable.map((m) => (
-                        <MatchScoreEntry
-                          key={m.id}
-                          eventType={event.event_type}
-                          config={cfg}
-                          match={m}
-                          stage={
+                  <div className="space-y-3">
+                    {scorable.map((m) => (
+                      <MatchScoreEntry
+                        key={m.id}
+                        eventType={event.event_type}
+                        config={cfg}
+                        match={m}
+                        stage={
+                          m.round === 'final' ? 'finals' : m.round === 'semi' ? 'semis' : 'quarters'
+                        }
+                        onSave={async (data) => {
+                          const stage =
                             m.round === 'final' ? 'finals' : m.round === 'semi' ? 'semis' : 'quarters'
-                          }
-                          onSave={async (data) => {
-                            await saveKnockoutMatchResult(m.id, data)
-                            await fetchEventData()
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <p className="mt-4 text-sm text-slate-600">
-                      Score the{' '}
-                      {activeKnockoutRound === 'final'
-                        ? 'final'
-                        : activeKnockoutRound === 'semi'
-                          ? 'semifinal'
-                          : 'quarterfinal'}{' '}
-                      above to continue.
-                    </p>
+                          await saveKnockoutMatchResult(m.id, data, stage)
+                          await fetchEventData()
+                        }}
+                      />
+                    ))}
                   </div>
                 )}
-                {scorable.length === 0 && activeKnockoutRound !== 'final' && !knockoutDone && (
-                  <p className="text-sm text-slate-500">
+                {scorable.length === 0 && activeKnockoutRound === 'semi' && finalMatch && finalMatch.status !== 'completed' && (
+                  <div className="rounded-xl border border-border bg-[#0C284780] p-3.5 space-y-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-text-steel">FINAL · WAITING</p>
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-semibold text-text-steel truncate">
+                        {finalMatch.entry_a ? getEntryDisplayName(finalMatch.entry_a) : 'Winner SF1'}
+                      </span>
+                      <span className="text-xs text-text-steel shrink-0">vs</span>
+                      <span className="font-semibold text-text-steel truncate text-right">
+                        {finalMatch.entry_b ? getEntryDisplayName(finalMatch.entry_b) : 'Winner SF2'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {scorable.length === 0 && activeKnockoutRound !== 'final' && !knockoutDone && activeKnockoutRound !== 'semi' && (
+                  <p className="text-sm text-text-steel">
                     Waiting for earlier round results — winners advance automatically.
                   </p>
                 )}
                 {knockoutDone && activeKnockoutRound === 'final' && (
-                  <p className="text-sm text-brand-700 font-medium">
-                    Division complete. Click <strong>End division</strong> to remove data.
+                  <p className="text-sm text-brand-500 font-semibold">
+                    Division complete. Click <strong>Delete division data</strong> below to remove all records.
                   </p>
                 )}
               </section>
             )
           })()}
         </>
+      )}
+
+      {event.status === 'ongoing' && (
+        <DeleteDivisionButton onClick={() => changeStatus('ended')} disabled={loading} className="mt-6">
+          Delete division data
+        </DeleteDivisionButton>
       )}
       </div>
     </AdminLayout>

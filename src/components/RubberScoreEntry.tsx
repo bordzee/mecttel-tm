@@ -24,34 +24,34 @@ export function RubberScoreEntry({ format, homeName, awayName, rubbers, onChange
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-between text-sm font-medium text-slate-900">
+      <div className="flex justify-between text-sm font-semibold text-text-bluewhite">
         <span className="truncate">{homeName}</span>
-        <span className="text-lg tabular-nums font-bold px-2">
+        <span className="text-lg tabular-nums font-extrabold px-2 text-text-primary">
           {calc.scoreA} – {calc.scoreB}
         </span>
         <span className="truncate text-right">{awayName}</span>
       </div>
-      <p className="text-xs text-slate-400">First to {threshold} rubber wins</p>
+      <p className="text-xs text-text-steel">First to {threshold} rubber wins</p>
       {labels.map((label, i) => (
         <div
           key={label}
-          className="flex items-center justify-between gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100"
+          className="flex items-center justify-between gap-2 bg-card-raised rounded-xl px-3 py-2 border border-border"
         >
-          <span className="text-sm text-slate-600 w-24 shrink-0">{label}</span>
+          <span className="text-sm text-text-steel w-24 shrink-0">{label}</span>
           <div className="flex gap-1">
             {(['W', 'L', null] as const).map((val) => (
               <button
                 key={String(val)}
                 type="button"
                 onClick={() => setRubber(i, val)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium min-w-[44px] transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold min-w-[44px] transition-colors ${
                   rubbers[i] === val
                     ? val === 'W'
-                      ? 'bg-brand-600 text-white'
+                      ? 'bg-brand-500 text-white'
                       : val === 'L'
-                        ? 'bg-red-500 text-white'
-                        : 'bg-slate-300 text-slate-700'
-                    : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'
+                        ? 'bg-live text-white'
+                        : 'bg-border text-text-bluewhite'
+                    : 'bg-navy border border-border text-text-steel hover:border-border-strong'
                 }`}
               >
                 {val ?? '—'}
@@ -61,7 +61,7 @@ export function RubberScoreEntry({ format, homeName, awayName, rubbers, onChange
         </div>
       ))}
       {calc.error && calc.scoreA + calc.scoreB > 0 && (
-        <p className="text-sm text-amber-700">{calc.error}</p>
+        <p className="text-sm text-amber">{calc.error}</p>
       )}
     </div>
   )

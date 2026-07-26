@@ -5,30 +5,52 @@
   --font-body: 'Inter', system-ui, sans-serif;
   --font-caption: 'Inter', system-ui, sans-serif;
 
-  --color-brand-50: #ecfdf5;
-  --color-brand-100: #d1fae5;
+  /* pen.dev design tokens */
+  --color-navy: #071b33;
+  --color-navy-section: #0c2847;
+  --color-card: #0c2847;
+  --color-card-raised: #123b63;
+  --color-border: #1c3e68;
+  --color-border-strong: #295084;
+
+  --color-brand-50: #e6f7f0;
+  --color-brand-100: #10b9811f;
   --color-brand-500: #10b981;
-  --color-brand-600: #059669;
-  --color-brand-700: #047857;
+  --color-brand-600: #10b981;
+  --color-brand-700: #0b8a61;
 
-  --color-live: #ef4444;
-  --color-live-bg: #fee2e2;
-  --color-live-text: #b91c1c;
+  --color-live: #ff3b3b;
+  --color-live-bg: #ff3b3b24;
+  --color-live-text: #ff3b3b;
 
-  --color-warning-bg: #fffbeb;
-  --color-warning-border: #fde68a;
-  --color-warning-text: #92400e;
+  --color-warning-bg: #33270b;
+  --color-warning-border: #ffb02066;
+  --color-warning-text: #ffb020;
 
-  --color-winner: #047857;
-  --color-chip-bg: #f1f5f9;
-  --color-chip-text: #475569;
+  --color-winner: #2fbf71;
+  --color-chip-bg: #123b63;
+  --color-chip-text: #dce7f5;
 
-  --radius-card: 12px;
-  --radius-btn: 8px;
+  --color-text-primary: #ffffff;
+  --color-text-bluewhite: #dce7f5;
+  --color-text-steel: #8da4c0;
+  --color-text-on-light: #071b33;
+  --color-text-muted-light: #5b708a;
+
+  --color-amber: #ffb020;
+  --color-amber-soft: #33270b;
+  --color-green-soft: #0f3324;
+  --color-red-soft: #3a1420;
+
+  --color-header-border: #e4e9f0;
+
+  --radius-card: 16px;
+  --radius-sm: 12px;
+  --radius-btn: 12px;
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-navy text-text-primary antialiased;
   font-family: var(--font-body);
 }
 

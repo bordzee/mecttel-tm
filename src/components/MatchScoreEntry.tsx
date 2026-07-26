@@ -13,6 +13,7 @@ import { getEntryDisplayName } from '../lib/displayNames'
 import { validateSetScore, getBestOfForStage } from '../lib/scoring'
 import { forfeitScores } from '../lib/matchOutcomes'
 import { Button, CaptionText, Card, FormLabel, SelectInput } from './ui/primitives'
+import { MatchCard } from './MatchCard'
 
 interface Props {
   eventType: EventType
@@ -67,8 +68,18 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
       finalB = calc.scoreB
       rubberResults = { home: rubbers }
     } else {
-      finalA = parseInt(scoreA, 10)
-      finalB = parseInt(scoreB, 10)
+      const parsedA = Number(scoreA)
+      const parsedB = Number(scoreB)
+      if (!Number.isInteger(parsedA) || !Number.isInteger(parsedB)) {
+        setError('Scores must be whole numbers')
+        return
+      }
+      if (parsedA < 0 || parsedB < 0) {
+        setError('Scores cannot be negative')
+        return
+      }
+      finalA = parsedA
+      finalB = parsedB
       const validation = validateSetScore(finalA, finalB, bestOf)
       if (!validation.valid) {
         setError(validation.error ?? 'Invalid score')
@@ -101,22 +112,20 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
 
   if (match.status === 'completed') {
     return (
-      <div className="text-sm bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
-        <span className="font-medium text-slate-900">{homeName}</span>{' '}
-        <span className="tabular-nums font-bold text-slate-900">
-          {match.score_a}–{match.score_b}
-        </span>{' '}
-        <span className="font-medium text-slate-900">{awayName}</span>
-        {match.outcome !== 'normal' && (
-          <span className="ml-2 text-xs text-amber-700">({match.outcome})</span>
-        )}
-      </div>
+      <MatchCard
+        homeName={homeName}
+        awayName={awayName}
+        scoreA={match.score_a}
+        scoreB={match.score_b}
+        homeWon={match.winner_entry_id === match.entry_a_id}
+        awayWon={match.winner_entry_id === match.entry_b_id}
+      />
     )
   }
 
   return (
     <Card className="p-4 space-y-3">
-      <p className="text-sm font-medium text-slate-900">
+      <p className="text-sm font-semibold text-text-bluewhite">
         {homeName} vs {awayName}
       </p>
 
@@ -159,19 +168,21 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
           <div className="flex items-center justify-center gap-2">
             <input
               type="number"
+              step={1}
               min={0}
               value={scoreA}
               onChange={(e) => setScoreA(e.target.value)}
-              className="w-16 h-10 border border-slate-200 rounded-lg text-center text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-500"
+              className="w-16 h-10 bg-navy border border-border rounded-xl text-center text-base font-extrabold text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500"
               aria-label={`Sets won by ${homeName}`}
             />
-            <span className="text-slate-400">–</span>
+            <span className="text-text-steel">–</span>
             <input
               type="number"
+              step={1}
               min={0}
               value={scoreB}
               onChange={(e) => setScoreB(e.target.value)}
-              className="w-16 h-10 border border-slate-200 rounded-lg text-center text-base font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-600/20 focus:border-brand-500"
+              className="w-16 h-10 bg-navy border border-border rounded-xl text-center text-base font-extrabold text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500"
               aria-label={`Sets won by ${awayName}`}
             />
           </div>
@@ -179,7 +190,7 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
         </>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-live">{error}</p>}
 
       <Button type="button" onClick={handleSave} disabled={saving} fullWidth>
         {saving ? 'Saving…' : 'Save result'}

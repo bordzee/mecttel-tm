@@ -21,23 +21,19 @@ export function getCategoryDisplay(
 }
 
 /** Auto-generate a division label from type + category. */
-export function buildEventName(
-  eventType: EventType,
-  category: Category | null,
-  categoryLabel?: string,
-): string {
+export function buildEventName(eventType: EventType, category: Category | null): string {
   const typeLabel = EVENT_TYPE_LABELS[eventType]
   if (eventType === 'team' || eventType === 'executive') {
-    if (categoryLabel) return categoryLabel
     return typeLabel
   }
-  const cat = getCategoryDisplay(category, categoryLabel)
+  const cat = getCategoryDisplay(category)
   return cat ? `${typeLabel} – ${cat}` : typeLabel
 }
 
 export function getEventDisplayName(event: Pick<TournamentEvent, 'name' | 'event_type' | 'category' | 'config'>) {
   if (event.name) return event.name
-  return buildEventName(event.event_type, event.category, event.config.category_label)
+  if (event.config.category_label) return event.config.category_label
+  return buildEventName(event.event_type, event.category)
 }
 
 export function isPlayerEventType(eventType: EventType): boolean {
@@ -45,5 +41,5 @@ export function isPlayerEventType(eventType: EventType): boolean {
 }
 
 export function hasCategoryPicker(eventType: EventType): boolean {
-  return eventType === 'single' || eventType === 'doubles' || eventType === 'executive'
+  return eventType === 'single' || eventType === 'doubles'
 }

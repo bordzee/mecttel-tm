@@ -5,6 +5,7 @@ import { HomePage } from './pages/HomePage'
 import { TournamentDetailPage } from './pages/TournamentDetailPage'
 import { EventDetailPage } from './pages/EventDetailPage'
 import { LivePage } from './pages/LivePage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import { AdminLoginPage } from './pages/admin/AdminLoginPage'
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage'
 import { TournamentWizardPage } from './pages/admin/TournamentWizardPage'
@@ -65,15 +66,13 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/admin/admins/new"
-            element={
-              <ProtectedRoute>
-                <CreateAdminPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/admin/admins/new" element={
+            <ProtectedRoute>
+              <CreateAdminPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/tournaments" element={<Navigate to="/admin" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

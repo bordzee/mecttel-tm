@@ -648,6 +648,12 @@ export function generateKnockoutPairings(
       if (a && b) playPairings.push({ a, b, side: s.bracketSide, rankA: 0, rankB: 0 })
     }
     warnings.push(...pairingWarnings(playPairings, entries))
+    warnings.push(
+      ...assertNoSameGroupPairings(
+        playPairings,
+        buildEntryGroupMap(advancersByGroup, groupOrder),
+      ),
+    )
   } else {
     let pairings: Pairing[]
     if (effectiveType === 'block') {
@@ -773,11 +779,25 @@ export function computeKnockoutAdvancement(
     if (!feeders.every((f) => f.status === 'completed' && f.winner_entry_id)) continue
 
     const winners = feeders
-      .map((f) => standingByEntryId?.get(f.winner_entry_id!) ?? null)
-      .filter((row): row is StandingRow => !!row)
+      .map((f) => {
+        const id = f.winner_entry_id!
+        return (
+          standingByEntryId?.get(id) ?? {
+            entryId: id,
+            name: '',
+            played: 0,
+            wins: 0,
+            losses: 0,
+            scoreFor: 0,
+            scoreAgainst: 0,
+            diff: 0,
+            rank: 0,
+          }
+        )
+      })
       .sort(compareStandingStrength)
 
-    if (winners.length !== 3) continue
+    if (winners.length < 3) continue
 
     if (m.is_odd_play_in) {
       updates.set(m.id, {

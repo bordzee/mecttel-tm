@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { httpsCallable } from 'firebase/functions'
 import { AdminLayout } from '../../components/AdminLayout'
 import {
-  AdminPageTitle,
+  EventPageTitle,
+  BackLink,
   Button,
   Card,
   ErrorMessage,
   FormLabel,
-  MetaText,
-  SuccessMessage,
+  InfoNoteCard,
+  SuccessBanner,
   TextInput,
 } from '../../components/ui/primitives'
 import { functions } from '../../lib/firebase'
@@ -28,7 +29,7 @@ export function CreateAdminPage() {
     try {
       const createAdmin = httpsCallable(functions, 'createAdmin')
       await createAdmin({ email, password })
-      setMessage(`Admin account created for ${email}`)
+      setMessage('Admin account created.')
       setEmail('')
       setPassword('')
     } catch (err) {
@@ -44,33 +45,38 @@ export function CreateAdminPage() {
 
   return (
     <AdminLayout>
-      <AdminPageTitle>Create admin</AdminPageTitle>
-      <MetaText className="mt-2 mb-6 block">
-        Requires the createAdmin Cloud Function, or add a user in Firebase Auth with profiles/&#123;uid&#125; role: admin.
-      </MetaText>
+      <div className="space-y-4">
+        <BackLink to="/admin">Dashboard</BackLink>
+        <EventPageTitle>Create admin</EventPageTitle>
 
-      <Card as="form" onSubmit={handleSubmit} className="p-4 space-y-4">
-        {message && <SuccessMessage>{message}</SuccessMessage>}
-        {error && <ErrorMessage>{error}</ErrorMessage>}
-        <div>
-          <FormLabel>Email</FormLabel>
-          <TextInput type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div>
-          <FormLabel>Password</FormLabel>
-          <TextInput
-            type="password"
-            required
-            minLength={8}
-            placeholder="Min 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <Button type="submit" disabled={loading} fullWidth>
-          {loading ? 'Creating…' : 'Create admin'}
-        </Button>
-      </Card>
+        <InfoNoteCard>
+          Creating admins requires a configured Firebase Cloud Function. This will fail if setup is incomplete.
+        </InfoNoteCard>
+
+        {message && <SuccessBanner>{message}</SuccessBanner>}
+
+        <Card as="form" onSubmit={handleSubmit} className="p-4 space-y-3.5">
+          {error && <ErrorMessage>{error}</ErrorMessage>}
+          <div>
+            <FormLabel>Email</FormLabel>
+            <TextInput type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="newadmin@mecttel.org" />
+          </div>
+          <div>
+            <FormLabel>Password</FormLabel>
+            <TextInput
+              type="password"
+              required
+              minLength={8}
+              placeholder="Min 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <Button type="submit" disabled={loading} fullWidth>
+            {loading ? 'Creating…' : 'Create admin'}
+          </Button>
+        </Card>
+      </div>
     </AdminLayout>
   )
 }

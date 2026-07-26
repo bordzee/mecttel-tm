@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   updateDoc,
@@ -11,7 +12,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { deleteEventData, deleteTournamentData, deleteWhere, stripUndefined } from './firebaseHelpers'
+import { deleteEventData, deleteTournamentData, deleteWhere, deleteQueryDocs, deleteEntryReferences, stripUndefined } from './firebaseHelpers'
 import type {
   EventType,
   Category,
@@ -34,7 +35,8 @@ import {
   computeKnockoutAdvancement,
   type KnockoutTreeNode,
 } from './knockoutSeeding'
-import { computeStandings, getTopAdvancers, resolveGroupStandings } from './standings'
+import { computeStandings, getTopAdvancers, resolveGroupStandings, needsManualRankResolution } from './standings'
+import { validateMatchResultSave } from './matchValidation'
 import { entrySortKey } from './groupLayout'
 
 function withId<T>(id: string, data: T): T & { id: string } {
@@ -45,10 +47,19 @@ function eventsRef(tournamentId: string) {
   return collection(db, 'tournaments', tournamentId, 'events')
 }
 
-const knockoutGenerationInflight = new Map<
-  string,
-  Promise<{ generated: boolean; warnings: string[] }>
->()
+const knockoutPropagationInflight = new Map<string, Promise<void>>()
+
+const BATCH_SIZE = 450
+
+type PendingWrite = { ref: ReturnType<typeof doc>; data: Record<string, unknown> }
+
+async function commitBatchSets(pendingSets: PendingWrite[]) {
+  for (let i = 0; i < pendingSets.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db)
+    pendingSets.slice(i, i + BATCH_SIZE).forEach(({ ref, data }) => batch.set(ref, data))
+    await batch.commit()
+  }
+}
 
 async function syncTournamentPublicVisibility(tournamentId: string) {
   const events = await fetchEvents(tournamentId)
@@ -247,7 +258,7 @@ export async function deleteEvent(tournamentId: string, eventId: string) {
   await syncTournamentPublicVisibility(tournamentId)
 }
 
-async function entryScope(tournamentId: string, eventId: string) {
+function entryScope(tournamentId: string, eventId: string) {
   return { tournament_id: tournamentId, event_id: eventId }
 }
 
@@ -256,23 +267,23 @@ export async function addTeamEntry(
   eventId: string,
   team: { name: string; organization: string; seeded: boolean | null; roster: string[] },
 ) {
-  const scope = await entryScope(tournamentId, eventId)
-  const teamRef = await addDoc(collection(db, 'teams'), {
+  const scope = entryScope(tournamentId, eventId)
+  const teamRef = doc(collection(db, 'teams'))
+  const entryRef = doc(collection(db, 'tournament_entries'))
+  const batch = writeBatch(db)
+
+  batch.set(teamRef, {
     ...scope,
     name: team.name,
     organization: team.organization || null,
     seeded: team.seeded,
   })
 
-  if (team.roster.length) {
-    const batch = writeBatch(db)
-    team.roster.forEach((name) => {
-      batch.set(doc(collection(db, 'team_players')), { team_id: teamRef.id, name })
-    })
-    await batch.commit()
-  }
+  team.roster.forEach((name) => {
+    batch.set(doc(collection(db, 'team_players')), { team_id: teamRef.id, name })
+  })
 
-  await addDoc(collection(db, 'tournament_entries'), {
+  batch.set(entryRef, {
     ...scope,
     entry_type: 'team',
     team_id: teamRef.id,
@@ -281,6 +292,7 @@ export async function addTeamEntry(
     seeded: team.seeded,
   })
 
+  await batch.commit()
   const snap = await getDoc(teamRef)
   return withId(snap.id, snap.data() as Omit<Team, 'id'>)
 }
@@ -290,15 +302,19 @@ export async function addPlayerEntry(
   eventId: string,
   player: { name: string; organization: string; seeded: boolean | null },
 ) {
-  const scope = await entryScope(tournamentId, eventId)
-  const playerRef = await addDoc(collection(db, 'players'), {
+  const scope = entryScope(tournamentId, eventId)
+  const playerRef = doc(collection(db, 'players'))
+  const entryRef = doc(collection(db, 'tournament_entries'))
+  const batch = writeBatch(db)
+
+  batch.set(playerRef, {
     ...scope,
     name: player.name,
     organization: player.organization || null,
     seeded: player.seeded,
   })
 
-  await addDoc(collection(db, 'tournament_entries'), {
+  batch.set(entryRef, {
     ...scope,
     entry_type: 'player',
     team_id: null,
@@ -307,6 +323,7 @@ export async function addPlayerEntry(
     seeded: player.seeded,
   })
 
+  await batch.commit()
   const snap = await getDoc(playerRef)
   return withId(snap.id, snap.data() as Omit<Player, 'id'>)
 }
@@ -322,8 +339,12 @@ export async function addPairEntry(
     seeded: boolean | null
   },
 ) {
-  const scope = await entryScope(tournamentId, eventId)
-  const pairRef = await addDoc(collection(db, 'pairs'), {
+  const scope = entryScope(tournamentId, eventId)
+  const pairRef = doc(collection(db, 'pairs'))
+  const entryRef = doc(collection(db, 'tournament_entries'))
+  const batch = writeBatch(db)
+
+  batch.set(pairRef, {
     ...scope,
     pair_name: pair.pair_name || null,
     player_a: pair.player_a,
@@ -332,7 +353,7 @@ export async function addPairEntry(
     seeded: pair.seeded,
   })
 
-  await addDoc(collection(db, 'tournament_entries'), {
+  batch.set(entryRef, {
     ...scope,
     entry_type: 'pair',
     team_id: null,
@@ -341,6 +362,7 @@ export async function addPairEntry(
     seeded: pair.seeded,
   })
 
+  await batch.commit()
   const snap = await getDoc(pairRef)
   return withId(snap.id, snap.data() as Omit<Pair, 'id'>)
 }
@@ -356,7 +378,27 @@ export async function saveGroupRankOrder(
   groupId: string,
   orderedEntryIds: string[],
   note?: string | null,
+  options?: { allowWhenKnockoutScored?: boolean; eventId?: string },
 ) {
+  if (!options?.allowWhenKnockoutScored && options?.eventId) {
+    const knockout = await fetchKnockoutMatches(options.eventId)
+    if (knockout.some((m) => m.status === 'completed')) {
+      throw new Error('Cannot change group ranks — knockout matches are already scored')
+    }
+  }
+
+  const membersSnap = await getDocs(
+    query(collection(db, 'group_members'), where('group_id', '==', groupId)),
+  )
+  const memberIds = new Set(membersSnap.docs.map((d) => d.data().entry_id as string))
+  const uniqueOrder = [...new Set(orderedEntryIds)]
+  if (
+    uniqueOrder.length !== memberIds.size ||
+    !uniqueOrder.every((id) => memberIds.has(id))
+  ) {
+    throw new Error('Rank order must include every group member exactly once')
+  }
+
   const trimmed = note?.trim()
   await updateDoc(doc(db, 'groups', groupId), {
     manual_rank_order: orderedEntryIds,
@@ -364,7 +406,16 @@ export async function saveGroupRankOrder(
   })
 }
 
-export async function clearGroupRankOrder(groupId: string) {
+export async function clearGroupRankOrder(
+  groupId: string,
+  options?: { allowWhenKnockoutScored?: boolean; eventId?: string },
+) {
+  if (!options?.allowWhenKnockoutScored && options?.eventId) {
+    const knockout = await fetchKnockoutMatches(options.eventId)
+    if (knockout.some((m) => m.status === 'completed')) {
+      throw new Error('Cannot reset group ranks — knockout matches are already scored')
+    }
+  }
   await updateDoc(doc(db, 'groups', groupId), {
     manual_rank_order: null,
     manual_rank_note: null,
@@ -404,48 +455,57 @@ export async function setupGroupsAndMatches(
     event.config.group_sizes,
   )
 
+  type PendingWriteLocal = { ref: ReturnType<typeof doc>; data: Record<string, unknown> }
+  const pendingSets: PendingWriteLocal[] = []
+
+  for (const assignment of assignments) {
+    const groupRef = doc(collection(db, 'groups'))
+    pendingSets.push({
+      ref: groupRef,
+      data: {
+        tournament_id: tournamentId,
+        event_id: event.id,
+        label: assignment.label,
+      },
+    })
+
+    assignment.entryIds.forEach((entryId) => {
+      pendingSets.push({
+        ref: doc(collection(db, 'group_members')),
+        data: { group_id: groupRef.id, entry_id: entryId },
+      })
+    })
+
+    const pairs = generateRoundRobinPairs(assignment.entryIds)
+    pairs.forEach(([a, b]) => {
+      pendingSets.push({
+        ref: doc(collection(db, 'group_matches')),
+        data: {
+          tournament_id: tournamentId,
+          event_id: event.id,
+          group_id: groupRef.id,
+          entry_a_id: a,
+          entry_b_id: b,
+          score_a: null,
+          score_b: null,
+          rubber_results: null,
+          winner_entry_id: null,
+          status: 'scheduled',
+          outcome: 'normal',
+        },
+      })
+    })
+  }
+
   const existingGroups = await fetchGroups(event.id)
   for (const g of existingGroups) {
     await deleteWhere('group_members', 'group_id', g.id)
   }
   await deleteWhere('groups', 'event_id', event.id)
   await deleteWhere('group_matches', 'event_id', event.id)
+  await deleteWhere('knockout_matches', 'event_id', event.id)
 
-  for (const assignment of assignments) {
-    const groupRef = await addDoc(collection(db, 'groups'), {
-      tournament_id: tournamentId,
-      event_id: event.id,
-      label: assignment.label,
-    })
-
-    const memberBatch = writeBatch(db)
-    assignment.entryIds.forEach((entryId) => {
-      memberBatch.set(doc(collection(db, 'group_members')), {
-        group_id: groupRef.id,
-        entry_id: entryId,
-      })
-    })
-    await memberBatch.commit()
-
-    const pairs = generateRoundRobinPairs(assignment.entryIds)
-    const matchesBatch = writeBatch(db)
-    pairs.forEach(([a, b]) => {
-      matchesBatch.set(doc(collection(db, 'group_matches')), {
-        tournament_id: tournamentId,
-        event_id: event.id,
-        group_id: groupRef.id,
-        entry_a_id: a,
-        entry_b_id: b,
-        score_a: null,
-        score_b: null,
-        rubber_results: null,
-        winner_entry_id: null,
-        status: 'scheduled',
-        outcome: 'normal',
-      })
-    })
-    await matchesBatch.commit()
-  }
+  await commitBatchSets(pendingSets)
 }
 
 export async function fetchGroupMatches(eventId: string) {
@@ -488,6 +548,31 @@ export async function fetchKnockoutMatches(eventId: string) {
     })
 }
 
+export async function startDivision(
+  tournamentId: string,
+  event: TournamentEvent,
+  entries: TournamentEntry[],
+  updatedConfig: TournamentConfig,
+) {
+  const fresh = await fetchEvent(tournamentId, event.id)
+  if (fresh.status !== 'upcoming') {
+    throw new Error('Division can only be started from upcoming status')
+  }
+
+  const eventForSetup = { ...fresh, config: updatedConfig }
+  await setupGroupsAndMatches(tournamentId, eventForSetup, entries)
+  return updateEvent(tournamentId, event.id, { config: updatedConfig, status: 'ongoing' })
+}
+
+async function loadEventForMatch(eventId: string): Promise<TournamentEvent> {
+  const entriesSnap = await getDocs(
+    query(collection(db, 'tournament_entries'), where('event_id', '==', eventId), limit(1)),
+  )
+  if (entriesSnap.empty) throw new Error('Event not found')
+  const tournamentId = entriesSnap.docs[0].data().tournament_id as string
+  return fetchEvent(tournamentId, eventId)
+}
+
 export async function saveGroupMatchResult(
   matchId: string,
   update: {
@@ -502,70 +587,62 @@ export async function saveGroupMatchResult(
   const matchSnap = await getDoc(matchRef)
   if (!matchSnap.exists()) throw new Error('Match not found')
 
+  const matchData = matchSnap.data()
+  const event = await loadEventForMatch(matchData.event_id as string)
+  validateMatchResultSave(
+    { id: matchId, ...matchData } as GroupMatch,
+    update,
+    { eventType: event.event_type, config: event.config, stage: 'group' },
+  )
+
   await updateDoc(matchRef, { ...update, status: 'completed' })
-  return { generated: false, warnings: [] as string[] }
-}
-
-export async function maybeAutoGenerateKnockout(
-  tournamentId: string,
-  eventId: string,
-): Promise<{ generated: boolean; warnings: string[] }> {
-  const inflight = knockoutGenerationInflight.get(eventId)
-  if (inflight) return inflight
-
-  const promise = (async (): Promise<{ generated: boolean; warnings: string[] }> => {
-    const existing = await fetchKnockoutMatches(eventId)
-    if (existing.length > 0) return { generated: false, warnings: [] }
-
-    const groupMatches = await fetchGroupMatches(eventId)
-    if (!groupMatches.length) return { generated: false, warnings: [] }
-
-    const allComplete = groupMatches.every((m) => m.status === 'completed')
-    if (!allComplete) return { generated: false, warnings: [] }
-
-    const event = await fetchEvent(tournamentId, eventId)
-    const warnings = await generateKnockoutBracket(tournamentId, event)
-    return { generated: true, warnings: warnings.map((w) => w.message) }
-  })()
-
-  knockoutGenerationInflight.set(eventId, promise)
-  try {
-    return await promise
-  } finally {
-    knockoutGenerationInflight.delete(eventId)
-  }
 }
 
 export async function propagateKnockoutWinners(eventId: string) {
-  const matches = await fetchKnockoutMatches(eventId)
-  if (!matches.length) return
+  const inflight = knockoutPropagationInflight.get(eventId)
+  if (inflight) return inflight
 
-  const tournamentId = matches[0].tournament_id
-  const standingMap = await fetchAdvancerStandingMap(tournamentId, eventId)
-  const updates = computeKnockoutAdvancement(matches, standingMap)
+  const promise = (async () => {
+    const matches = await fetchKnockoutMatches(eventId)
+    if (!matches.length) return
 
-  const batch = writeBatch(db)
-  let hasWrites = false
+    const tournamentId = matches[0].tournament_id
+    const standingMap = await fetchAdvancerStandingMap(tournamentId, eventId)
+    const updates = computeKnockoutAdvancement(matches, standingMap)
+    const pendingUpdates: { id: string; patch: Record<string, unknown> }[] = []
 
-  for (const m of matches) {
-    if (m.status === 'completed' && !updates.has(m.id)) continue
-    const patch = updates.get(m.id)
-    if (!patch) continue
+    for (const m of matches) {
+      if (m.status === 'completed' && !updates.has(m.id)) continue
+      const patch = updates.get(m.id)
+      if (!patch) continue
 
-    const changed =
-      patch.entry_a_id !== m.entry_a_id ||
-      patch.entry_b_id !== m.entry_b_id ||
-      patch.status !== m.status ||
-      (patch.winner_entry_id != null && patch.winner_entry_id !== m.winner_entry_id) ||
-      (patch.outcome != null && patch.outcome !== m.outcome)
+      const changed =
+        patch.entry_a_id !== m.entry_a_id ||
+        patch.entry_b_id !== m.entry_b_id ||
+        patch.status !== m.status ||
+        (patch.winner_entry_id != null && patch.winner_entry_id !== m.winner_entry_id) ||
+        (patch.outcome != null && patch.outcome !== m.outcome)
 
-    if (changed) {
-      batch.update(doc(db, 'knockout_matches', m.id), patch)
-      hasWrites = true
+      if (changed) {
+        pendingUpdates.push({ id: m.id, patch })
+      }
     }
-  }
 
-  if (hasWrites) await batch.commit()
+    for (let i = 0; i < pendingUpdates.length; i += BATCH_SIZE) {
+      const batch = writeBatch(db)
+      pendingUpdates.slice(i, i + BATCH_SIZE).forEach(({ id, patch }) => {
+        batch.update(doc(db, 'knockout_matches', id), patch)
+      })
+      await batch.commit()
+    }
+  })()
+
+  knockoutPropagationInflight.set(eventId, promise)
+  try {
+    await promise
+  } finally {
+    knockoutPropagationInflight.delete(eventId)
+  }
 }
 
 async function fetchAdvancerStandingMap(
@@ -599,47 +676,51 @@ async function fetchAdvancerStandingMap(
   return map
 }
 
-function writeKnockoutTree(
-  batch: ReturnType<typeof writeBatch>,
+function buildKnockoutTreeWrites(
   tournamentId: string,
   eventId: string,
   tree: KnockoutTreeNode[],
-) {
+): PendingWrite[] {
   const keyToId = new Map<string, string>()
   for (const node of tree) {
     keyToId.set(node.key, doc(collection(db, 'knockout_matches')).id)
   }
 
+  const pending: PendingWrite[] = []
   for (const node of tree) {
     const isBye = node.slot.isBye === true
     const matchId = keyToId.get(node.key)!
-    batch.set(doc(db, 'knockout_matches', matchId), {
-      tournament_id: tournamentId,
-      event_id: eventId,
-      round: node.slot.round,
-      slot: node.slot.slot,
-      bracket_side: node.slot.bracketSide,
-      entry_a_id: node.slot.entryAId,
-      entry_b_id: node.slot.entryBId,
-      score_a: isBye ? 1 : null,
-      score_b: isBye ? 0 : null,
-      rubber_results: null,
-      winner_entry_id: isBye ? (node.slot.winnerEntryId ?? node.slot.entryAId) : null,
-      source_match_a_id: node.slot.sourceAKey
-        ? (keyToId.get(node.slot.sourceAKey) ?? null)
-        : null,
-      source_match_b_id: node.slot.sourceBKey
-        ? (keyToId.get(node.slot.sourceBKey) ?? null)
-        : null,
-      pending_odd_round: node.slot.pendingOddRound ?? false,
-      is_odd_play_in: node.slot.isOddPlayIn ?? false,
-      feeder_source_match_ids: (node.slot.feederSourceKeys ?? [])
-        .map((key) => keyToId.get(key))
-        .filter((id): id is string => !!id),
-      status: isBye ? 'completed' : node.slot.entryAId && node.slot.entryBId ? 'scheduled' : 'pending',
-      outcome: isBye ? 'bye' : 'normal',
+    pending.push({
+      ref: doc(db, 'knockout_matches', matchId),
+      data: {
+        tournament_id: tournamentId,
+        event_id: eventId,
+        round: node.slot.round,
+        slot: node.slot.slot,
+        bracket_side: node.slot.bracketSide,
+        entry_a_id: node.slot.entryAId,
+        entry_b_id: node.slot.entryBId,
+        score_a: isBye ? 1 : null,
+        score_b: isBye ? 0 : null,
+        rubber_results: null,
+        winner_entry_id: isBye ? (node.slot.winnerEntryId ?? node.slot.entryAId) : null,
+        source_match_a_id: node.slot.sourceAKey
+          ? (keyToId.get(node.slot.sourceAKey) ?? null)
+          : null,
+        source_match_b_id: node.slot.sourceBKey
+          ? (keyToId.get(node.slot.sourceBKey) ?? null)
+          : null,
+        pending_odd_round: node.slot.pendingOddRound ?? false,
+        is_odd_play_in: node.slot.isOddPlayIn ?? false,
+        feeder_source_match_ids: (node.slot.feederSourceKeys ?? [])
+          .map((key) => keyToId.get(key))
+          .filter((id): id is string => !!id),
+        status: isBye ? 'completed' : node.slot.entryAId && node.slot.entryBId ? 'scheduled' : 'pending',
+        outcome: isBye ? 'bye' : 'normal',
+      },
     })
   }
+  return pending
 }
 
 export async function saveKnockoutMatchResult(
@@ -651,15 +732,29 @@ export async function saveKnockoutMatchResult(
     winner_entry_id: string
     outcome: string
   },
+  stage: 'quarters' | 'semis' | 'finals' = 'quarters',
 ) {
   const matchRef = doc(db, 'knockout_matches', matchId)
   const matchSnap = await getDoc(matchRef)
   if (!matchSnap.exists()) throw new Error('Match not found')
 
+  const matchData = matchSnap.data()
+  const event = await loadEventForMatch(matchData.event_id as string)
+  validateMatchResultSave(
+    { id: matchId, ...matchData } as KnockoutMatch,
+    update,
+    { eventType: event.event_type, config: event.config, stage },
+  )
+
   await updateDoc(matchRef, { ...update, status: 'completed' })
 
-  const eventId = matchSnap.data().event_id as string
-  await propagateKnockoutWinners(eventId)
+  const eventId = matchData.event_id as string
+  try {
+    await propagateKnockoutWinners(eventId)
+  } catch (err) {
+    console.error('Knockout advancement failed after saving match result', err)
+    throw new Error('Score saved but bracket could not advance — refresh and try again')
+  }
 }
 
 export async function generateKnockoutBracket(tournamentId: string, event: TournamentEvent) {
@@ -672,22 +767,29 @@ export async function generateKnockoutBracket(tournamentId: string, event: Tourn
   const groupOrder = groups.map((g) => g.id)
 
   const standingsByGroup = new Map<string, ReturnType<typeof computeStandings>>()
-  const preWarnings: string[] = []
 
   for (const group of groups) {
     const entryIds = members.filter((m) => m.group_id === group.id).map((m) => m.entry_id)
     const groupMatches = matches.filter((m) => m.group_id === group.id)
+
+    const unplayed = groupMatches.filter((m) => m.status !== 'completed').length
+    if (unplayed > 0) {
+      throw new Error(
+        `Group ${group.label} still has ${unplayed} unplayed match${unplayed === 1 ? '' : 'es'}`,
+      )
+    }
+
+    const computed = computeStandings(entryIds, groupMatches, entryMap)
+    if (needsManualRankResolution(computed) && !group.manual_rank_order?.length) {
+      throw new Error(
+        `Group ${group.label} has tied standings — set manual ranks before generating knockout`,
+      )
+    }
+
     standingsByGroup.set(
       group.id,
       resolveGroupStandings(entryIds, groupMatches, entryMap, group.manual_rank_order),
     )
-
-    const unplayed = groupMatches.filter((m) => m.status !== 'completed').length
-    if (unplayed > 0) {
-      preWarnings.push(
-        `Group ${group.label} still has ${unplayed} unplayed match${unplayed === 1 ? '' : 'es'}`,
-      )
-    }
   }
 
   const advancers = getTopAdvancers(standingsByGroup, advanceCount)
@@ -704,21 +806,17 @@ export async function generateKnockoutBracket(tournamentId: string, event: Tourn
   const existing = await getDocs(
     query(collection(db, 'knockout_matches'), where('event_id', '==', event.id)),
   )
-  const delBatch = writeBatch(db)
-  existing.docs.forEach((d) => delBatch.delete(d.ref))
-  await delBatch.commit()
+  await deleteQueryDocs(existing.docs.map((d) => d.ref))
 
   if (tree.length) {
-    const addBatch = writeBatch(db)
-    writeKnockoutTree(addBatch, tournamentId, event.id, tree)
-    await addBatch.commit()
+    await commitBatchSets(buildKnockoutTreeWrites(tournamentId, event.id, tree))
+  }
+
+  if (tree.length) {
     await propagateKnockoutWinners(event.id)
   }
 
-  return [
-    ...preWarnings.map((message) => ({ message })),
-    ...warnings,
-  ]
+  return warnings
 }
 
 export async function regenerateKnockoutFromRanks(tournamentId: string, eventId: string) {
@@ -727,6 +825,10 @@ export async function regenerateKnockoutFromRanks(tournamentId: string, eventId:
     throw new Error('Cannot update knockout — some knockout matches are already scored')
   }
   const event = await fetchEvent(tournamentId, eventId)
+  const recheck = await fetchKnockoutMatches(eventId)
+  if (recheck.some((m) => m.status === 'completed')) {
+    throw new Error('Cannot update knockout — a match was scored while regenerating')
+  }
   return generateKnockoutBracket(tournamentId, event)
 }
 
@@ -741,6 +843,17 @@ export async function fetchTeamRosters(teamIds: string[]) {
 }
 
 export async function deleteEntry(entry: TournamentEntry) {
+  const eventSnap = await getDoc(
+    doc(db, 'tournaments', entry.tournament_id, 'events', entry.event_id),
+  )
+  if (!eventSnap.exists()) throw new Error('Division not found')
+  const status = eventSnap.data().status as TournamentEvent['status']
+  if (status !== 'draft' && status !== 'upcoming') {
+    throw new Error('Cannot remove entries after the division has started')
+  }
+
+  await deleteEntryReferences(entry.event_id, entry.id)
+
   if (entry.team_id) {
     const roster = await getDocs(
       query(collection(db, 'team_players'), where('team_id', '==', entry.team_id)),

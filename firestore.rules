@@ -8,29 +8,108 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function isString(v) {
+      return v is string;
+    }
+
+    function isOptionalString(v) {
+      return v == null || v is string;
+    }
+
+    function isBool(v) {
+      return v is bool;
+    }
+
+    function isInt(v) {
+      return v is int;
+    }
+
+    function eventStatus(v) {
+      return v in ['draft', 'upcoming', 'ongoing', 'ended'];
+    }
+
+    function eventType(v) {
+      return v in ['team', 'single', 'doubles', 'executive'];
+    }
+
+    function entryType(v) {
+      return v in ['team', 'player', 'pair'];
+    }
+
+    function matchStatus(v) {
+      return v in ['scheduled', 'completed', 'pending'];
+    }
+
+    function knockoutRound(v) {
+      return v in ['quarter', 'semi', 'final'];
+    }
+
+    function matchOutcome(v) {
+      return v in ['normal', 'forfeit', 'no_show', 'dq', 'bye'];
+    }
+
     function eventIsPublic(tournamentId, eventId) {
       return exists(/databases/$(database)/documents/tournaments/$(tournamentId)/events/$(eventId))
         && get(/databases/$(database)/documents/tournaments/$(tournamentId)/events/$(eventId)).data.status in ['upcoming', 'ongoing'];
     }
 
+    function scopedEventFields() {
+      return isString(request.resource.data.tournament_id)
+        && isString(request.resource.data.event_id);
+    }
+
+    function validMatchWrite() {
+      return scopedEventFields()
+        && isString(request.resource.data.entry_a_id)
+        && isString(request.resource.data.entry_b_id)
+        && matchStatus(request.resource.data.status)
+        && matchOutcome(request.resource.data.outcome)
+        && (request.resource.data.score_a == null || isInt(request.resource.data.score_a))
+        && (request.resource.data.score_b == null || isInt(request.resource.data.score_b))
+        && (request.resource.data.winner_entry_id == null || isString(request.resource.data.winner_entry_id));
+    }
+
     match /profiles/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow write: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['role'])
+        && request.resource.data.role == 'admin';
+      allow delete: if isAdmin();
     }
 
     match /tournaments/{tournamentId} {
       allow read: if isAdmin() || resource.data.public_visible == true;
-      allow write: if isAdmin();
+      allow create: if isAdmin()
+        && isString(request.resource.data.name)
+        && isOptionalString(request.resource.data.venue)
+        && isOptionalString(request.resource.data.start_date)
+        && isBool(request.resource.data.public_visible)
+        && isString(request.resource.data.created_at);
+      allow update: if isAdmin()
+        && isString(request.resource.data.name)
+        && isOptionalString(request.resource.data.venue)
+        && isOptionalString(request.resource.data.start_date)
+        && isBool(request.resource.data.public_visible);
+      allow delete: if isAdmin();
 
       match /events/{eventId} {
         allow read: if resource.data.status in ['upcoming', 'ongoing'] || isAdmin();
-        allow write: if isAdmin();
+        allow create, update: if isAdmin()
+          && isString(request.resource.data.name)
+          && eventType(request.resource.data.event_type)
+          && eventStatus(request.resource.data.status)
+          && request.resource.data.status != 'ended'
+          && isInt(request.resource.data.sort_order)
+          && isString(request.resource.data.created_at)
+          && request.resource.data.config is map;
+        allow delete: if isAdmin();
       }
     }
 
     match /teams/{docId} {
       allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && scopedEventFields() && isString(request.resource.data.name);
+      allow delete: if isAdmin();
     }
 
     match /team_players/{docId} {
@@ -41,27 +120,47 @@ service cloud.firestore {
           get(/databases/$(database)/documents/teams/$(resource.data.team_id)).data.event_id
         )
       );
-      allow write: if isAdmin();
+      allow create, update: if isAdmin()
+        && isString(request.resource.data.team_id)
+        && isString(request.resource.data.name)
+        && exists(/databases/$(database)/documents/teams/$(request.resource.data.team_id));
+      allow delete: if isAdmin();
     }
 
     match /players/{docId} {
       allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && scopedEventFields() && isString(request.resource.data.name);
+      allow delete: if isAdmin();
     }
 
     match /pairs/{docId} {
       allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin()
+        && scopedEventFields()
+        && isString(request.resource.data.player_a)
+        && isString(request.resource.data.player_b);
+      allow delete: if isAdmin();
     }
 
     match /tournament_entries/{docId} {
       allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin()
+        && scopedEventFields()
+        && entryType(request.resource.data.entry_type)
+        && (
+          (request.resource.data.entry_type == 'team' && request.resource.data.team_id is string)
+          || (request.resource.data.entry_type == 'player' && request.resource.data.player_id is string)
+          || (request.resource.data.entry_type == 'pair' && request.resource.data.pair_id is string)
+        );
+      allow delete: if isAdmin();
     }
 
     match /groups/{docId} {
       allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin()
+        && scopedEventFields()
+        && isString(request.resource.data.label);
+      allow delete: if isAdmin();
     }
 
     match /group_members/{docId} {
@@ -72,17 +171,34 @@ service cloud.firestore {
           get(/databases/$(database)/documents/groups/$(resource.data.group_id)).data.event_id
         )
       );
-      allow write: if isAdmin();
+      allow create, update: if isAdmin()
+        && isString(request.resource.data.group_id)
+        && isString(request.resource.data.entry_id)
+        && exists(/databases/$(database)/documents/groups/$(request.resource.data.group_id));
+      allow delete: if isAdmin();
     }
 
     match /group_matches/{docId} {
       allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && validMatchWrite() && isString(request.resource.data.group_id);
+      allow delete: if isAdmin();
     }
 
     match /knockout_matches/{docId} {
       allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin()
+        && scopedEventFields()
+        && knockoutRound(request.resource.data.round)
+        && isInt(request.resource.data.slot)
+        && request.resource.data.bracket_side in ['left', 'right']
+        && matchStatus(request.resource.data.status)
+        && matchOutcome(request.resource.data.outcome)
+        && (request.resource.data.entry_a_id == null || isString(request.resource.data.entry_a_id))
+        && (request.resource.data.entry_b_id == null || isString(request.resource.data.entry_b_id))
+        && (request.resource.data.score_a == null || isInt(request.resource.data.score_a))
+        && (request.resource.data.score_b == null || isInt(request.resource.data.score_b))
+        && (request.resource.data.winner_entry_id == null || isString(request.resource.data.winner_entry_id));
+      allow delete: if isAdmin();
     }
   }
 }

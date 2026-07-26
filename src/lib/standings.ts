@@ -23,6 +23,10 @@ export function computeStandings(
     const b = stats.get(m.entry_b_id)
     if (!a || !b) continue
 
+    const winnerKnown =
+      m.winner_entry_id === m.entry_a_id || m.winner_entry_id === m.entry_b_id
+    if (!winnerKnown) continue
+
     a.played++
     b.played++
     a.scoreFor += m.score_a
@@ -74,21 +78,38 @@ export function applyManualRankOrder(
 ): StandingRow[] {
   if (!rankOrder?.length) return rows
 
+  const seen = new Set<string>()
+  const uniqueOrder = rankOrder.filter((entryId) => {
+    if (seen.has(entryId)) return false
+    seen.add(entryId)
+    return true
+  })
+
   const byId = new Map(rows.map((row) => [row.entryId, row]))
   const ordered: StandingRow[] = []
 
-  rankOrder.forEach((entryId, index) => {
+  uniqueOrder.forEach((entryId, index) => {
     const row = byId.get(entryId)
     if (row) ordered.push({ ...row, rank: index + 1, rankOverridden: true })
   })
 
   for (const row of rows) {
-    if (!rankOrder.includes(row.entryId)) {
+    if (!seen.has(row.entryId)) {
       ordered.push({ ...row, rank: ordered.length + 1 })
     }
   }
 
   return ordered
+}
+
+/** True when automatic tie-break leaves two or more entries tied on wins and diff. */
+export function needsManualRankResolution(rows: StandingRow[]): boolean {
+  const tieGroups = new Map<string, number>()
+  for (const row of rows) {
+    const key = `${row.wins}:${row.diff}`
+    tieGroups.set(key, (tieGroups.get(key) ?? 0) + 1)
+  }
+  return [...tieGroups.values()].some((count) => count > 1)
 }
 
 export function resolveGroupStandings(

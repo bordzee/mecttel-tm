@@ -12,7 +12,6 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   u16: 'Under 16',
   u18: 'Under 18',
   open: 'Open',
-  custom: 'Custom',
 }
 
 export const RUBBER_SLOT_LABELS: Record<TeamFormat, string[]> = {

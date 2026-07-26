@@ -1,28 +1,28 @@
-import type { GroupLayoutOption } from '../types'
+import type { StartLayoutOption } from '../lib/groupLayout'
 import { FormLabel } from './ui/primitives'
 
-interface Props {
-  options: GroupLayoutOption[]
-  selected?: number
-  onSelect: (perGroup: number) => void
-}
-
-export function GroupLayoutPicker({ options, selected, onSelect }: Props) {
-  if (!options.length) {
-    return <p className="text-sm text-amber">No valid group layouts for this entry count.</p>
-  }
+export function StartLayoutPicker({
+  options,
+  selectedKey,
+  onSelect,
+}: {
+  options: StartLayoutOption[]
+  selectedKey?: string
+  onSelect: (key: string) => void
+}) {
+  if (!options.length) return null
 
   return (
     <div className="space-y-2">
-      <FormLabel>Group layout</FormLabel>
+      <FormLabel>Select group layout</FormLabel>
       <div className="space-y-2">
         {options.map((opt) => {
-          const active = selected === opt.entriesPerGroup
+          const active = selectedKey === opt.key
           return (
             <button
-              key={opt.entriesPerGroup}
+              key={opt.key}
               type="button"
-              onClick={() => onSelect(opt.entriesPerGroup)}
+              onClick={() => onSelect(opt.key)}
               className={`w-full flex items-center gap-2.5 px-3 py-3 rounded-[10px] border transition-colors text-left ${
                 active
                   ? 'border-[1.5px] border-brand-500 bg-brand-100'
@@ -35,12 +35,10 @@ export function GroupLayoutPicker({ options, selected, onSelect }: Props) {
                 }`}
                 aria-hidden
               />
-              <span className="flex-1 min-w-0 text-sm font-semibold text-text-bluewhite">
-                {opt.entriesPerGroup} entries per group
-              </span>
-              <span className="text-xs font-semibold text-text-steel shrink-0">
-                {opt.groupCount} groups
-              </span>
+              <span className="flex-1 min-w-0 text-sm font-semibold text-text-bluewhite">{opt.label}</span>
+              {opt.uneven && (
+                <span className="text-xs font-semibold text-text-steel shrink-0">uneven</span>
+              )}
             </button>
           )
         })}

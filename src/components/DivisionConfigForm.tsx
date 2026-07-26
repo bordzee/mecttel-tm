@@ -2,13 +2,19 @@ import { GroupLayoutPicker } from './GroupLayoutPicker'
 import { getGroupLayoutOptions } from '../lib/groupLayout'
 import { DEFAULT_SET_RULES } from '../lib/constants'
 import { buildEventName, hasCategoryPicker } from '../lib/displayNames'
+import {
+  FormLabel,
+  NumberStepper,
+  RemoveRowButton,
+  SegmentedControl,
+  TextInput,
+} from './ui/primitives'
 import type { Category, EventType, KnockoutBracketType, TeamFormat, TournamentConfig } from '../types'
 
 export interface DivisionDraft {
   clientId: string
   event_type: EventType
   category: Category
-  category_label: string
   custom_name: string
   total_slots: number
   entries_per_group?: number
@@ -24,7 +30,6 @@ export function createDivisionDraft(partial?: Partial<DivisionDraft>): DivisionD
     clientId: crypto.randomUUID(),
     event_type: 'single',
     category: 'open',
-    category_label: '',
     custom_name: '',
     total_slots: 12,
     entries_per_group: undefined,
@@ -44,7 +49,7 @@ export const DIVISION_PRESETS: { label: string; draft: Partial<DivisionDraft> }[
   { label: 'Singles – Open', draft: { event_type: 'single', category: 'open' } },
   { label: 'Doubles – Open', draft: { event_type: 'doubles', category: 'open' } },
   { label: 'Team', draft: { event_type: 'team', category: 'open' } },
-  { label: 'Executive', draft: { event_type: 'executive', category: 'open' } },
+  { label: 'Executive', draft: { event_type: 'executive' } },
 ]
 
 const EVENT_TYPES: { value: EventType; label: string }[] = [
@@ -55,11 +60,10 @@ const EVENT_TYPES: { value: EventType; label: string }[] = [
 ]
 
 const CATEGORIES: { value: Category; label: string }[] = [
-  { value: 'u12', label: 'Under 12' },
-  { value: 'u16', label: 'Under 16' },
-  { value: 'u18', label: 'Under 18' },
+  { value: 'u12', label: 'U12' },
+  { value: 'u16', label: 'U16' },
+  { value: 'u18', label: 'U18' },
   { value: 'open', label: 'Open' },
-  { value: 'custom', label: 'Custom label' },
 ]
 
 const KNOCKOUT_BRACKETS: { value: KnockoutBracketType; label: string }[] = [
@@ -92,15 +96,13 @@ export function divisionDraftToConfig(draft: DivisionDraft): TournamentConfig {
       team_format: draft.team_format,
       roster_size: draft.roster_size,
     }),
-    ...(draft.category === 'custom' && draft.category_label && { category_label: draft.category_label }),
   }
 }
 
 export function divisionDraftToEventInput(draft: DivisionDraft) {
-  const category = draft.event_type === 'team' ? null : draft.category
-  const name =
-    draft.custom_name.trim() ||
-    buildEventName(draft.event_type, category, draft.category_label || undefined)
+  const category =
+    draft.event_type === 'team' || draft.event_type === 'executive' ? null : draft.category
+  const name = draft.custom_name.trim() || buildEventName(draft.event_type, category)
 
   return {
     name,
@@ -124,87 +126,58 @@ export function DivisionConfigForm({ draft, onChange, onRemove, title }: Props) 
     draft.custom_name.trim() ||
     buildEventName(
       draft.event_type,
-      draft.event_type === 'team' ? null : draft.category,
-      draft.category_label || undefined,
+      draft.event_type === 'team' || draft.event_type === 'executive' ? null : draft.category,
     )
 
   const patch = (partial: Partial<DivisionDraft>) => onChange({ ...draft, ...partial })
 
+  const advanceMax = draft.entries_per_group ?? 4
+  const blockDisabled =
+    selectedLayout != null && selectedLayout.groupCount % 2 !== 0
+
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="font-medium text-slate-900">{title ?? displayName}</h3>
-          {!title && <p className="text-xs text-slate-500 mt-0.5">{displayName}</p>}
-        </div>
-        {onRemove && (
-          <button type="button" onClick={onRemove} className="text-xs text-red-600 shrink-0">
-            Remove
-          </button>
-        )}
+    <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-heading text-base font-extrabold text-text-primary">
+          {title ?? displayName}
+        </h3>
+        {onRemove && <RemoveRowButton onClick={onRemove} />}
       </div>
 
-      <div>
-        <label className="block text-sm font-medium mb-1">Event type</label>
-        <div className="grid grid-cols-2 gap-2">
-          {EVENT_TYPES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() =>
-                patch({
-                  event_type: t.value,
-                  entries_per_group: undefined,
-                })
-              }
-              className={`px-3 py-2 rounded-lg border text-sm ${
-                draft.event_type === t.value ? 'border-brand-500 bg-brand-50' : 'border-slate-200'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+      <div className="space-y-2">
+        <FormLabel>Event type</FormLabel>
+        <SegmentedControl
+          value={draft.event_type}
+          onChange={(event_type) =>
+            patch({ event_type, entries_per_group: undefined })
+          }
+          options={EVENT_TYPES}
+        />
       </div>
 
       {hasCategoryPicker(draft.event_type) && (
-        <div>
-          <label className="block text-sm font-medium mb-1">Category</label>
-          <select
+        <div className="space-y-2">
+          <FormLabel>Category</FormLabel>
+          <SegmentedControl
             value={draft.category}
-            onChange={(e) => patch({ category: e.target.value as Category })}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2.5"
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          {draft.category === 'custom' && (
-            <input
-              placeholder="Custom category label (e.g. Veterans, Mixed)"
-              value={draft.category_label}
-              onChange={(e) => patch({ category_label: e.target.value })}
-              className="w-full mt-2 border border-slate-200 rounded-lg px-3 py-2.5"
-            />
-          )}
+            onChange={(category) => patch({ category })}
+            options={CATEGORIES}
+          />
         </div>
       )}
 
       <div>
-        <label className="block text-sm font-medium mb-1">Custom display name (optional)</label>
-        <input
+        <FormLabel>Display name (optional)</FormLabel>
+        <TextInput
           value={draft.custom_name}
           onChange={(e) => patch({ custom_name: e.target.value })}
-          placeholder="Override auto-generated name"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2.5"
+          placeholder={displayName}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-1">Maximum entry slots</label>
-        <input
+        <FormLabel>Maximum entry slots</FormLabel>
+        <TextInput
           type="number"
           min={2}
           value={draft.total_slots}
@@ -214,47 +187,31 @@ export function DivisionConfigForm({ draft, onChange, onRemove, title }: Props) 
               entries_per_group: undefined,
             })
           }
-          className="w-full border border-slate-200 rounded-lg px-3 py-2.5"
         />
       </div>
 
       {draft.event_type === 'team' && (
-        <>
-          <div>
-            <label className="block text-sm font-medium mb-1">Roster size</label>
-            <div className="flex gap-2">
-              {([3, 4] as const).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => patch({ roster_size: n })}
-                  className={`flex-1 py-2 rounded-lg border ${
-                    draft.roster_size === n ? 'border-brand-500 bg-brand-50' : 'border-slate-200'
-                  }`}
-                >
-                  {n} players
-                </button>
-              ))}
-            </div>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <FormLabel>Roster size</FormLabel>
+            <SegmentedControl
+              value={String(draft.roster_size) as '3' | '4'}
+              onChange={(v) => patch({ roster_size: parseInt(v, 10) as 3 | 4 })}
+              options={[
+                { value: '3', label: '3' },
+                { value: '4', label: '4' },
+              ]}
+            />
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Team format</label>
-            <div className="space-y-2">
-              {FORMATS.map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => patch({ team_format: f })}
-                  className={`w-full text-left px-3 py-2 rounded-lg border ${
-                    draft.team_format === f ? 'border-brand-500 bg-brand-50' : 'border-slate-200'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
+          <div className="space-y-2">
+            <FormLabel>Team format</FormLabel>
+            <SegmentedControl
+              value={draft.team_format}
+              onChange={(team_format) => patch({ team_format: team_format as TeamFormat })}
+              options={FORMATS.map((f) => ({ value: f, label: f }))}
+            />
           </div>
-        </>
+        </div>
       )}
 
       <GroupLayoutPicker
@@ -268,46 +225,30 @@ export function DivisionConfigForm({ draft, onChange, onRemove, title }: Props) 
             layout.groupCount % 2 !== 0
           patch({
             entries_per_group: v,
+            advance_count: Math.min(draft.advance_count, v),
             ...(blockInvalid ? { knockout_bracket: 'cross' as const } : {}),
           })
         }}
       />
-      <div>
-        <label className="block text-sm font-medium mb-1">Advance per group</label>
-        <input
-          type="number"
-          min={1}
-          max={draft.entries_per_group ?? 4}
+
+      <div className="space-y-2">
+        <FormLabel>Advance per group</FormLabel>
+        <NumberStepper
           value={draft.advance_count}
-          onChange={(e) => patch({ advance_count: parseInt(e.target.value, 10) || 1 })}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2.5"
+          min={1}
+          max={advanceMax}
+          onChange={(advance_count) => patch({ advance_count })}
         />
       </div>
-      <div>
-        <label className="block text-sm font-medium mb-2">Knockout bracket</label>
-        <div className="flex gap-2">
-          {KNOCKOUT_BRACKETS.map((opt) => {
-            const blockDisabled =
-              opt.value === 'block' &&
-              selectedLayout != null &&
-              selectedLayout.groupCount % 2 !== 0
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                disabled={blockDisabled}
-                onClick={() => patch({ knockout_bracket: opt.value })}
-                className={`flex-1 py-2 rounded-lg border text-sm ${
-                  draft.knockout_bracket === opt.value
-                    ? 'border-brand-500 bg-brand-50'
-                    : 'border-slate-200'
-                } ${blockDisabled ? 'opacity-50' : ''}`}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
-        </div>
+
+      <div className="space-y-2">
+        <FormLabel>Knockout bracket</FormLabel>
+        <SegmentedControl
+          value={draft.knockout_bracket}
+          onChange={(knockout_bracket) => patch({ knockout_bracket: knockout_bracket as KnockoutBracketType })}
+          options={KNOCKOUT_BRACKETS}
+          disabledValues={blockDisabled ? ['block'] : []}
+        />
       </div>
     </div>
   )

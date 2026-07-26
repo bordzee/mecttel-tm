@@ -1,4 +1,4 @@
-import { DestructiveTextButton } from './ui/primitives'
+import { SeedBadge } from './ui/primitives'
 import { seededLabel } from './SeededSelect'
 import type { TournamentEntry } from '../types'
 import { getEntryDisplayName } from '../lib/displayNames'
@@ -15,18 +15,25 @@ export function EntryRow({
   const org = getEntryOrganization(entry)
 
   return (
-    <div className="flex items-center justify-between gap-2 bg-slate-50 rounded-lg px-3 py-2">
-      <div className="flex items-center gap-1.5 min-w-0">
-        <div className="min-w-0">
-          <span className="text-sm text-slate-900 truncate block">{getEntryDisplayName(entry)}</span>
-          {org && <span className="text-xs text-slate-500 truncate block">{org}</span>}
+    <div className="flex items-center gap-2.5 bg-card rounded-xl border border-border px-3 py-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[15px] font-bold text-text-primary">{getEntryDisplayName(entry)}</span>
+          {seeded && <SeedBadge>{seeded}</SeedBadge>}
         </div>
-        {seeded && <span className="text-[11px] text-slate-400 shrink-0">{seeded}</span>}
+        {org && <span className="text-xs text-text-steel block mt-0.5">{org}</span>}
       </div>
       {onRemove && (
-        <DestructiveTextButton onClick={onRemove} className="text-xs shrink-0">
-          Remove
-        </DestructiveTextButton>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-text-steel hover:text-live shrink-0 p-1"
+          aria-label="Remove entry"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+          </svg>
+        </button>
       )}
     </div>
   )

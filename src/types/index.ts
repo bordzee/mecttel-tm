@@ -1,6 +1,6 @@
 export type EventType = 'team' | 'single' | 'doubles' | 'executive'
 export type TournamentStatus = 'draft' | 'upcoming' | 'ongoing' | 'ended'
-export type Category = 'u12' | 'u16' | 'u18' | 'open' | 'custom'
+export type Category = 'u12' | 'u16' | 'u18' | 'open'
 export type TeamFormat = 'SSS' | 'SDS' | 'SSDSS'
 export type MatchOutcome = 'normal' | 'forfeit' | 'no_show' | 'dq' | 'bye'
 export type KnockoutRound = 'quarter' | 'semi' | 'final'
