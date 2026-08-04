@@ -1,0 +1,61 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "tournament_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tournament_id", "order": "ASCENDING" },
+        { "fieldPath": "event_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "teams",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tournament_id", "order": "ASCENDING" },
+        { "fieldPath": "event_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "players",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tournament_id", "order": "ASCENDING" },
+        { "fieldPath": "event_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pairs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tournament_id", "order": "ASCENDING" },
+        { "fieldPath": "event_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "groups",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tournament_id", "order": "ASCENDING" },
+        { "fieldPath": "event_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "group_matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tournament_id", "order": "ASCENDING" },
+        { "fieldPath": "event_id", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "knockout_matches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tournament_id", "order": "ASCENDING" },
+        { "fieldPath": "event_id", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

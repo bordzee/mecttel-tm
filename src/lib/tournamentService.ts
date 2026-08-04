@@ -4,7 +4,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  limit,
   orderBy,
   query,
   updateDoc,
@@ -47,6 +46,15 @@ function eventsRef(tournamentId: string) {
   return collection(db, 'tournaments', tournamentId, 'events')
 }
 
+/** Queries scoped by tournament + event so Firestore rules can authorize public reads. */
+function eventScopeQuery(collectionName: string, tournamentId: string, eventId: string) {
+  return query(
+    collection(db, collectionName),
+    where('tournament_id', '==', tournamentId),
+    where('event_id', '==', eventId),
+  )
+}
+
 const knockoutPropagationInflight = new Map<string, Promise<void>>()
 
 const BATCH_SIZE = 450
@@ -67,15 +75,13 @@ async function syncTournamentPublicVisibility(tournamentId: string) {
   await updateDoc(doc(db, 'tournaments', tournamentId), { public_visible: visible })
 }
 
-async function hydrateEntries(eventId: string): Promise<TournamentEntry[]> {
-  const entriesSnap = await getDocs(
-    query(collection(db, 'tournament_entries'), where('event_id', '==', eventId)),
-  )
+async function hydrateEntries(tournamentId: string, eventId: string): Promise<TournamentEntry[]> {
+  const entriesSnap = await getDocs(eventScopeQuery('tournament_entries', tournamentId, eventId))
 
   const [teamsSnap, playersSnap, pairsSnap] = await Promise.all([
-    getDocs(query(collection(db, 'teams'), where('event_id', '==', eventId))),
-    getDocs(query(collection(db, 'players'), where('event_id', '==', eventId))),
-    getDocs(query(collection(db, 'pairs'), where('event_id', '==', eventId))),
+    getDocs(eventScopeQuery('teams', tournamentId, eventId)),
+    getDocs(eventScopeQuery('players', tournamentId, eventId)),
+    getDocs(eventScopeQuery('pairs', tournamentId, eventId)),
   ])
 
   const teams = new Map(teamsSnap.docs.map((d) => [d.id, withId(d.id, d.data() as Omit<Team, 'id'>)]))
@@ -245,8 +251,8 @@ export async function updateEvent(
   return fetchEvent(tournamentId, eventId)
 }
 
-export async function fetchEntries(eventId: string): Promise<TournamentEntry[]> {
-  return hydrateEntries(eventId)
+export async function fetchEntries(tournamentId: string, eventId: string): Promise<TournamentEntry[]> {
+  return hydrateEntries(tournamentId, eventId)
 }
 
 export async function deleteTournament(id: string) {
@@ -367,8 +373,8 @@ export async function addPairEntry(
   return withId(snap.id, snap.data() as Omit<Pair, 'id'>)
 }
 
-export async function fetchGroups(eventId: string) {
-  const snap = await getDocs(query(collection(db, 'groups'), where('event_id', '==', eventId)))
+export async function fetchGroups(tournamentId: string, eventId: string) {
+  const snap = await getDocs(eventScopeQuery('groups', tournamentId, eventId))
   return snap.docs
     .map((d) => withId(d.id, d.data() as Omit<Group, 'id'>))
     .sort((a, b) => a.label.localeCompare(b.label))
@@ -378,10 +384,10 @@ export async function saveGroupRankOrder(
   groupId: string,
   orderedEntryIds: string[],
   note?: string | null,
-  options?: { allowWhenKnockoutScored?: boolean; eventId?: string },
+  options?: { allowWhenKnockoutScored?: boolean; tournamentId?: string; eventId?: string },
 ) {
-  if (!options?.allowWhenKnockoutScored && options?.eventId) {
-    const knockout = await fetchKnockoutMatches(options.eventId)
+  if (!options?.allowWhenKnockoutScored && options?.eventId && options?.tournamentId) {
+    const knockout = await fetchKnockoutMatches(options.tournamentId, options.eventId)
     if (knockout.some((m) => m.status === 'completed')) {
       throw new Error('Cannot change group ranks — knockout matches are already scored')
     }
@@ -408,10 +414,10 @@ export async function saveGroupRankOrder(
 
 export async function clearGroupRankOrder(
   groupId: string,
-  options?: { allowWhenKnockoutScored?: boolean; eventId?: string },
+  options?: { allowWhenKnockoutScored?: boolean; tournamentId?: string; eventId?: string },
 ) {
-  if (!options?.allowWhenKnockoutScored && options?.eventId) {
-    const knockout = await fetchKnockoutMatches(options.eventId)
+  if (!options?.allowWhenKnockoutScored && options?.eventId && options?.tournamentId) {
+    const knockout = await fetchKnockoutMatches(options.tournamentId, options.eventId)
     if (knockout.some((m) => m.status === 'completed')) {
       throw new Error('Cannot reset group ranks — knockout matches are already scored')
     }
@@ -422,9 +428,13 @@ export async function clearGroupRankOrder(
   })
 }
 
-export async function fetchGroupMembers(eventId: string, groupIds: string[]) {
+export async function fetchGroupMembers(
+  tournamentId: string,
+  eventId: string,
+  groupIds: string[],
+) {
   if (!groupIds.length) return []
-  const entries = await fetchEntries(eventId)
+  const entries = await fetchEntries(tournamentId, eventId)
   const entryMap = new Map(entries.map((e) => [e.id, e]))
   const results: { id: string; group_id: string; entry_id: string; entry?: TournamentEntry }[] = []
 
@@ -497,7 +507,7 @@ export async function setupGroupsAndMatches(
     })
   }
 
-  const existingGroups = await fetchGroups(event.id)
+  const existingGroups = await fetchGroups(tournamentId, event.id)
   for (const g of existingGroups) {
     await deleteWhere('group_members', 'group_id', g.id)
   }
@@ -508,11 +518,9 @@ export async function setupGroupsAndMatches(
   await commitBatchSets(pendingSets)
 }
 
-export async function fetchGroupMatches(eventId: string) {
-  const snap = await getDocs(
-    query(collection(db, 'group_matches'), where('event_id', '==', eventId)),
-  )
-  const entries = await fetchEntries(eventId)
+export async function fetchGroupMatches(tournamentId: string, eventId: string) {
+  const snap = await getDocs(eventScopeQuery('group_matches', tournamentId, eventId))
+  const entries = await fetchEntries(tournamentId, eventId)
   const entryMap = new Map(entries.map((e) => [e.id, e]))
   return snap.docs.map((d) => {
     const data = d.data()
@@ -525,11 +533,9 @@ export async function fetchGroupMatches(eventId: string) {
   })
 }
 
-export async function fetchKnockoutMatches(eventId: string) {
-  const snap = await getDocs(
-    query(collection(db, 'knockout_matches'), where('event_id', '==', eventId)),
-  )
-  const entries = await fetchEntries(eventId)
+export async function fetchKnockoutMatches(tournamentId: string, eventId: string) {
+  const snap = await getDocs(eventScopeQuery('knockout_matches', tournamentId, eventId))
+  const entries = await fetchEntries(tournamentId, eventId)
   const entryMap = new Map(entries.map((e) => [e.id, e]))
   const roundOrder = { quarter: 0, semi: 1, final: 2 }
   return snap.docs
@@ -564,13 +570,11 @@ export async function startDivision(
   return updateEvent(tournamentId, event.id, { config: updatedConfig, status: 'ongoing' })
 }
 
-async function loadEventForMatch(eventId: string): Promise<TournamentEvent> {
-  const entriesSnap = await getDocs(
-    query(collection(db, 'tournament_entries'), where('event_id', '==', eventId), limit(1)),
-  )
-  if (entriesSnap.empty) throw new Error('Event not found')
-  const tournamentId = entriesSnap.docs[0].data().tournament_id as string
-  return fetchEvent(tournamentId, eventId)
+async function loadEventForMatch(matchData: {
+  tournament_id: string
+  event_id: string
+}): Promise<TournamentEvent> {
+  return fetchEvent(matchData.tournament_id, matchData.event_id)
 }
 
 export async function saveGroupMatchResult(
@@ -588,7 +592,10 @@ export async function saveGroupMatchResult(
   if (!matchSnap.exists()) throw new Error('Match not found')
 
   const matchData = matchSnap.data()
-  const event = await loadEventForMatch(matchData.event_id as string)
+  const event = await loadEventForMatch({
+    tournament_id: matchData.tournament_id as string,
+    event_id: matchData.event_id as string,
+  })
   validateMatchResultSave(
     { id: matchId, ...matchData } as GroupMatch,
     update,
@@ -598,15 +605,14 @@ export async function saveGroupMatchResult(
   await updateDoc(matchRef, { ...update, status: 'completed' })
 }
 
-export async function propagateKnockoutWinners(eventId: string) {
+export async function propagateKnockoutWinners(tournamentId: string, eventId: string) {
   const inflight = knockoutPropagationInflight.get(eventId)
   if (inflight) return inflight
 
   const promise = (async () => {
-    const matches = await fetchKnockoutMatches(eventId)
+    const matches = await fetchKnockoutMatches(tournamentId, eventId)
     if (!matches.length) return
 
-    const tournamentId = matches[0].tournament_id
     const standingMap = await fetchAdvancerStandingMap(tournamentId, eventId)
     const updates = computeKnockoutAdvancement(matches, standingMap)
     const pendingUpdates: { id: string; patch: Record<string, unknown> }[] = []
@@ -650,10 +656,10 @@ async function fetchAdvancerStandingMap(
   eventId: string,
 ): Promise<Map<string, StandingRow>> {
   const event = await fetchEvent(tournamentId, eventId)
-  const groups = await fetchGroups(eventId)
-  const members = await fetchGroupMembers(eventId, groups.map((g) => g.id))
-  const matches = await fetchGroupMatches(eventId)
-  const entries = await fetchEntries(eventId)
+  const groups = await fetchGroups(tournamentId, eventId)
+  const members = await fetchGroupMembers(tournamentId, eventId, groups.map((g) => g.id))
+  const matches = await fetchGroupMatches(tournamentId, eventId)
+  const entries = await fetchEntries(tournamentId, eventId)
   const entryMap = new Map(entries.map((e) => [e.id, e]))
 
   const standingsByGroup = new Map<string, StandingRow[]>()
@@ -739,7 +745,10 @@ export async function saveKnockoutMatchResult(
   if (!matchSnap.exists()) throw new Error('Match not found')
 
   const matchData = matchSnap.data()
-  const event = await loadEventForMatch(matchData.event_id as string)
+  const event = await loadEventForMatch({
+    tournament_id: matchData.tournament_id as string,
+    event_id: matchData.event_id as string,
+  })
   validateMatchResultSave(
     { id: matchId, ...matchData } as KnockoutMatch,
     update,
@@ -749,8 +758,9 @@ export async function saveKnockoutMatchResult(
   await updateDoc(matchRef, { ...update, status: 'completed' })
 
   const eventId = matchData.event_id as string
+  const tournamentId = matchData.tournament_id as string
   try {
-    await propagateKnockoutWinners(eventId)
+    await propagateKnockoutWinners(tournamentId, eventId)
   } catch (err) {
     console.error('Knockout advancement failed after saving match result', err)
     throw new Error('Score saved but bracket could not advance — refresh and try again')
@@ -758,10 +768,10 @@ export async function saveKnockoutMatchResult(
 }
 
 export async function generateKnockoutBracket(tournamentId: string, event: TournamentEvent) {
-  const groups = await fetchGroups(event.id)
-  const members = await fetchGroupMembers(event.id, groups.map((g) => g.id))
-  const matches = await fetchGroupMatches(event.id)
-  const entries = await fetchEntries(event.id)
+  const groups = await fetchGroups(tournamentId, event.id)
+  const members = await fetchGroupMembers(tournamentId, event.id, groups.map((g) => g.id))
+  const matches = await fetchGroupMatches(tournamentId, event.id)
+  const entries = await fetchEntries(tournamentId, event.id)
   const entryMap = new Map(entries.map((e) => [e.id, e]))
   const advanceCount = event.config.advance_count
   const groupOrder = groups.map((g) => g.id)
@@ -803,9 +813,7 @@ export async function generateKnockoutBracket(tournamentId: string, event: Tourn
     bracketType,
   )
 
-  const existing = await getDocs(
-    query(collection(db, 'knockout_matches'), where('event_id', '==', event.id)),
-  )
+  const existing = await getDocs(eventScopeQuery('knockout_matches', tournamentId, event.id))
   await deleteQueryDocs(existing.docs.map((d) => d.ref))
 
   if (tree.length) {
@@ -813,19 +821,19 @@ export async function generateKnockoutBracket(tournamentId: string, event: Tourn
   }
 
   if (tree.length) {
-    await propagateKnockoutWinners(event.id)
+    await propagateKnockoutWinners(tournamentId, event.id)
   }
 
   return warnings
 }
 
 export async function regenerateKnockoutFromRanks(tournamentId: string, eventId: string) {
-  const existing = await fetchKnockoutMatches(eventId)
+  const existing = await fetchKnockoutMatches(tournamentId, eventId)
   if (existing.some((m) => m.status === 'completed')) {
     throw new Error('Cannot update knockout — some knockout matches are already scored')
   }
   const event = await fetchEvent(tournamentId, eventId)
-  const recheck = await fetchKnockoutMatches(eventId)
+  const recheck = await fetchKnockoutMatches(tournamentId, eventId)
   if (recheck.some((m) => m.status === 'completed')) {
     throw new Error('Cannot update knockout — a match was scored while regenerating')
   }

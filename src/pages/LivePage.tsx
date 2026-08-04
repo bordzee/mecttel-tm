@@ -42,13 +42,13 @@ export function LivePage() {
       const [t, ev, g, gm, km, e] = await Promise.all([
         fetchTournament(tournamentId),
         fetchEvent(tournamentId, eventId),
-        fetchGroups(eventId),
-        fetchGroupMatches(eventId),
-        fetchKnockoutMatches(eventId),
-        fetchEntries(eventId),
+        fetchGroups(tournamentId, eventId),
+        fetchGroupMatches(tournamentId, eventId),
+        fetchKnockoutMatches(tournamentId, eventId),
+        fetchEntries(tournamentId, eventId),
       ])
       if (seq !== loadSeq.current) return
-      const m = await fetchGroupMembers(eventId, g.map((x) => x.id))
+      const m = await fetchGroupMembers(tournamentId, eventId, g.map((x) => x.id))
       if (seq !== loadSeq.current) return
       setTournament(t)
       setEvent(ev)
@@ -85,7 +85,8 @@ export function LivePage() {
   }, [fetchEventData, tournamentId, eventId])
 
   useRealtimeEvent(
-    isFirebaseConfigured && eventId ? eventId : undefined,
+    isFirebaseConfigured ? tournamentId : undefined,
+    isFirebaseConfigured ? eventId : undefined,
     fetchEventData,
     (msg) => setError(msg),
   )

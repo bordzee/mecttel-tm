@@ -60,7 +60,7 @@ export function EventDetailPage() {
     Promise.all([
       fetchTournament(tournamentId),
       fetchEvent(tournamentId, eventId),
-      fetchEntries(eventId),
+      fetchEntries(tournamentId, eventId),
     ])
       .then(async ([t, e, entriesList]) => {
         setTournament(t)

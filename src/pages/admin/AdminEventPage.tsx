@@ -103,13 +103,13 @@ export function AdminEventPage() {
       const [t, ev, e, g, gm, km] = await Promise.all([
         fetchTournament(tournamentId),
         fetchEvent(tournamentId, eventId),
-        fetchEntries(eventId),
-        fetchGroups(eventId),
-        fetchGroupMatches(eventId),
-        fetchKnockoutMatches(eventId),
+        fetchEntries(tournamentId, eventId),
+        fetchGroups(tournamentId, eventId),
+        fetchGroupMatches(tournamentId, eventId),
+        fetchKnockoutMatches(tournamentId, eventId),
       ])
       if (seq !== loadSeq.current) return
-      const m = g.length ? await fetchGroupMembers(eventId, g.map((x) => x.id)) : []
+      const m = g.length ? await fetchGroupMembers(tournamentId, eventId, g.map((x) => x.id)) : []
       if (seq !== loadSeq.current) return
       setTournament(t)
       setEvent(ev)
@@ -158,7 +158,7 @@ export function AdminEventPage() {
     setError(msg)
   }, [])
 
-  useRealtimeEvent(eventId, fetchEventData, handleRealtimeError)
+  useRealtimeEvent(tournamentId, eventId, fetchEventData, handleRealtimeError)
 
   useEffect(() => {
     if (!event || event.event_type !== 'team') {
@@ -386,7 +386,7 @@ export function AdminEventPage() {
     const warnings = await regenerateKnockoutFromRanks(tournamentId, eventId)
     if (warnings.length) setWarnings(warnings.map((w) => w.message))
     await fetchEventData()
-    const kmUpdated = await fetchKnockoutMatches(eventId)
+    const kmUpdated = await fetchKnockoutMatches(tournamentId, eventId)
     const firstKnockoutTab = buildKnockoutStageTabs(kmUpdated)[0]
     if (firstKnockoutTab) setActiveStage(firstKnockoutTab.id)
   }
@@ -404,10 +404,10 @@ export function AdminEventPage() {
     setLoading(true)
     setError('')
     try {
-      await saveGroupRankOrder(groupId, orderedEntryIds, note, { eventId })
+      await saveGroupRankOrder(groupId, orderedEntryIds, note, { tournamentId, eventId })
       setMessage('Group ranks saved')
       await fetchEventData()
-      const km = await fetchKnockoutMatches(eventId)
+      const km = await fetchKnockoutMatches(tournamentId, eventId)
       if (km.length > 0 && !km.some((m) => m.status === 'completed')) {
         await refreshKnockoutFromRanks()
         setMessage('Group ranks saved — knockout bracket updated')
@@ -428,10 +428,10 @@ export function AdminEventPage() {
     setLoading(true)
     setError('')
     try {
-      await clearGroupRankOrder(groupId, { eventId })
+      await clearGroupRankOrder(groupId, { tournamentId, eventId })
       setMessage('Ranks reset to automatic tie-break')
       await fetchEventData()
-      const km = await fetchKnockoutMatches(eventId)
+      const km = await fetchKnockoutMatches(tournamentId, eventId)
       if (km.length > 0 && !km.some((m) => m.status === 'completed')) {
         await refreshKnockoutFromRanks()
         setMessage('Ranks reset — knockout bracket updated')
@@ -477,7 +477,7 @@ export function AdminEventPage() {
       let statusMessage = `Status updated to ${status}`
       if (status === 'ongoing') {
         const freshEvent = await fetchEvent(tournamentId, event.id)
-        const freshEntries = await fetchEntries(event.id)
+        const freshEntries = await fetchEntries(tournamentId, event.id)
         let rostersByTeamId: Map<string, string[]> | undefined
         if (freshEvent.event_type === 'team') {
           const teamIds = freshEntries.filter((e) => e.team_id).map((e) => e.team_id!)

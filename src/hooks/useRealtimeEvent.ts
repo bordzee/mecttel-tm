@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db, isFirebaseConfigured } from '../lib/firebase'
 
 export function useRealtimeEvent(
+  tournamentId: string | undefined,
   eventId: string | undefined,
   onUpdate: () => void | Promise<void>,
   onError?: (message: string) => void,
@@ -14,15 +15,27 @@ export function useRealtimeEvent(
   onErrorRef.current = onError
 
   useEffect(() => {
-    if (!isFirebaseConfigured || !eventId) {
+    if (!isFirebaseConfigured || !tournamentId || !eventId) {
       setConnected(false)
       return
     }
 
     setConnected(false)
-    const groupMatchesQ = query(collection(db, 'group_matches'), where('event_id', '==', eventId))
-    const knockoutQ = query(collection(db, 'knockout_matches'), where('event_id', '==', eventId))
-    const groupsQ = query(collection(db, 'groups'), where('event_id', '==', eventId))
+    const groupMatchesQ = query(
+      collection(db, 'group_matches'),
+      where('tournament_id', '==', tournamentId),
+      where('event_id', '==', eventId),
+    )
+    const knockoutQ = query(
+      collection(db, 'knockout_matches'),
+      where('tournament_id', '==', tournamentId),
+      where('event_id', '==', eventId),
+    )
+    const groupsQ = query(
+      collection(db, 'groups'),
+      where('tournament_id', '==', tournamentId),
+      where('event_id', '==', eventId),
+    )
 
     let ready = 0
     const requiredReady = 3
@@ -78,7 +91,7 @@ export function useRealtimeEvent(
       unsubGroups()
       setConnected(false)
     }
-  }, [eventId])
+  }, [tournamentId, eventId])
 
   return { connected }
 }
