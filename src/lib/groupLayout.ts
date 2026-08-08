@@ -1,7 +1,7 @@
 import type { GroupLayoutOption, TournamentEntry } from '../types'
 
 const MIN_PER_GROUP = 3
-const MAX_PER_GROUP = 8
+export const MAX_PER_GROUP = 8
 
 export interface StartLayoutOption {
   key: string
@@ -82,6 +82,11 @@ function layoutScore(
   return score
 }
 
+/** Block bracket requires an even number of groups after the group stage. */
+export function isLayoutCompatibleWithBlock(option: Pick<StartLayoutOption, 'groupCount'>): boolean {
+  return option.groupCount % 2 === 0
+}
+
 export function getStartLayoutOptions(
   entryCount: number,
   config: { entries_per_group?: number; group_count?: number },
@@ -99,6 +104,8 @@ export function getStartLayoutOptions(
   }
 
   for (const uneven of getUnevenGroupLayouts(entryCount)) {
+    const allEqual = uneven.sizes.every((s) => s === uneven.sizes[0])
+    if (allEqual) continue // same as "N groups × M" even layout
     const maxSize = Math.max(...uneven.sizes)
     options.push({
       key: `uneven-${uneven.sizes.join('-')}`,

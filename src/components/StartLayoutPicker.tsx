@@ -5,10 +5,15 @@ export function StartLayoutPicker({
   options,
   selectedKey,
   onSelect,
+  isOptionDisabled,
+  disabledHint = 'Block bracket requires an even number of groups',
 }: {
   options: StartLayoutOption[]
   selectedKey?: string
   onSelect: (key: string) => void
+  /** When set, options matching this are shown but not selectable (e.g. Block + odd group count). */
+  isOptionDisabled?: (option: StartLayoutOption) => boolean
+  disabledHint?: string
 }) {
   if (!options.length) return null
 
@@ -18,25 +23,41 @@ export function StartLayoutPicker({
       <div className="space-y-2">
         {options.map((opt) => {
           const active = selectedKey === opt.key
+          const disabled = isOptionDisabled?.(opt) ?? false
           return (
             <button
               key={opt.key}
               type="button"
+              disabled={disabled}
               onClick={() => onSelect(opt.key)}
+              title={disabled ? disabledHint : undefined}
               className={`w-full flex items-center gap-2.5 px-3 py-3 rounded-[10px] border transition-colors text-left ${
-                active
-                  ? 'border-[1.5px] border-brand-500 bg-brand-100'
-                  : 'border border-border bg-navy hover:border-border-strong'
+                disabled
+                  ? 'border border-border bg-navy/50 opacity-60 cursor-not-allowed'
+                  : active
+                    ? 'border-[1.5px] border-brand-500 bg-brand-100'
+                    : 'border border-border bg-navy hover:border-border-strong'
               }`}
             >
               <span
                 className={`w-[18px] h-[18px] rounded-full shrink-0 border-[1.5px] ${
-                  active ? 'border-brand-500 bg-brand-500' : 'border-border-strong bg-transparent'
+                  disabled
+                    ? 'border-border bg-transparent'
+                    : active
+                      ? 'border-brand-500 bg-brand-500'
+                      : 'border-border-strong bg-transparent'
                 }`}
                 aria-hidden
               />
-              <span className="flex-1 min-w-0 text-sm font-semibold text-text-bluewhite">{opt.label}</span>
-              {opt.uneven && (
+              <span className="flex-1 min-w-0">
+                <span className={`block text-sm font-semibold ${disabled ? 'text-text-steel' : 'text-text-bluewhite'}`}>
+                  {opt.label}
+                </span>
+                {disabled && (
+                  <span className="block text-xs text-text-steel mt-0.5">{disabledHint}</span>
+                )}
+              </span>
+              {opt.uneven && !disabled && (
                 <span className="text-xs font-semibold text-text-steel shrink-0">uneven</span>
               )}
             </button>

@@ -29,6 +29,7 @@ import type {
 } from '../types'
 import { assignEntriesToGroups } from './groupAssignment'
 import { generateRoundRobinPairs } from './roundRobin'
+import { newRoundRobinPairsForEntry, nextGroupLabel, validateLateJoinTarget, type LateJoinMode } from './lateJoinAssignment'
 import {
   generateKnockoutPairings,
   computeKnockoutAdvancement,
@@ -300,7 +301,7 @@ export async function addTeamEntry(
 
   await batch.commit()
   const snap = await getDoc(teamRef)
-  return withId(snap.id, snap.data() as Omit<Team, 'id'>)
+  return { team: withId(snap.id, snap.data() as Omit<Team, 'id'>), entryId: entryRef.id }
 }
 
 export async function addPlayerEntry(
@@ -331,7 +332,7 @@ export async function addPlayerEntry(
 
   await batch.commit()
   const snap = await getDoc(playerRef)
-  return withId(snap.id, snap.data() as Omit<Player, 'id'>)
+  return { player: withId(snap.id, snap.data() as Omit<Player, 'id'>), entryId: entryRef.id }
 }
 
 export async function addPairEntry(
@@ -370,7 +371,76 @@ export async function addPairEntry(
 
   await batch.commit()
   const snap = await getDoc(pairRef)
-  return withId(snap.id, snap.data() as Omit<Pair, 'id'>)
+  return { pair: withId(snap.id, snap.data() as Omit<Pair, 'id'>), entryId: entryRef.id }
+}
+
+export async function updatePlayerEntry(
+  entry: TournamentEntry,
+  update: { name: string; organization: string; seeded: boolean | null },
+) {
+  if (!entry.player_id) throw new Error('Not a player entry')
+  const batch = writeBatch(db)
+  batch.update(doc(db, 'players', entry.player_id), {
+    name: update.name,
+    organization: update.organization || null,
+    seeded: update.seeded,
+  })
+  batch.update(doc(db, 'tournament_entries', entry.id), { seeded: update.seeded })
+  await batch.commit()
+}
+
+export async function updatePairEntry(
+  entry: TournamentEntry,
+  update: {
+    pair_name: string
+    player_a: string
+    player_b: string
+    organization: string
+    seeded: boolean | null
+  },
+) {
+  if (!entry.pair_id) throw new Error('Not a pair entry')
+  const batch = writeBatch(db)
+  batch.update(doc(db, 'pairs', entry.pair_id), {
+    pair_name: update.pair_name || null,
+    player_a: update.player_a,
+    player_b: update.player_b,
+    organization: update.organization || null,
+    seeded: update.seeded,
+  })
+  batch.update(doc(db, 'tournament_entries', entry.id), { seeded: update.seeded })
+  await batch.commit()
+}
+
+export async function updateTeamEntry(
+  entry: TournamentEntry,
+  update: {
+    name: string
+    organization: string
+    seeded: boolean | null
+    roster?: string[]
+  },
+) {
+  if (!entry.team_id) throw new Error('Not a team entry')
+  const batch = writeBatch(db)
+  batch.update(doc(db, 'teams', entry.team_id), {
+    name: update.name,
+    organization: update.organization || null,
+    seeded: update.seeded,
+  })
+  batch.update(doc(db, 'tournament_entries', entry.id), { seeded: update.seeded })
+
+  if (update.roster) {
+    const rosterSnap = await getDocs(
+      query(collection(db, 'team_players'), where('team_id', '==', entry.team_id)),
+    )
+    rosterSnap.docs.forEach((d) => batch.delete(d.ref))
+    update.roster.forEach((name) => {
+      batch.set(doc(collection(db, 'team_players')), { team_id: entry.team_id, name })
+    })
+  }
+
+  await batch.commit()
 }
 
 export async function fetchGroups(tournamentId: string, eventId: string) {
@@ -459,18 +529,23 @@ export async function setupGroupsAndMatches(
   entries: TournamentEntry[],
 ) {
   const groupCount = event.config.group_count!
-  const { groups: assignments } = assignEntriesToGroups(
+  const assignment = assignEntriesToGroups(
     entries,
     groupCount,
     event.config.group_sizes,
   )
+  if (assignment.error) {
+    throw new Error(assignment.error)
+  }
+  const { groups: assignments } = assignment
 
   type PendingWriteLocal = { ref: ReturnType<typeof doc>; data: Record<string, unknown> }
-  const pendingSets: PendingWriteLocal[] = []
+  const groupWrites: PendingWriteLocal[] = []
+  const memberAndMatchWrites: PendingWriteLocal[] = []
 
   for (const assignment of assignments) {
     const groupRef = doc(collection(db, 'groups'))
-    pendingSets.push({
+    groupWrites.push({
       ref: groupRef,
       data: {
         tournament_id: tournamentId,
@@ -480,7 +555,7 @@ export async function setupGroupsAndMatches(
     })
 
     assignment.entryIds.forEach((entryId) => {
-      pendingSets.push({
+      memberAndMatchWrites.push({
         ref: doc(collection(db, 'group_members')),
         data: { group_id: groupRef.id, entry_id: entryId },
       })
@@ -488,7 +563,7 @@ export async function setupGroupsAndMatches(
 
     const pairs = generateRoundRobinPairs(assignment.entryIds)
     pairs.forEach(([a, b]) => {
-      pendingSets.push({
+      memberAndMatchWrites.push({
         ref: doc(collection(db, 'group_matches')),
         data: {
           tournament_id: tournamentId,
@@ -515,7 +590,9 @@ export async function setupGroupsAndMatches(
   await deleteWhere('group_matches', 'event_id', event.id)
   await deleteWhere('knockout_matches', 'event_id', event.id)
 
-  await commitBatchSets(pendingSets)
+  // Groups must commit before members — Firestore rules check group_id exists.
+  await commitBatchSets(groupWrites)
+  await commitBatchSets(memberAndMatchWrites)
 }
 
 export async function fetchGroupMatches(tournamentId: string, eventId: string) {
@@ -554,7 +631,7 @@ export async function fetchKnockoutMatches(tournamentId: string, eventId: string
     })
 }
 
-export async function startDivision(
+export async function generateGroupStage(
   tournamentId: string,
   event: TournamentEvent,
   entries: TournamentEntry[],
@@ -562,12 +639,235 @@ export async function startDivision(
 ) {
   const fresh = await fetchEvent(tournamentId, event.id)
   if (fresh.status !== 'upcoming') {
-    throw new Error('Division can only be started from upcoming status')
+    throw new Error('Group stage can only be generated while registration is open')
   }
 
   const eventForSetup = { ...fresh, config: updatedConfig }
   await setupGroupsAndMatches(tournamentId, eventForSetup, entries)
   return updateEvent(tournamentId, event.id, { config: updatedConfig, status: 'ongoing' })
+}
+
+/** @deprecated Use generateGroupStage */
+export const startDivision = generateGroupStage
+
+export type LateJoinAssignment =
+  | { mode: Extract<LateJoinMode, 'balance' | 'pick'>; groupId: string }
+  | { mode: 'new_group' }
+
+export type LateJoinEntryInput =
+  | { type: 'team'; name: string; organization: string; seeded: boolean | null; roster: string[] }
+  | { type: 'player'; name: string; organization: string; seeded: boolean | null }
+  | {
+      type: 'pair'
+      pair_name: string
+      player_a: string
+      player_b: string
+      organization: string
+      seeded: boolean | null
+    }
+
+export function mockEntryFromLateJoinInput(
+  tournamentId: string,
+  eventId: string,
+  input: LateJoinEntryInput,
+): TournamentEntry {
+  const base = {
+    id: '__pending__',
+    tournament_id: tournamentId,
+    event_id: eventId,
+    team_id: null as string | null,
+    player_id: null as string | null,
+    pair_id: null as string | null,
+    seeded: input.seeded,
+  }
+  if (input.type === 'team') {
+    return {
+      ...base,
+      entry_type: 'team',
+      team: {
+        id: 'pending',
+        tournament_id: tournamentId,
+        event_id: eventId,
+        name: input.name,
+        organization: input.organization || null,
+        seeded: input.seeded,
+      },
+    }
+  }
+  if (input.type === 'player') {
+    return {
+      ...base,
+      entry_type: 'player',
+      player: {
+        id: 'pending',
+        tournament_id: tournamentId,
+        event_id: eventId,
+        name: input.name,
+        organization: input.organization || null,
+        seeded: input.seeded,
+      },
+    }
+  }
+  return {
+    ...base,
+    entry_type: 'pair',
+    pair: {
+      id: 'pending',
+      tournament_id: tournamentId,
+      event_id: eventId,
+      pair_name: input.pair_name || null,
+      player_a: input.player_a,
+      player_b: input.player_b,
+      organization: input.organization || null,
+      seeded: input.seeded,
+    },
+  }
+}
+
+export async function addLateJoinEntry(
+  tournamentId: string,
+  eventId: string,
+  input: LateJoinEntryInput,
+  assignment: LateJoinAssignment,
+): Promise<{ entryId: string; warnings: string[] }> {
+  const [event, knockout, groups, entries] = await Promise.all([
+    fetchEvent(tournamentId, eventId),
+    fetchKnockoutMatches(tournamentId, eventId),
+    fetchGroups(tournamentId, eventId),
+    fetchEntries(tournamentId, eventId),
+  ])
+
+  if (event.status !== 'ongoing') {
+    throw new Error('Late check-in is only available during the group stage')
+  }
+  if (knockout.length > 0) {
+    throw new Error('Cannot add late entries after the knockout bracket has been generated')
+  }
+  if (!groups.length) {
+    throw new Error('Group stage has not been generated yet')
+  }
+
+  const mockEntry = mockEntryFromLateJoinInput(tournamentId, eventId, input)
+  const members = await fetchGroupMembers(
+    tournamentId,
+    eventId,
+    groups.map((g) => g.id),
+  )
+
+  const warnings: string[] = []
+  const scope = entryScope(tournamentId, eventId)
+  const entryRef = doc(collection(db, 'tournament_entries'))
+  const batch = writeBatch(db)
+
+  if (input.type === 'team') {
+    const teamRef = doc(collection(db, 'teams'))
+    batch.set(teamRef, {
+      ...scope,
+      name: input.name,
+      organization: input.organization || null,
+      seeded: input.seeded,
+    })
+    input.roster.forEach((name) => {
+      batch.set(doc(collection(db, 'team_players')), { team_id: teamRef.id, name })
+    })
+    batch.set(entryRef, {
+      ...scope,
+      entry_type: 'team',
+      team_id: teamRef.id,
+      player_id: null,
+      pair_id: null,
+      seeded: input.seeded,
+    })
+  } else if (input.type === 'player') {
+    const playerRef = doc(collection(db, 'players'))
+    batch.set(playerRef, {
+      ...scope,
+      name: input.name,
+      organization: input.organization || null,
+      seeded: input.seeded,
+    })
+    batch.set(entryRef, {
+      ...scope,
+      entry_type: 'player',
+      team_id: null,
+      player_id: playerRef.id,
+      pair_id: null,
+      seeded: input.seeded,
+    })
+  } else {
+    const pairRef = doc(collection(db, 'pairs'))
+    batch.set(pairRef, {
+      ...scope,
+      pair_name: input.pair_name || null,
+      player_a: input.player_a,
+      player_b: input.player_b,
+      organization: input.organization || null,
+      seeded: input.seeded,
+    })
+    batch.set(entryRef, {
+      ...scope,
+      entry_type: 'pair',
+      team_id: null,
+      player_id: null,
+      pair_id: pairRef.id,
+      seeded: input.seeded,
+    })
+  }
+
+  const entryId = entryRef.id
+
+  if (assignment.mode === 'new_group') {
+    const label = nextGroupLabel(groups.map((g) => g.label))
+    const groupRef = doc(collection(db, 'groups'))
+    batch.set(groupRef, { tournament_id: tournamentId, event_id: eventId, label })
+    await batch.commit()
+
+    const memberBatch = writeBatch(db)
+    memberBatch.set(doc(collection(db, 'group_members')), {
+      group_id: groupRef.id,
+      entry_id: entryId,
+    })
+    await memberBatch.commit()
+    return { entryId, warnings }
+  }
+
+  const group = groups.find((g) => g.id === assignment.groupId)
+  if (!group) throw new Error('Group not found')
+
+  const groupEntryIds = members.filter((m) => m.group_id === group.id).map((m) => m.entry_id)
+  const groupEntries = groupEntryIds
+    .map((id) => entries.find((e) => e.id === id))
+    .filter(Boolean) as TournamentEntry[]
+
+  const validation = validateLateJoinTarget(groupEntries, mockEntry)
+  if (!validation.ok) {
+    throw new Error(validation.error ?? 'Cannot assign to this group')
+  }
+  warnings.push(...validation.warnings)
+
+  batch.set(doc(collection(db, 'group_members')), {
+    group_id: group.id,
+    entry_id: entryId,
+  })
+
+  for (const [a, b] of newRoundRobinPairsForEntry(entryId, groupEntryIds)) {
+    batch.set(doc(collection(db, 'group_matches')), {
+      tournament_id: tournamentId,
+      event_id: eventId,
+      group_id: group.id,
+      entry_a_id: a,
+      entry_b_id: b,
+      score_a: null,
+      score_b: null,
+      rubber_results: null,
+      winner_entry_id: null,
+      status: 'scheduled',
+      outcome: 'normal',
+    })
+  }
+
+  await batch.commit()
+  return { entryId, warnings }
 }
 
 async function loadEventForMatch(matchData: {

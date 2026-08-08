@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AdminLayout } from '../../components/AdminLayout'
 import { FirebaseSetupBanner } from '../../components/FirebaseSetupBanner'
@@ -41,7 +41,7 @@ export function AdminTournamentHubPage() {
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!tournamentId) return
     const [t, e] = await Promise.all([fetchTournament(tournamentId), fetchEvents(tournamentId)])
     setTournament(t)
@@ -49,7 +49,7 @@ export function AdminTournamentHubPage() {
     setEditName(t.name)
     setEditVenue(t.venue ?? '')
     setEditDate(t.start_date ?? '')
-  }
+  }, [tournamentId])
 
   useEffect(() => {
     setPageLoading(true)
@@ -57,7 +57,7 @@ export function AdminTournamentHubPage() {
     load()
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setPageLoading(false))
-  }, [tournamentId])
+  }, [load])
 
   const handleSave = async () => {
     if (!tournamentId) return

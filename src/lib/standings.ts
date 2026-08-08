@@ -1,5 +1,25 @@
 import type { GroupMatch, KnockoutMatch, StandingRow, TournamentEntry } from '../types'
 import { getEntryDisplayName } from './displayNames'
+import { isEntrySeeded } from './groupLayout'
+
+function sortByPerformance(a: StandingRow, b: StandingRow): number {
+  if (b.wins !== a.wins) return b.wins - a.wins
+  if (b.diff !== a.diff) return b.diff - a.diff
+  return a.name.localeCompare(b.name)
+}
+
+function sortBySeededThenName(
+  a: StandingRow,
+  b: StandingRow,
+  entries: Map<string, TournamentEntry>,
+): number {
+  const aEntry = entries.get(a.entryId)
+  const bEntry = entries.get(b.entryId)
+  const aSeeded = aEntry ? isEntrySeeded(aEntry) : false
+  const bSeeded = bEntry ? isEntrySeeded(bEntry) : false
+  if (aSeeded !== bSeeded) return aSeeded ? -1 : 1
+  return a.name.localeCompare(b.name)
+}
 
 export function computeStandings(
   entryIds: string[],
@@ -59,14 +79,24 @@ export function computeStandings(
     }
   })
 
-  rows.sort((x, y) => {
-    if (y.wins !== x.wins) return y.wins - x.wins
-    if (y.diff !== x.diff) return y.diff - x.diff
-    return x.name.localeCompare(y.name)
-  })
+  const hasCompleted = matches.some(
+    (m) =>
+      m.status === 'completed' &&
+      m.score_a != null &&
+      m.score_b != null &&
+      (m.winner_entry_id === m.entry_a_id || m.winner_entry_id === m.entry_b_id),
+  )
+
+  if (!hasCompleted) {
+    rows.sort((a, b) => sortBySeededThenName(a, b, entries))
+  } else {
+    rows.sort(sortByPerformance)
+  }
 
   rows.forEach((row, i) => {
     row.rank = i + 1
+    const entry = entries.get(row.entryId)
+    row.seeded = entry ? isEntrySeeded(entry) : false
   })
 
   return rows

@@ -40,10 +40,6 @@ export function AddEventPage() {
 
   const handleCreate = async () => {
     if (!tournamentId) return
-    if (!draft.entries_per_group) {
-      setError('Select a group layout')
-      return
-    }
     setSaving(true)
     setError('')
     try {

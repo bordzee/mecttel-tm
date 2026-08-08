@@ -52,6 +52,81 @@ describe('standings', () => {
     )
     expect(rows.every((r) => r.played === 0)).toBe(true)
   })
+
+  it('ranks seeded entries first before any group matches are played', () => {
+    const entryMap = new Map<string, TournamentEntry>([
+      [
+        'a',
+        {
+          id: 'a',
+          tournament_id: 't',
+          event_id: 'e',
+          entry_type: 'player',
+          team_id: null,
+          player_id: 'p1',
+          pair_id: null,
+          seeded: false,
+          player: {
+            id: 'p1',
+            tournament_id: 't',
+            event_id: 'e',
+            name: 'Unseeded',
+            organization: null,
+            seeded: false,
+          },
+        },
+      ],
+      [
+        'b',
+        {
+          id: 'b',
+          tournament_id: 't',
+          event_id: 'e',
+          entry_type: 'player',
+          team_id: null,
+          player_id: 'p2',
+          pair_id: null,
+          seeded: true,
+          player: {
+            id: 'p2',
+            tournament_id: 't',
+            event_id: 'e',
+            name: 'Seeded B',
+            organization: null,
+            seeded: true,
+          },
+        },
+      ],
+      [
+        'c',
+        {
+          id: 'c',
+          tournament_id: 't',
+          event_id: 'e',
+          entry_type: 'player',
+          team_id: null,
+          player_id: 'p3',
+          pair_id: null,
+          seeded: true,
+          player: {
+            id: 'p3',
+            tournament_id: 't',
+            event_id: 'e',
+            name: 'Seeded A',
+            organization: null,
+            seeded: true,
+          },
+        },
+      ],
+    ])
+
+    const rows = computeStandings(['a', 'b', 'c'], [], entryMap)
+    expect(rows.map((r) => r.entryId)).toEqual(['c', 'b', 'a'])
+    expect(rows[0]?.rank).toBe(1)
+    expect(rows[1]?.rank).toBe(2)
+    expect(rows[0]?.seeded).toBe(true)
+    expect(rows[2]?.seeded).toBe(false)
+  })
 })
 
 describe('entryValidation', () => {

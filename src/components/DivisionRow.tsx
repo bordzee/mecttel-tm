@@ -12,7 +12,7 @@ function eventPillVariant(status: TournamentEvent['status']): 'live' | 'upcoming
 
 function divisionSubtitle(status: TournamentEvent['status']): string {
   if (status === 'ongoing') return 'Group stage in progress'
-  if (status === 'upcoming') return 'Starts soon'
+  if (status === 'upcoming') return 'Registration open'
   if (status === 'draft') return 'Draft — not published'
   return 'Ended'
 }
@@ -29,7 +29,13 @@ export function DivisionRow({ event, to }: { event: TournamentEvent; to: string 
         <p className="text-xs text-text-steel mt-1">{divisionSubtitle(event.status)}</p>
       </div>
       <Pill variant={eventPillVariant(event.status)}>
-        {event.status === 'ongoing' ? 'Live' : event.status === 'upcoming' ? 'Upcoming' : event.status === 'draft' ? 'Draft' : 'Ended'}
+        {event.status === 'ongoing'
+          ? 'Live'
+          : event.status === 'upcoming'
+            ? 'Registration open'
+            : event.status === 'draft'
+              ? 'Draft'
+              : 'Ended'}
       </Pill>
       <svg
         xmlns="http://www.w3.org/2000/svg"

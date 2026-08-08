@@ -1,7 +1,6 @@
-import { seededLabel } from './SeededSelect'
-import { EmptyMessage, ParticipantsTitle, SeedBadge } from './ui/primitives'
+import { EmptyMessage, ParticipantsTitle, SeededStarIcon } from './ui/primitives'
 import { getEntryDisplayName } from '../lib/displayNames'
-import { getEntryOrganization } from '../lib/groupLayout'
+import { getEntryOrganization, isEntrySeeded } from '../lib/groupLayout'
 import type { EventType, TournamentEntry } from '../types'
 
 export function PublicParticipantsList({
@@ -56,7 +55,7 @@ function PublicParticipantRow({
 }) {
   const name = getEntryDisplayName(entry)
   const org = getEntryOrganization(entry)
-  const seeded = seededLabel(entry)
+  const seeded = isEntrySeeded(entry)
   const pairDetail =
     entry.entry_type === 'pair' && entry.pair && entry.pair.pair_name
       ? `${entry.pair.player_a} / ${entry.pair.player_b}`
@@ -64,16 +63,20 @@ function PublicParticipantRow({
 
   return (
     <li className="bg-card rounded-xl border border-border px-3 py-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-[15px] font-bold text-text-primary">{name}</p>
-          {pairDetail && <p className="text-xs text-text-steel mt-0.5">{pairDetail}</p>}
-          {org && <p className="text-xs text-text-steel mt-0.5">{org}</p>}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[15px] font-bold text-text-primary truncate">{name}</p>
+          {pairDetail && <p className="text-sm text-text-steel mt-0.5">{pairDetail}</p>}
+          {org && <p className="text-sm text-text-steel mt-0.5">{org}</p>}
           {eventType === 'team' && roster && roster.length > 0 && (
-            <p className="text-xs text-text-steel mt-1">{roster.join(' · ')}</p>
+            <p className="text-sm text-text-steel mt-1">{roster.join(' · ')}</p>
           )}
         </div>
-        {seeded && <SeedBadge>{seeded}</SeedBadge>}
+        {seeded && (
+          <span className="shrink-0 inline-flex self-center" title="Seeded" aria-label="Seeded">
+            <SeededStarIcon size={18} />
+          </span>
+        )}
       </div>
     </li>
   )

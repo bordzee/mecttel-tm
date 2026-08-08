@@ -8,17 +8,18 @@ export type EntryType = 'team' | 'player' | 'pair'
 export type RubberResult = 'W' | 'L' | null
 
 export interface SetRules {
-  group: 3 | 5
-  knockout_early: 3 | 5
-  quarters: 5
-  semis: 5
+  group: 3 | 5 | 7
+  knockout_early: 3 | 5 | 7
+  quarters: 3 | 5 | 7
+  semis: 3 | 5 | 7
   finals: 5 | 7
 }
 
 export type KnockoutBracketType = 'cross' | 'block'
 
 export interface TournamentConfig {
-  total_slots: number
+  /** Legacy divisions only; omit for unlimited registration. */
+  total_slots?: number
   entries_per_group?: number
   group_count?: number
   /** Per-group sizes when entry count does not divide evenly (e.g. [4,4,4,5] for 17). */
@@ -180,6 +181,8 @@ export interface StandingRow {
   scoreAgainst: number
   diff: number
   rank: number
+  /** True when entry is seeded in this division. */
+  seeded?: boolean
   /** True when rank comes from admin manual order, not auto tie-break. */
   rankOverridden?: boolean
 }

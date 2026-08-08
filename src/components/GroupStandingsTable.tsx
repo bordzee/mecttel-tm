@@ -1,5 +1,5 @@
 import type { StandingRow } from '../types'
-import { ManualRankBadge, ManualRankNote } from './ui/primitives'
+import { ManualRankBadge, ManualRankNote, SeededStarIcon } from './ui/primitives'
 
 const COL = {
   rank: 'w-[38px] shrink-0',
@@ -73,11 +73,18 @@ export function GroupStandingsTable({
                 {row.rank}
               </div>
               <div
-                className={`flex-1 min-w-0 flex items-center px-3 text-[15px] font-semibold truncate ${
+                className={`flex-1 min-w-0 flex items-center px-3 text-[15px] font-semibold min-w-0 ${
                   isLeader ? 'text-winner' : 'text-text-bluewhite'
                 }`}
               >
-                {row.name}
+                <span className="truncate inline-flex items-center gap-1 min-w-0">
+                  <span className="truncate">{row.name}</span>
+                  {row.seeded && (
+                    <span className="shrink-0 inline-flex" title="Seeded" aria-label="Seeded">
+                      <SeededStarIcon size={14} />
+                    </span>
+                  )}
+                </span>
               </div>
               <div className={`${COL.stat} flex items-center justify-center text-sm text-text-bluewhite tabular-nums`}>
                 {row.wins}

@@ -20,7 +20,7 @@ import {
   divisionDraftToEventInput,
   type DivisionDraft,
 } from '../../components/DivisionConfigForm'
-import { createTournamentWithEvents } from '../../lib/tournamentService'
+import { createTournament, createTournamentWithEvents } from '../../lib/tournamentService'
 
 function chunkPresets<T>(items: T[], size: number): T[][] {
   const rows: T[][] = []
@@ -51,17 +51,24 @@ export function TournamentWizardPage() {
     setDivisions((prev) => [...prev, createDivisionDraft(preset)])
   }
 
-  const handleCreate = async () => {
+  const handleCreateHubOnly = async () => {
+    setError('')
+    setSaving(true)
+    try {
+      const tournament = await createTournament({ name, venue, start_date: startDate })
+      navigate(`/admin/tournaments/${tournament.id}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to create')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCreateWithDivisions = async () => {
     setError('')
     if (!divisions.length) {
       setError('Add at least one division')
       return
-    }
-    for (const d of divisions) {
-      if (!d.entries_per_group) {
-        setError('Each division needs a group layout')
-        return
-      }
     }
     setSaving(true)
     try {
@@ -111,10 +118,14 @@ export function TournamentWizardPage() {
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
-            <Button onClick={() => setStep(1)} disabled={!name} fullWidth>
-              Next: Add divisions
+            <Button onClick={handleCreateHubOnly} disabled={!name || saving} fullWidth>
+              {saving ? 'Creating…' : 'Create tournament'}
+            </Button>
+            <Button variant="secondary" onClick={() => setStep(1)} disabled={!name} fullWidth>
+              Add divisions now (optional)
             </Button>
           </div>
+          {error && <ErrorMessage>{error}</ErrorMessage>}
         </div>
       )}
 
@@ -160,7 +171,7 @@ export function TournamentWizardPage() {
 
           {error && <ErrorMessage>{error}</ErrorMessage>}
 
-          <Button onClick={handleCreate} disabled={saving || divisions.length === 0} fullWidth>
+          <Button onClick={handleCreateWithDivisions} disabled={saving || divisions.length === 0} fullWidth>
             {saving ? 'Creating…' : `Create ${name || 'tournament'}`}
           </Button>
           <Button variant="secondary" fullWidth onClick={() => setStep(0)}>

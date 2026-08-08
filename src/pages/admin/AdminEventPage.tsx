@@ -10,6 +10,8 @@ import {
   ErrorMessage,
   EventAdminTitle,
   FormLabel,
+  InfoNoteCard,
+  IconActionButton,
   PanelSectionTitle,
   Pill,
   SectionHeaderRow,
@@ -23,9 +25,12 @@ import { GroupStageNavigator } from '../../components/GroupStageNavigator'
 import { KnockoutBracket } from '../../components/KnockoutBracket'
 import { MatchScoreEntry } from '../../components/MatchScoreEntry'
 import { EntryRow } from '../../components/EntryRow'
+import { EntryEditDialog, type EntryEditFormState } from '../../components/EntryEditDialog'
 import { ConflictWarnings } from '../../components/ConflictWarnings'
 import { SeededSelect } from '../../components/SeededSelect'
 import { StartLayoutPicker } from '../../components/StartLayoutPicker'
+import { LateEntryDialog } from '../../components/LateEntryDialog'
+import { KnockoutBracketPicker } from '../../components/KnockoutBracketPicker'
 import {
   fetchTournament,
   fetchEvent,
@@ -36,7 +41,12 @@ import {
   addTeamEntry,
   addPlayerEntry,
   addPairEntry,
-  startDivision,
+  updatePlayerEntry,
+  updatePairEntry,
+  updateTeamEntry,
+  generateGroupStage,
+  addLateJoinEntry,
+  type LateJoinEntryInput,
   fetchGroups,
   fetchGroupMembers,
   fetchGroupMatches,
@@ -48,8 +58,14 @@ import {
   saveKnockoutMatchResult,
   fetchTeamRosters,
 } from '../../lib/tournamentService'
-import { assignEntriesToGroups } from '../../lib/groupAssignment'
-import { getStartLayoutOptions, parseSeededValue } from '../../lib/groupLayout'
+import { assignEntriesToGroups, canAddEntryToGroup } from '../../lib/groupAssignment'
+import {
+  getStartLayoutOptions,
+  isLayoutCompatibleWithBlock,
+  parseSeededValue,
+  entrySortKey,
+} from '../../lib/groupLayout'
+import { suggestBalanceGroup, type GroupSummary } from '../../lib/lateJoinAssignment'
 import { buildKnockoutStageTabs, isKnockoutStage, knockoutRoundFromStageId } from '../../lib/knockoutTabs'
 import { computeStandings, resolveGroupStandings, needsManualRankResolution } from '../../lib/standings'
 import { validateTournamentStart } from '../../lib/matchOutcomes'
@@ -62,9 +78,23 @@ import {
   validateNewEntry,
 } from '../../lib/entryValidation'
 import { FirebaseSetupBanner } from '../../components/FirebaseSetupBanner'
+import {
+  DivisionConfigForm,
+  divisionDraftToSettingsUpdate,
+  eventToDivisionDraft,
+  type DivisionDraft,
+} from '../../components/DivisionConfigForm'
 import { STATUS_LABELS } from '../../lib/constants'
 import { useRealtimeEvent } from '../../hooks/useRealtimeEvent'
-import type { Tournament, TournamentEvent, TournamentEntry, Group } from '../../types'
+import type { Tournament, TournamentEvent, TournamentEntry, Group, KnockoutBracketType } from '../../types'
+
+type AdminDivisionTab = 'participants' | 'late-check-in' | 'brackets'
+
+type PendingLateEntry = {
+  label: string
+  mock: TournamentEntry
+  input: LateJoinEntryInput
+}
 
 function statusPillVariant(status: TournamentEvent['status']): 'live' | 'upcoming' | 'draft' | 'ended' {
   if (status === 'ongoing') return 'live'
@@ -85,6 +115,7 @@ export function AdminEventPage() {
   const [members, setMembers] = useState<{ group_id: string; entry_id: string }[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [addingEntry, setAddingEntry] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [refreshError, setRefreshError] = useState('')
@@ -92,7 +123,14 @@ export function AdminEventPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [activeStage, setActiveStage] = useState<string>('')
+  const [adminTab, setAdminTab] = useState<AdminDivisionTab>('participants')
   const [startLayoutKey, setStartLayoutKey] = useState<string>()
+  const [pendingLateEntry, setPendingLateEntry] = useState<PendingLateEntry | null>(null)
+  const [editingDivision, setEditingDivision] = useState(false)
+  const [editDraft, setEditDraft] = useState<DivisionDraft | null>(null)
+  const [editingEntry, setEditingEntry] = useState<TournamentEntry | null>(null)
+  const [editingEntryRoster, setEditingEntryRoster] = useState<string[] | undefined>()
+  const [entryEditError, setEntryEditError] = useState('')
   const loadSeq = useRef(0)
   const isInitialLoad = useRef(true)
 
@@ -120,11 +158,17 @@ export function AdminEventPage() {
       setMembers(m.map((x) => ({ group_id: x.group_id, entry_id: x.entry_id })))
       setLoadError('')
       setRefreshError('')
+      if (isInitialLoad.current) {
+        isInitialLoad.current = false
+        setPageLoading(false)
+      }
     } catch (e) {
       if (seq !== loadSeq.current) return
       const msg = e instanceof Error ? e.message : 'Failed to load division'
       if (isInitialLoad.current) {
         setLoadError(msg)
+        isInitialLoad.current = false
+        setPageLoading(false)
       } else {
         setRefreshError(msg)
       }
@@ -132,33 +176,24 @@ export function AdminEventPage() {
   }, [tournamentId, eventId])
 
   useEffect(() => {
-    let cancelled = false
-    async function init() {
-      setLoadError('')
-      setPageLoading(true)
-      try {
-        await fetchEventData()
-      } catch (e) {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Failed to load')
-      } finally {
-        if (!cancelled) {
-          isInitialLoad.current = false
-          setPageLoading(false)
-        }
-      }
-    }
-    init()
-    return () => {
-      cancelled = true
-      loadSeq.current++
-    }
+    isInitialLoad.current = true
+    setPageLoading(true)
+    setLoadError('')
+    setTournament(null)
+    setEvent(null)
+    void fetchEventData()
   }, [eventId, fetchEventData])
 
   const handleRealtimeError = useCallback((msg: string) => {
-    setError(msg)
+    setRefreshError(msg)
   }, [])
 
-  useRealtimeEvent(tournamentId, eventId, fetchEventData, handleRealtimeError)
+  useRealtimeEvent(
+    pageLoading ? undefined : tournamentId,
+    pageLoading ? undefined : eventId,
+    fetchEventData,
+    handleRealtimeError,
+  )
 
   useEffect(() => {
     if (!event || event.event_type !== 'team') {
@@ -190,6 +225,11 @@ export function AdminEventPage() {
   }, [entries, event])
 
   const entryMap = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries])
+
+  const sortedEntries = useMemo(
+    () => [...entries].sort((a, b) => entrySortKey(a) - entrySortKey(b)),
+    [entries],
+  )
 
   const groupStageData = useMemo(() => {
     return groups.map((group) => {
@@ -239,17 +279,35 @@ export function AdminEventPage() {
     ? knockoutMatches.filter((m) => m.round === activeKnockoutRound)
     : []
 
-  const startLayoutOptions = useMemo(() => {
+  const isBlockBracket = (event?.config.knockout_bracket ?? 'cross') === 'block'
+
+  const allLayoutOptions = useMemo(() => {
     if (!event) return []
     return getStartLayoutOptions(entries.length, event.config)
   }, [event, entries.length])
 
+  const isLayoutSelectable = useCallback(
+    (option: (typeof allLayoutOptions)[number]) =>
+      !isBlockBracket || isLayoutCompatibleWithBlock(option),
+    [isBlockBracket],
+  )
+
+  const selectableLayoutOptions = useMemo(
+    () => allLayoutOptions.filter(isLayoutSelectable),
+    [allLayoutOptions, isLayoutSelectable],
+  )
+
   useEffect(() => {
-    if (!startLayoutOptions.length) return
+    if (!selectableLayoutOptions.length) {
+      setStartLayoutKey(undefined)
+      return
+    }
     setStartLayoutKey((prev) =>
-      prev && startLayoutOptions.some((o) => o.key === prev) ? prev : startLayoutOptions[0].key,
+      prev && selectableLayoutOptions.some((o) => o.key === prev)
+        ? prev
+        : selectableLayoutOptions[0].key,
     )
-  }, [startLayoutOptions])
+  }, [selectableLayoutOptions])
 
   const startPreview = useMemo(() => {
     if (!event) return null
@@ -272,23 +330,80 @@ export function AdminEventPage() {
       groupSizes = startPreview.groupSizes
     }
     if (!groupCount || entries.length === 0) return []
-    const { warnings: w } = assignEntriesToGroups(entries, groupCount, groupSizes)
-    return w.map((x) => x.message)
+    const result = assignEntriesToGroups(entries, groupCount, groupSizes)
+    if (result.error) return [result.error]
+    return result.warnings.map((x) => x.message)
   }, [entries, event, startPreview])
+
+  const knockoutGenerated = knockoutMatches.length > 0
+
+  const groupSummaries = useMemo((): GroupSummary[] => {
+    return groups.map((group) => ({
+      groupId: group.id,
+      label: group.label,
+      entries: members
+        .filter((m) => m.group_id === group.id)
+        .map((m) => entryMap.get(m.entry_id))
+        .filter(Boolean) as TournamentEntry[],
+    }))
+  }, [groups, members, entryMap])
+
+  const lateJoinSuggestion = useMemo(() => {
+    if (!pendingLateEntry) return null
+    return suggestBalanceGroup(groupSummaries, pendingLateEntry.mock)
+  }, [pendingLateEntry, groupSummaries])
+
+  const buildMockEntry = (
+    partial: Partial<TournamentEntry> & Pick<TournamentEntry, 'entry_type' | 'seeded'>,
+  ): TournamentEntry => ({
+    id: '__pending__',
+    tournament_id: tournamentId ?? '',
+    event_id: eventId ?? '',
+    team_id: null,
+    player_id: null,
+    pair_id: null,
+    ...partial,
+  })
+
+  const handleLateJoinConfirm = async (mode: 'balance' | 'pick' | 'new_group', groupId?: string) => {
+    if (!tournamentId || !eventId || !pendingLateEntry) return
+    setLoading(true)
+    setError('')
+    try {
+      const { warnings: lateWarnings } = await addLateJoinEntry(
+        tournamentId,
+        eventId,
+        pendingLateEntry.input,
+        mode === 'new_group'
+          ? { mode: 'new_group' }
+          : { mode, groupId: groupId! },
+      )
+      if (lateWarnings.length) setWarnings(lateWarnings)
+      setPendingLateEntry(null)
+      setMessage('Late entry added')
+      await fetchEventData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add late entry')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleAddEntry = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!tournamentId || !eventId || !event) return
     const formEl = e.currentTarget
     const form = new FormData(formEl)
-    setLoading(true)
+    setAddingEntry(true)
     setError('')
     try {
       const seeded = parseSeededValue(form.get('seeded'))
-      let wrote = false
+      const isLateJoin = event.status === 'ongoing' && !knockoutGenerated
+
       if (event.event_type === 'team') {
         const roster = (form.get('roster') as string).split(',').map((s) => s.trim()).filter(Boolean)
         const name = form.get('name') as string
+        const organization = form.get('organization') as string
         const teamIds = entries.filter((e) => e.team_id).map((e) => e.team_id!)
         const existingRosters = teamIds.length ? await fetchTeamRosters(teamIds) : []
         const otherTeamRosterNames = existingRosters.map((r) => normalizeEntryName(r.name))
@@ -300,26 +415,67 @@ export function AdminEventPage() {
           setError(dup)
           return
         }
+        if (isLateJoin) {
+          const mock = buildMockEntry({
+            entry_type: 'team',
+            seeded,
+            team: {
+              id: 'pending',
+              tournament_id: tournamentId,
+              event_id: eventId,
+              name,
+              organization: organization || null,
+              seeded,
+            },
+          })
+          setPendingLateEntry({
+            label: name,
+            mock,
+            input: { type: 'team', name, organization, seeded, roster },
+          })
+          formEl.reset()
+          return
+        }
         await addTeamEntry(tournamentId, eventId, {
           name,
-          organization: form.get('organization') as string,
+          organization,
           seeded,
           roster,
         })
-        wrote = true
       } else if (isPlayerEventType(event.event_type)) {
         const name = form.get('name') as string
+        const organization = form.get('organization') as string
         const dup = validateNewEntry(entries, event.event_type, { type: 'player', name })
         if (dup) {
           setError(dup)
           return
         }
+        if (isLateJoin) {
+          const mock = buildMockEntry({
+            entry_type: 'player',
+            seeded,
+            player: {
+              id: 'pending',
+              tournament_id: tournamentId,
+              event_id: eventId,
+              name,
+              organization: organization || null,
+              seeded,
+            },
+          })
+          setPendingLateEntry({
+            label: name,
+            mock,
+            input: { type: 'player', name, organization, seeded },
+          })
+          formEl.reset()
+          return
+        }
         await addPlayerEntry(tournamentId, eventId, {
           name,
-          organization: form.get('organization') as string,
+          organization,
           seeded,
         })
-        wrote = true
       } else if (event.event_type === 'doubles') {
         const pairInput = {
           type: 'pair' as const,
@@ -327,27 +483,334 @@ export function AdminEventPage() {
           player_a: form.get('player_a') as string,
           player_b: form.get('player_b') as string,
         }
+        const organization = form.get('organization') as string
         const dup = validateNewEntry(entries, event.event_type, pairInput)
         if (dup) {
           setError(dup)
           return
         }
+        if (isLateJoin) {
+          const label = pairInput.pair_name.trim() || `${pairInput.player_a} / ${pairInput.player_b}`
+          const mock = buildMockEntry({
+            entry_type: 'pair',
+            seeded,
+            pair: {
+              id: 'pending',
+              tournament_id: tournamentId,
+              event_id: eventId,
+              pair_name: pairInput.pair_name || null,
+              player_a: pairInput.player_a,
+              player_b: pairInput.player_b,
+              organization: organization || null,
+              seeded,
+            },
+          })
+          setPendingLateEntry({
+            label,
+            mock,
+            input: {
+              type: 'pair',
+              pair_name: pairInput.pair_name,
+              player_a: pairInput.player_a,
+              player_b: pairInput.player_b,
+              organization,
+              seeded,
+            },
+          })
+          formEl.reset()
+          return
+        }
         await addPairEntry(tournamentId, eventId, {
           ...pairInput,
-          organization: form.get('organization') as string,
+          organization,
           seeded,
         })
-        wrote = true
       } else {
         setError('Unsupported event type')
         return
       }
-      if (!wrote) return
       formEl.reset()
       setMessage('Entry added')
       await fetchEventData()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add entry')
+    } finally {
+      setAddingEntry(false)
+    }
+  }
+
+  const openDivisionEdit = () => {
+    if (!event) return
+    setEditDraft(eventToDivisionDraft(event))
+    setEditingDivision(true)
+    setError('')
+  }
+
+  const closeDivisionEdit = () => {
+    setEditingDivision(false)
+    setEditDraft(null)
+  }
+
+  const handleSaveDivisionSettings = async () => {
+    if (!tournamentId || !event || !editDraft) return
+    setLoading(true)
+    setError('')
+    try {
+      if (event.event_type === 'team' && entries.length > 0) {
+        const teamIds = entries.filter((e) => e.team_id).map((e) => e.team_id!)
+        const rosters = teamIds.length ? await fetchTeamRosters(teamIds) : []
+        const wrongSize = teamIds.some((teamId) => {
+          const count = rosters.filter((r) => r.team_id === teamId).length
+          return count !== editDraft.roster_size
+        })
+        if (wrongSize) {
+          setError(
+            `Cannot set roster size to ${editDraft.roster_size} — existing teams have a different roster size. Remove teams first or keep ${event.config.roster_size ?? 3}.`,
+          )
+          return
+        }
+      }
+
+      const patch = divisionDraftToSettingsUpdate(editDraft, event)
+      await updateEvent(tournamentId, event.id, patch)
+      setMessage('Division settings saved')
+      setEditingDivision(false)
+      setEditDraft(null)
+      await fetchEventData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save division settings')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const applyFormToEntry = (
+    entry: TournamentEntry,
+    form: EntryEditFormState,
+    ev: TournamentEvent,
+  ): TournamentEntry => {
+    const seeded = form.seeded
+    if (ev.event_type === 'team' && entry.team) {
+      return {
+        ...entry,
+        seeded,
+        team: {
+          ...entry.team,
+          name: form.name.trim(),
+          organization: form.organization.trim() || null,
+          seeded,
+        },
+      }
+    }
+    if (isPlayerEventType(ev.event_type) && entry.player) {
+      return {
+        ...entry,
+        seeded,
+        player: {
+          ...entry.player,
+          name: form.name.trim(),
+          organization: form.organization.trim() || null,
+          seeded,
+        },
+      }
+    }
+    if (ev.event_type === 'doubles' && entry.pair) {
+      return {
+        ...entry,
+        seeded,
+        pair: {
+          ...entry.pair,
+          pair_name: form.pair_name.trim() || null,
+          player_a: form.player_a.trim(),
+          player_b: form.player_b.trim(),
+          organization: form.organization.trim() || null,
+          seeded,
+        },
+      }
+    }
+    return entry
+  }
+
+  const handleKnockoutBracketChange = async (knockout_bracket: KnockoutBracketType) => {
+    if (!tournamentId || !event) return
+    const current = event.config.knockout_bracket ?? 'cross'
+    if (knockout_bracket === current) return
+    setLoading(true)
+    setError('')
+    try {
+      await updateEvent(tournamentId, event.id, {
+        config: { ...event.config, knockout_bracket },
+      })
+      await fetchEventData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update knockout bracket')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleOpenEditEntry = async (entry: TournamentEntry) => {
+    setEntryEditError('')
+    setLoading(true)
+    try {
+      if (entry.entry_type === 'team' && entry.team_id) {
+        const rosters = await fetchTeamRosters([entry.team_id])
+        setEditingEntryRoster(
+          rosters.filter((r) => r.team_id === entry.team_id).map((r) => r.name),
+        )
+      } else {
+        setEditingEntryRoster(undefined)
+      }
+      setEditingEntry(entry)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load entry')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCloseEditEntry = () => {
+    setEditingEntry(null)
+    setEditingEntryRoster(undefined)
+    setEntryEditError('')
+  }
+
+  const handleSaveEntryEdit = async (form: EntryEditFormState) => {
+    if (!event || !editingEntry) return
+    setLoading(true)
+    setEntryEditError('')
+    try {
+      const seeded = form.seeded
+      const allowRosterEdit =
+        event.status === 'draft' || event.status === 'upcoming'
+
+      if (event.event_type === 'team') {
+        const rosterNames = allowRosterEdit
+          ? form.roster
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : editingEntryRoster ?? []
+        const teamIds = entries
+          .filter((e) => e.team_id && e.id !== editingEntry.id)
+          .map((e) => e.team_id!)
+        const existingRosters = teamIds.length ? await fetchTeamRosters(teamIds) : []
+        const otherTeamRosterNames = existingRosters.map((r) => normalizeEntryName(r.name))
+        const dup = validateNewEntry(
+          entries,
+          event.event_type,
+          { type: 'team', name: form.name, roster: rosterNames },
+          {
+            excludeEntryId: editingEntry.id,
+            rosterSize: allowRosterEdit ? event.config.roster_size : undefined,
+            otherTeamRosterNames,
+          },
+        )
+        if (dup) {
+          setEntryEditError(dup)
+          return
+        }
+
+        if (event.status === 'ongoing') {
+          const memberGroupId = members.find((m) => m.entry_id === editingEntry.id)?.group_id
+          if (memberGroupId) {
+            const groupEntries = members
+              .filter((m) => m.group_id === memberGroupId && m.entry_id !== editingEntry.id)
+              .map((m) => entryMap.get(m.entry_id))
+              .filter((e): e is TournamentEntry => !!e)
+            const mock = applyFormToEntry(editingEntry, form, event)
+            const check = canAddEntryToGroup(groupEntries, mock)
+            if (!check.ok) {
+              setEntryEditError(check.reason)
+              return
+            }
+          }
+        }
+
+        await updateTeamEntry(editingEntry, {
+          name: form.name.trim(),
+          organization: form.organization.trim(),
+          seeded,
+          roster: allowRosterEdit ? rosterNames : undefined,
+        })
+      } else if (isPlayerEventType(event.event_type)) {
+        const dup = validateNewEntry(
+          entries,
+          event.event_type,
+          { type: 'player', name: form.name },
+          { excludeEntryId: editingEntry.id },
+        )
+        if (dup) {
+          setEntryEditError(dup)
+          return
+        }
+
+        if (event.status === 'ongoing') {
+          const memberGroupId = members.find((m) => m.entry_id === editingEntry.id)?.group_id
+          if (memberGroupId) {
+            const groupEntries = members
+              .filter((m) => m.group_id === memberGroupId && m.entry_id !== editingEntry.id)
+              .map((m) => entryMap.get(m.entry_id))
+              .filter((e): e is TournamentEntry => !!e)
+            const mock = applyFormToEntry(editingEntry, form, event)
+            const check = canAddEntryToGroup(groupEntries, mock)
+            if (!check.ok) {
+              setEntryEditError(check.reason)
+              return
+            }
+          }
+        }
+
+        await updatePlayerEntry(editingEntry, {
+          name: form.name.trim(),
+          organization: form.organization.trim(),
+          seeded,
+        })
+      } else if (event.event_type === 'doubles') {
+        const pairInput = {
+          type: 'pair' as const,
+          pair_name: form.pair_name,
+          player_a: form.player_a,
+          player_b: form.player_b,
+        }
+        const dup = validateNewEntry(entries, event.event_type, pairInput, {
+          excludeEntryId: editingEntry.id,
+        })
+        if (dup) {
+          setEntryEditError(dup)
+          return
+        }
+
+        if (event.status === 'ongoing') {
+          const memberGroupId = members.find((m) => m.entry_id === editingEntry.id)?.group_id
+          if (memberGroupId) {
+            const groupEntries = members
+              .filter((m) => m.group_id === memberGroupId && m.entry_id !== editingEntry.id)
+              .map((m) => entryMap.get(m.entry_id))
+              .filter((e): e is TournamentEntry => !!e)
+            const mock = applyFormToEntry(editingEntry, form, event)
+            const check = canAddEntryToGroup(groupEntries, mock)
+            if (!check.ok) {
+              setEntryEditError(check.reason)
+              return
+            }
+          }
+        }
+
+        await updatePairEntry(editingEntry, {
+          pair_name: form.pair_name.trim(),
+          player_a: form.player_a.trim(),
+          player_b: form.player_b.trim(),
+          organization: form.organization.trim(),
+          seeded,
+        })
+      }
+
+      setMessage('Entry updated')
+      handleCloseEditEntry()
+      await fetchEventData()
+    } catch (err) {
+      setEntryEditError(err instanceof Error ? err.message : 'Failed to update entry')
     } finally {
       setLoading(false)
     }
@@ -493,12 +956,21 @@ export function AdminEventPage() {
           }
         }
         if (hasBlockingDuplicates(freshEntries, freshEvent.event_type, rostersByTeamId)) {
-          setError('Remove duplicate entries before starting this division')
+          setError('Remove duplicate entries before generating the group stage')
           return
         }
         const check = validateTournamentStart(freshEntries.length, freshEvent.config, startLayoutKey)
         if (!check.ok) {
-          setError(check.error ?? 'Cannot start')
+          setError(check.error ?? 'Cannot generate group stage')
+          return
+        }
+        const assignCheck = assignEntriesToGroups(
+          freshEntries,
+          check.groupCount!,
+          check.groupSizes,
+        )
+        if (assignCheck.error) {
+          setError(assignCheck.error)
           return
         }
         const { group_sizes: _prev, ...configBase } = freshEvent.config
@@ -508,7 +980,7 @@ export function AdminEventPage() {
           group_count: check.groupCount!,
           ...(check.groupSizes ? { group_sizes: check.groupSizes } : {}),
         }
-        await startDivision(
+        await generateGroupStage(
           tournamentId,
           freshEvent,
           freshEntries,
@@ -517,7 +989,7 @@ export function AdminEventPage() {
         const layoutLabel = check.uneven
           ? `${check.groupCount} groups (${check.groupSizes!.join('+')})`
           : `${check.groupCount} groups × ${check.entriesPerGroup}`
-        statusMessage = `Started with ${freshEntries.length} entries → ${layoutLabel}`
+        statusMessage = `Group stage generated — ${freshEntries.length} entries → ${layoutLabel}`
       } else if (status === 'ended') {
         if (!confirm('Delete this division and all its data? This cannot be undone.')) return
         await updateEvent(tournamentId, event.id, { status: 'ended' })
@@ -529,7 +1001,14 @@ export function AdminEventPage() {
       setMessage(statusMessage)
       await fetchEventData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Status update failed')
+      const msg = err instanceof Error ? err.message : 'Status update failed'
+      if (msg.includes('permission') || msg.includes('insufficient')) {
+        setError(
+          'Firestore denied the write. Deploy the latest security rules with `firebase deploy --only firestore:rules`, then try again.',
+        )
+      } else {
+        setError(msg)
+      }
     } finally {
       setLoading(false)
     }
@@ -555,14 +1034,103 @@ export function AdminEventPage() {
   }
 
   const cfg = event.config
-  const canEditEntries = event.status === 'draft' || event.status === 'upcoming'
+  const canEditDivisionSettings = event.status === 'draft' || event.status === 'upcoming'
+  const canEditEntries = canEditDivisionSettings
+  const canEditEntryDetails =
+    canEditDivisionSettings || (event.status === 'ongoing' && !knockoutGenerated)
+  const canLateJoin = event.status === 'ongoing' && !knockoutGenerated && groups.length > 0
+  const showParticipantsSection = entries.length > 0
+  const entryCountLabel =
+    cfg.total_slots != null ? `${entries.length} / ${cfg.total_slots}` : String(entries.length)
   const rosterSize = cfg.roster_size ?? 3
+  const groupAssignmentBlocked = assignmentWarnings.some((w) => w.startsWith('Cannot assign'))
   const startDisabled =
     loading ||
     entries.length < 2 ||
     hasBlockingDuplicates(entries, event.event_type) ||
     rosterWarnings.length > 0 ||
-    !startPreview?.ok
+    groupAssignmentBlocked ||
+    !startPreview?.ok ||
+    selectableLayoutOptions.length === 0
+
+  const adminTabs: { id: AdminDivisionTab; label: string }[] = [
+    { id: 'participants', label: 'Participants' },
+  ]
+  if (canLateJoin) adminTabs.push({ id: 'late-check-in', label: 'Late check-in' })
+  if (event.status === 'ongoing' && groups.length > 0) {
+    adminTabs.push({ id: 'brackets', label: 'Brackets' })
+  }
+
+  const activeAdminTab: AdminDivisionTab = adminTabs.some((t) => t.id === adminTab)
+    ? adminTab
+    : adminTabs[0]!.id
+
+  const renderEntryForm = (lateOnly: boolean) => (
+    <form onSubmit={handleAddEntry} className="bg-card border border-border rounded-2xl p-4 space-y-3">
+      {event.event_type === 'team' && (
+        <>
+          <div>
+            <FormLabel>Team name</FormLabel>
+            <TextInput name="name" placeholder="Enter team name" required />
+          </div>
+          <div>
+            <FormLabel>Organization</FormLabel>
+            <TextInput name="organization" placeholder="Enter organization" />
+          </div>
+          <div>
+            <FormLabel>Roster</FormLabel>
+            <TextInput name="roster" placeholder={`Roster names, comma-separated (e.g. 3–${rosterSize} players)`} required />
+          </div>
+          <SeededSelect />
+        </>
+      )}
+      {isPlayerEventType(event.event_type) && (
+        <>
+          <div>
+            <FormLabel>Player name</FormLabel>
+            <TextInput name="name" placeholder="Enter player name" required />
+          </div>
+          <div>
+            <FormLabel>Organization *</FormLabel>
+            <TextInput name="organization" placeholder="Enter organization" required />
+          </div>
+          <SeededSelect />
+        </>
+      )}
+      {event.event_type === 'doubles' && (
+        <>
+          <div>
+            <FormLabel>Pair name</FormLabel>
+            <TextInput name="pair_name" placeholder="Pair name (optional)" />
+          </div>
+          <div>
+            <FormLabel>Player A</FormLabel>
+            <TextInput name="player_a" placeholder="Player A" required />
+          </div>
+          <div>
+            <FormLabel>Player B</FormLabel>
+            <TextInput name="player_b" placeholder="Player B" required />
+          </div>
+          <div>
+            <FormLabel>Organization</FormLabel>
+            <TextInput name="organization" placeholder="Organization (optional)" />
+          </div>
+          <SeededSelect />
+        </>
+      )}
+      <AddEntryButton
+        type="submit"
+        disabled={
+          addingEntry ||
+          loading ||
+          (!lateOnly && canEditEntries && cfg.total_slots != null && entries.length >= cfg.total_slots)
+        }
+        fullWidth
+      >
+        {addingEntry ? 'Adding…' : lateOnly ? 'Add late entry' : 'Add entry'}
+      </AddEntryButton>
+    </form>
+  )
 
   return (
     <AdminLayout>
@@ -570,20 +1138,48 @@ export function AdminEventPage() {
         <FirebaseSetupBanner />
         <BackLink to={`/admin/tournaments/${tournamentId}`}>{tournament.name}</BackLink>
 
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <EventAdminTitle>{getEventDisplayName(event)}</EventAdminTitle>
-            <Pill variant={statusPillVariant(event.status)}>
-              {event.status === 'ongoing' ? 'Live' : STATUS_LABELS[event.status]}
-            </Pill>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex items-center gap-2.5">
+              <EventAdminTitle>{getEventDisplayName(event)}</EventAdminTitle>
+              <Pill variant={statusPillVariant(event.status)}>
+                {event.status === 'ongoing' ? 'Live' : STATUS_LABELS[event.status]}
+              </Pill>
+            </div>
+            <p className="inline-flex items-center gap-1.5 text-xs text-text-steel font-medium">
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9" /><path d="M18 6v12" /><path d="M6 9a9 9 0 0 0 9 9" />
+              </svg>
+              Knockout type — {cfg.knockout_bracket === 'cross' ? 'Cross' : 'Block'}
+            </p>
           </div>
-          <p className="inline-flex items-center gap-1.5 text-xs text-text-steel font-medium">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9" /><path d="M18 6v12" /><path d="M6 9a9 9 0 0 0 9 9" />
-            </svg>
-            Knockout type — {cfg.knockout_bracket === 'cross' ? 'Cross' : 'Block'}
-          </p>
+          {canEditDivisionSettings && (
+            <IconActionButton onClick={editingDivision ? closeDivisionEdit : openDivisionEdit}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 20h9" /><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z" />
+              </svg>
+            </IconActionButton>
+          )}
         </div>
+
+        {editingDivision && editDraft && (
+          <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-4">
+            <PanelSectionTitle>Edit division settings</PanelSectionTitle>
+            <DivisionConfigForm
+              draft={editDraft}
+              onChange={setEditDraft}
+              lockEventStructure
+            />
+            <div className="grid grid-cols-2 gap-2.5">
+              <Button variant="secondary" onClick={closeDivisionEdit} disabled={loading} fullWidth>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveDivisionSettings} disabled={loading} fullWidth>
+                {loading ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {message && <SuccessBanner>{message}</SuccessBanner>}
         {refreshError && <WarningBanner>{refreshError}</WarningBanner>}
@@ -592,22 +1188,45 @@ export function AdminEventPage() {
 
         {event.status === 'upcoming' && entries.length >= 2 && (
           <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
-            <p className="text-sm font-extrabold text-text-primary">Ready to start</p>
+            <p className="text-sm font-extrabold text-text-primary">Generate group stage</p>
             <div className="flex items-center justify-between text-[13px]">
               <span className="font-semibold text-text-steel">Entries</span>
-              <span className="font-bold text-text-bluewhite tabular-nums">
-                {entries.length} / {cfg.total_slots}
-              </span>
+              <span className="font-bold text-text-bluewhite tabular-nums">{entryCountLabel}</span>
             </div>
-            {startPreview?.ok ? (
+            {isBlockBracket && selectableLayoutOptions.length === 0 && (
+              <WarningBanner>
+                Block bracket requires an even number of groups. For {entries.length} entries there
+                is no valid even layout — switch to Cross bracket below, or change the entry count.
+              </WarningBanner>
+            )}
+            {isBlockBracket && selectableLayoutOptions.length > 0 && allLayoutOptions.length > selectableLayoutOptions.length && (
+              <InfoNoteCard>
+                Block knockout needs an even number of groups. Layouts with an odd group count
+                (e.g. 3×3) are shown but require a Cross bracket — switch to Cross below or pick an
+                even layout above.
+              </InfoNoteCard>
+            )}
+            {allLayoutOptions.length > 0 ? (
               <StartLayoutPicker
-                options={startLayoutOptions}
+                options={allLayoutOptions}
                 selectedKey={startLayoutKey}
                 onSelect={setStartLayoutKey}
+                isOptionDisabled={(opt) => !isLayoutSelectable(opt)}
               />
             ) : (
-              startPreview && <p className="text-sm text-live">{startPreview.error}</p>
+              startPreview && !startPreview.ok && (
+                <p className="text-sm text-live">{startPreview.error}</p>
+              )
             )}
+          </div>
+        )}
+
+        {canEditDivisionSettings && (event.status === 'draft' || event.status === 'upcoming') && (
+          <div className="bg-card border border-border-strong rounded-2xl p-4">
+            <KnockoutBracketPicker
+              value={cfg.knockout_bracket ?? 'cross'}
+              onChange={handleKnockoutBracketChange}
+            />
           </div>
         )}
 
@@ -622,102 +1241,74 @@ export function AdminEventPage() {
                 : undefined
             }
           >
-            Start division
+            Generate group stage
           </Button>
         )}
 
-      {canEditEntries && (
-        <section className="space-y-3">
-          <SectionHeaderRow
-            title="Add entries"
-            trailing={
-              <span className="text-[13px] font-bold text-text-steel tabular-nums">
-                {entries.length} / {cfg.total_slots}
-              </span>
-            }
+        {adminTabs.length > 1 && (
+          <GroupStageNavigator
+            tabs={adminTabs}
+            activeId={activeAdminTab}
+            onChange={(id) => setAdminTab(id as AdminDivisionTab)}
           />
-          <form onSubmit={handleAddEntry} className="bg-card border border-border rounded-2xl p-4 space-y-3">
-            {event.event_type === 'team' && (
-              <>
-                <div>
-                  <FormLabel>Team name</FormLabel>
-                  <TextInput name="name" placeholder="Enter team name" required />
-                </div>
-                <div>
-                  <FormLabel>Organization</FormLabel>
-                  <TextInput name="organization" placeholder="Enter organization" />
-                </div>
-                <div>
-                  <FormLabel>Roster</FormLabel>
-                  <TextInput name="roster" placeholder={`Roster names, comma-separated (e.g. 3–${rosterSize} players)`} required />
-                </div>
-                <SeededSelect />
-              </>
+        )}
+
+        {activeAdminTab === 'participants' && (
+          <section className="space-y-3">
+            <SectionHeaderRow
+              title="Participants"
+              trailing={
+                <span className="text-[13px] font-bold text-text-steel tabular-nums">
+                  {entryCountLabel}
+                </span>
+              }
+            />
+            {canEditEntries && renderEntryForm(false)}
+            {showParticipantsSection && (
+              <div className="space-y-2">
+                {sortedEntries.map((entry) => (
+                  <EntryRow
+                    key={entry.id}
+                    entry={entry}
+                    onEdit={
+                      canEditEntryDetails ? () => handleOpenEditEntry(entry) : undefined
+                    }
+                    onRemove={canEditEntries ? () => handleDeleteEntry(entry) : undefined}
+                  />
+                ))}
+              </div>
             )}
-            {isPlayerEventType(event.event_type) && (
-              <>
-                <div>
-                  <FormLabel>Player name</FormLabel>
-                  <TextInput name="name" placeholder="Enter player name" required />
-                </div>
-                <div>
-                  <FormLabel>Organization *</FormLabel>
-                  <TextInput name="organization" placeholder="Enter organization" required />
-                </div>
-                <SeededSelect />
-              </>
+            {event.status === 'draft' && (
+              <Button disabled={loading} onClick={() => changeStatus('upcoming')} fullWidth>
+                Open registration
+              </Button>
             )}
-            {event.event_type === 'doubles' && (
-              <>
-                <div>
-                  <FormLabel>Pair name</FormLabel>
-                  <TextInput name="pair_name" placeholder="Pair name (optional)" />
-                </div>
-                <div>
-                  <FormLabel>Player A</FormLabel>
-                  <TextInput name="player_a" placeholder="Player A" required />
-                </div>
-                <div>
-                  <FormLabel>Player B</FormLabel>
-                  <TextInput name="player_b" placeholder="Player B" required />
-                </div>
-                <div>
-                  <FormLabel>Organization</FormLabel>
-                  <TextInput name="organization" placeholder="Organization (optional)" />
-                </div>
-                <SeededSelect />
-              </>
+            {canEditEntries && (
+              <DeleteDivisionButton onClick={handleDeleteEvent} disabled={loading}>
+                Delete division
+              </DeleteDivisionButton>
             )}
-            <AddEntryButton type="submit" disabled={loading || entries.length >= cfg.total_slots} fullWidth>
-              {loading ? 'Adding…' : 'Add entry'}
-            </AddEntryButton>
-          </form>
+          </section>
+        )}
 
-          <div className="space-y-2">
-            {entries.map((entry) => (
-              <EntryRow key={entry.id} entry={entry} onRemove={() => handleDeleteEntry(entry)} />
-            ))}
-          </div>
+        {activeAdminTab === 'late-check-in' && canLateJoin && (
+          <section className="space-y-3">
+            <SectionHeaderRow title="Late check-in" />
+            <InfoNoteCard>
+              Knockout bracket is not generated yet. New entries are assigned to a group with only
+              missing round-robin matches added.
+            </InfoNoteCard>
+            {renderEntryForm(true)}
+          </section>
+        )}
 
-          {event.status === 'draft' && (
-            <Button disabled={loading} onClick={() => changeStatus('upcoming')} fullWidth>
-              Publish division
-            </Button>
-          )}
+        {event.status === 'ongoing' && groups.length === 0 && (
+          <WarningBanner>
+            Group stage data is missing. End this division and start it again if setup failed.
+          </WarningBanner>
+        )}
 
-          <DeleteDivisionButton onClick={handleDeleteEvent} disabled={loading}>
-            Delete division
-          </DeleteDivisionButton>
-        </section>
-      )}
-
-      {event.status === 'ongoing' && groups.length === 0 && (
-        <WarningBanner>
-          Group stage data is missing. End this division and start it again if setup failed.
-        </WarningBanner>
-      )}
-
-      {event.status === 'ongoing' && groups.length > 0 && (
+        {activeAdminTab === 'brackets' && event.status === 'ongoing' && groups.length > 0 && (
         <>
           <GroupStageNavigator tabs={stageTabs} activeId={activeStage} onChange={setActiveStage} />
 
@@ -893,12 +1484,39 @@ export function AdminEventPage() {
             )
           })()}
         </>
-      )}
+        )}
 
-      {event.status === 'ongoing' && (
+        {event.status === 'ongoing' && (
         <DeleteDivisionButton onClick={() => changeStatus('ended')} disabled={loading} className="mt-6">
           Delete division data
         </DeleteDivisionButton>
+      )}
+
+      {pendingLateEntry && (
+        <LateEntryDialog
+          entryLabel={pendingLateEntry.label}
+          groups={groupSummaries}
+          mockEntry={pendingLateEntry.mock}
+          suggestion={lateJoinSuggestion}
+          confirming={loading}
+          onCancel={() => setPendingLateEntry(null)}
+          onConfirm={handleLateJoinConfirm}
+        />
+      )}
+
+      {editingEntry && (
+        <EntryEditDialog
+          key={editingEntry.id}
+          entry={editingEntry}
+          eventType={event.event_type}
+          rosterSize={rosterSize}
+          allowRosterEdit={canEditEntries}
+          initialRoster={editingEntryRoster}
+          error={entryEditError}
+          confirming={loading}
+          onCancel={handleCloseEditEntry}
+          onSave={handleSaveEntryEdit}
+        />
       )}
       </div>
     </AdminLayout>

@@ -118,11 +118,25 @@ export function ConfigRowsCard({ rows }: { rows: { label: string; value: string 
 export function SeedBadge({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-500 bg-brand-100 px-2 py-1 rounded-lg shrink-0">
-      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-        <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z" />
-      </svg>
+      <SeededStarIcon size={12} />
       {children}
     </span>
+  )
+}
+
+export function SeededStarIcon({ size = 14, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={`shrink-0 text-brand-500 ${className}`}
+      aria-hidden
+    >
+      <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z" />
+    </svg>
   )
 }
 

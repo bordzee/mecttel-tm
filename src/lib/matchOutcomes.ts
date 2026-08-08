@@ -48,8 +48,8 @@ export function validateTournamentStart(
   adjusted?: boolean
   suggestions?: number[]
 } {
-  if (entryCount < 2) return { ok: false, error: 'Need at least 2 entries to start' }
-  if (entryCount > config.total_slots) {
+  if (entryCount < 2) return { ok: false, error: 'Need at least 2 entries to generate group stage' }
+  if (config.total_slots != null && entryCount > config.total_slots) {
     return { ok: false, error: `Too many entries (${entryCount}) for ${config.total_slots} max slots` }
   }
 

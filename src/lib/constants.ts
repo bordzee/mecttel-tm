@@ -36,7 +36,7 @@ export const DEFAULT_SET_RULES = {
 
 export const STATUS_LABELS = {
   draft: 'Draft',
-  upcoming: 'Upcoming',
+  upcoming: 'Registration open',
   ongoing: 'Ongoing',
   ended: 'Ended',
 }

@@ -90,7 +90,7 @@ export function duplicateEntryWarnings(entries: TournamentEntry[]): string[] {
       .filter(Boolean)
       .map((e) => getEntryDisplayName(e!))
     const unique = [...new Set(labels)]
-    return `Duplicate name "${g.displayName}" appears on ${unique.length} entries — remove extras before starting`
+    return `Duplicate name "${g.displayName}" appears on ${unique.length} entries — remove extras before generating the group stage`
   })
 }
 
@@ -108,12 +108,25 @@ export interface ValidateNewEntryOptions {
   rosterSize?: number
   /** Normalized player names from other teams' rosters. */
   otherTeamRosterNames?: string[]
+  /** Skip duplicate checks against this entry (when editing). */
+  excludeEntryId?: string
 }
 
-function playerNameTaken(entries: TournamentEntry[], name: string): TournamentEntry | null {
+function filterEntriesForValidation(
+  entries: TournamentEntry[],
+  excludeEntryId?: string,
+): TournamentEntry[] {
+  return excludeEntryId ? entries.filter((e) => e.id !== excludeEntryId) : entries
+}
+
+function playerNameTaken(
+  entries: TournamentEntry[],
+  name: string,
+  excludeEntryId?: string,
+): TournamentEntry | null {
   const key = normalizeEntryName(name)
   if (!key) return null
-  for (const entry of entries) {
+  for (const entry of filterEntriesForValidation(entries, excludeEntryId)) {
     if (entry.entry_type === 'player' && entry.player) {
       if (normalizeEntryName(entry.player.name) === key) return entry
     }
@@ -163,10 +176,12 @@ export function validateNewEntry(
   input: NewEntryInput,
   options?: ValidateNewEntryOptions,
 ): string | null {
+  const scoped = filterEntriesForValidation(entries, options?.excludeEntryId)
+
   if (input.type === 'player') {
     const name = normalizeEntryName(input.name)
     if (!name) return 'Name is required'
-    for (const entry of entries) {
+    for (const entry of scoped) {
       if (entry.entry_type === 'player' && entry.player) {
         if (normalizeEntryName(entry.player.name) === name) {
           return `Duplicate player: "${input.name.trim()}" is already registered`
@@ -195,7 +210,7 @@ export function validateNewEntry(
     if (new Set(rosterKeys).size !== rosterKeys.length) {
       return 'Roster cannot include duplicate player names'
     }
-    for (const entry of entries) {
+    for (const entry of scoped) {
       if (entry.entry_type === 'team' && entry.team) {
         if (normalizeEntryName(entry.team.name) === name) {
           return `Duplicate team: "${input.name.trim()}" is already registered`
@@ -207,7 +222,7 @@ export function validateNewEntry(
       if (options?.otherTeamRosterNames?.includes(key)) {
         return `"${player.trim()}" is already on another team's roster`
       }
-      const taken = playerNameTaken(entries, player)
+      const taken = playerNameTaken(entries, player, options?.excludeEntryId)
       if (taken) {
         return `"${player.trim()}" is already registered in this division`
       }
@@ -222,7 +237,7 @@ export function validateNewEntry(
     if (a === b) return 'Player A and Player B must be different people'
 
     const pairKey = [a, b].sort().join('|')
-    for (const entry of entries) {
+    for (const entry of scoped) {
       if (entry.entry_type === 'pair' && entry.pair) {
         const existingKey = [
           normalizeEntryName(entry.pair.player_a),
@@ -250,7 +265,7 @@ export function validateNewEntry(
 
     if (input.pair_name.trim()) {
       const pn = normalizeEntryName(input.pair_name)
-      for (const entry of entries) {
+      for (const entry of scoped) {
         if (entry.entry_type === 'pair' && entry.pair?.pair_name) {
           if (normalizeEntryName(entry.pair.pair_name) === pn) {
             return `Pair name "${input.pair_name.trim()}" is already used`

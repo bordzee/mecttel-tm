@@ -122,8 +122,7 @@ service cloud.firestore {
       );
       allow create, update: if isAdmin()
         && isString(request.resource.data.team_id)
-        && isString(request.resource.data.name)
-        && exists(/databases/$(database)/documents/teams/$(request.resource.data.team_id));
+        && isString(request.resource.data.name);
       allow delete: if isAdmin();
     }
 
@@ -173,8 +172,7 @@ service cloud.firestore {
       );
       allow create, update: if isAdmin()
         && isString(request.resource.data.group_id)
-        && isString(request.resource.data.entry_id)
-        && exists(/databases/$(database)/documents/groups/$(request.resource.data.group_id));
+        && isString(request.resource.data.entry_id);
       allow delete: if isAdmin();
     }
 
