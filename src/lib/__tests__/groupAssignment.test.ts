@@ -73,6 +73,17 @@ describe('groupAssignment', () => {
     expect(validation.ok).toBe(true)
     expect(validation.warnings.length).toBeGreaterThan(0)
   })
+
+  it('summarizes org sibling warnings once per organization', () => {
+    const entries = Array.from({ length: 10 }, (_, i) =>
+      playerEntry(String(i), `P${i}`, i < 8 ? 'CIT' : 'MECTTEL', null),
+    )
+    const result = assignEntriesToGroups(entries, 2)
+    const orgWarnings = result.warnings.filter((w) => w.type === 'org_sibling')
+    expect(orgWarnings).toHaveLength(1)
+    expect(orgWarnings[0]?.message).toContain('CIT')
+    expect(orgWarnings[0]?.message).toContain('up to')
+  })
 })
 
 describe('groupLayout', () => {

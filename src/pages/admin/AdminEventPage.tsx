@@ -309,6 +309,10 @@ export function AdminEventPage() {
     )
   }, [selectableLayoutOptions])
 
+  useEffect(() => {
+    setWarnings([])
+  }, [startLayoutKey])
+
   const startPreview = useMemo(() => {
     if (!event) return null
     return validateTournamentStart(entries.length, event.config, startLayoutKey)
@@ -336,6 +340,14 @@ export function AdminEventPage() {
   }, [entries, event, startPreview])
 
   const knockoutGenerated = knockoutMatches.length > 0
+
+  const conflictWarnings = useMemo(() => {
+    const list = [...duplicateWarnings, ...assignmentWarnings]
+    if (event?.status === 'ongoing' || knockoutGenerated) {
+      list.push(...warnings)
+    }
+    return [...new Set(list.filter(Boolean))]
+  }, [duplicateWarnings, assignmentWarnings, warnings, event?.status, knockoutGenerated])
 
   const groupSummaries = useMemo((): GroupSummary[] => {
     return groups.map((group) => ({
@@ -1184,7 +1196,7 @@ export function AdminEventPage() {
         {message && <SuccessBanner>{message}</SuccessBanner>}
         {refreshError && <WarningBanner>{refreshError}</WarningBanner>}
         {error && <ErrorMessage>{error}</ErrorMessage>}
-        <ConflictWarnings warnings={[...duplicateWarnings, ...assignmentWarnings, ...warnings]} />
+        <ConflictWarnings warnings={conflictWarnings} />
 
         {event.status === 'upcoming' && entries.length >= 2 && (
           <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">

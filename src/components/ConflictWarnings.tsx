@@ -1,7 +1,7 @@
 import { WarningBanner } from './ui/primitives'
 
 export function ConflictWarnings({ warnings }: { warnings: string[] }) {
-  const filtered = warnings.filter(Boolean)
+  const filtered = [...new Set(warnings.filter(Boolean))]
   if (filtered.length === 0) return null
 
   if (filtered.length === 1) {
@@ -10,8 +10,8 @@ export function ConflictWarnings({ warnings }: { warnings: string[] }) {
 
   return (
     <div className="space-y-2">
-      {filtered.map((w) => (
-        <WarningBanner key={w}>{w}</WarningBanner>
+      {filtered.map((w, index) => (
+        <WarningBanner key={`${index}-${w}`}>{w}</WarningBanner>
       ))}
     </div>
   )

@@ -87,8 +87,11 @@ export function validateSeededPlacementPossible(
 
 function collectWarnings(buckets: TournamentEntry[][]): AssignmentWarning[] {
   const warnings: AssignmentWarning[] = []
+  /** Peak same-org count in any one group — one summary warning per org. */
+  const orgPeakInGroup = new Map<string, number>()
+
   for (const bucket of buckets) {
-    const orgs = new Map<string, string[]>()
+    const orgCounts = new Map<string, number>()
     let seededCount = 0
     const seededOrgCounts = new Map<string, number>()
 
@@ -101,16 +104,12 @@ function collectWarnings(buckets: TournamentEntry[][]): AssignmentWarning[] {
       const org = getEntryOrganization(entry)
       if (!org) continue
       const key = org.trim()
-      if (!orgs.has(key)) orgs.set(key, [])
-      orgs.get(key)!.push(entry.id)
+      orgCounts.set(key, (orgCounts.get(key) ?? 0) + 1)
     }
 
-    for (const [org, ids] of orgs) {
-      if (ids.length > 1) {
-        warnings.push({
-          type: 'org_sibling',
-          message: `Same organization "${org}" has ${ids.length} entries in one group`,
-        })
+    for (const [org, count] of orgCounts) {
+      if (count > 1) {
+        orgPeakInGroup.set(org, Math.max(orgPeakInGroup.get(org) ?? 0, count))
       }
     }
     for (const [org, count] of seededOrgCounts) {
@@ -128,6 +127,14 @@ function collectWarnings(buckets: TournamentEntry[][]): AssignmentWarning[] {
       })
     }
   }
+
+  for (const [org, peak] of orgPeakInGroup) {
+    warnings.push({
+      type: 'org_sibling',
+      message: `Organization "${org}" has up to ${peak} entries in one group — siblings may meet before the final`,
+    })
+  }
+
   return warnings
 }
 
