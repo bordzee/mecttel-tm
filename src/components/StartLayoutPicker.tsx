@@ -1,4 +1,5 @@
 import type { StartLayoutOption } from '../lib/groupLayout'
+import { layoutIncludesGroupOfTwo } from '../lib/groupLayout'
 import { FormLabel } from './ui/primitives'
 
 export function StartLayoutPicker({
@@ -59,6 +60,9 @@ export function StartLayoutPicker({
               </span>
               {opt.uneven && !disabled && (
                 <span className="text-xs font-semibold text-text-steel shrink-0">uneven</span>
+              )}
+              {layoutIncludesGroupOfTwo(opt.groupSizes) && !disabled && (
+                <span className="text-xs font-semibold text-amber shrink-0">group of 2</span>
               )}
             </button>
           )

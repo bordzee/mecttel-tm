@@ -1,6 +1,9 @@
 import type { GroupLayoutOption, TournamentEntry } from '../types'
 
-const MIN_PER_GROUP = 3
+/** Preferred minimum when the entry count allows it. */
+export const MIN_PER_GROUP = 3
+/** Absolute minimum for one group in an uneven layout (e.g. 11 → 3+3+3+2). */
+export const ABSOLUTE_MIN_PER_GROUP = 2
 export const MAX_PER_GROUP = 8
 
 export interface StartLayoutOption {
@@ -38,13 +41,15 @@ export function getGroupLayoutOptions(totalEntries: number): GroupLayoutOption[]
   return options
 }
 
-/** Split `count` entries across `groupCount` groups (each 3–8). */
+/** Split `count` entries across `groupCount` groups (each 2–8; prefer 3+). */
 export function distributeGroupSizes(count: number, groupCount: number): number[] | null {
   if (groupCount < 2) return null
-  if (count < groupCount * MIN_PER_GROUP || count > groupCount * MAX_PER_GROUP) return null
+  if (count < groupCount * ABSOLUTE_MIN_PER_GROUP || count > groupCount * MAX_PER_GROUP) return null
 
-  const sizes = new Array(groupCount).fill(MIN_PER_GROUP)
-  let remaining = count - groupCount * MIN_PER_GROUP
+  const baseMin =
+    count >= groupCount * MIN_PER_GROUP ? MIN_PER_GROUP : ABSOLUTE_MIN_PER_GROUP
+  const sizes = new Array(groupCount).fill(baseMin)
+  let remaining = count - groupCount * baseMin
   let i = 0
   while (remaining > 0) {
     const idx = i % groupCount
@@ -56,9 +61,13 @@ export function distributeGroupSizes(count: number, groupCount: number): number[
   return sizes
 }
 
+export function layoutIncludesGroupOfTwo(groupSizes?: number[]): boolean {
+  return groupSizes != null && groupSizes.some((size) => size === ABSOLUTE_MIN_PER_GROUP)
+}
+
 export function getUnevenGroupLayouts(entryCount: number): { groupCount: number; sizes: number[] }[] {
   const layouts: { groupCount: number; sizes: number[] }[] = []
-  const maxGroups = Math.floor(entryCount / MIN_PER_GROUP)
+  const maxGroups = Math.floor(entryCount / ABSOLUTE_MIN_PER_GROUP)
   for (let g = 2; g <= maxGroups; g++) {
     const sizes = distributeGroupSizes(entryCount, g)
     if (sizes) layouts.push({ groupCount: g, sizes })
@@ -165,7 +174,7 @@ export function resolveGroupLayoutForStart(
   if (!options.length) {
     return {
       ok: false,
-      error: `${entryCount} entries cannot be grouped (need 3–8 per group, at least 2 groups).`,
+      error: `${entryCount} entries cannot be grouped (need 2–8 per group, at least 2 groups).`,
       suggestions: [],
     }
   }

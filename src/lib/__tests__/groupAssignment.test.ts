@@ -104,6 +104,16 @@ describe('groupLayout', () => {
     expect(isLayoutCompatibleWithBlock(threeByThree!)).toBe(false)
     expect(isLayoutCompatibleWithBlock(fiveFour!)).toBe(true)
   })
+
+  it('offers 3+3+3+2 for 11 entries when a group of 2 is required', () => {
+    const options = getStartLayoutOptions(11, {})
+    const labels = options.map((o) => o.label)
+    expect(labels).toContain('4 groups (3+3+3+2)')
+    expect(labels).toContain('3 groups (4+4+3)')
+
+    const fourGroups = options.find((o) => o.key === 'uneven-3-3-3-2')
+    expect(fourGroups?.groupSizes).toEqual([3, 3, 3, 2])
+  })
 })
 
 describe('lateJoinAssignment', () => {
