@@ -132,3 +132,74 @@ body {
 .status-popup--exit {
   animation: status-popup-exit 280ms cubic-bezier(0.4, 0, 0.8, 1);
 }
+
+@keyframes confirm-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes confirm-backdrop-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-dialog-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes confirm-dialog-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+}
+
+.confirm-backdrop,
+.confirm-dialog {
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
+}
+
+.confirm-backdrop--enter {
+  animation: confirm-backdrop-enter 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.confirm-backdrop--idle {
+  opacity: 1;
+}
+
+.confirm-backdrop--exit {
+  animation: confirm-backdrop-exit 240ms cubic-bezier(0.4, 0, 0.8, 1);
+}
+
+.confirm-dialog--enter {
+  animation: confirm-dialog-enter 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.confirm-dialog--idle {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.confirm-dialog--exit {
+  animation: confirm-dialog-exit 280ms cubic-bezier(0.4, 0, 0.8, 1);
+}

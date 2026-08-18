@@ -88,6 +88,7 @@ import { useRealtimeEvent } from '../../hooks/useRealtimeEvent'
 import { useMinLoading } from '../../hooks/useMinLoading'
 import { AdminEventPageSkeleton } from '../../components/ui/Skeleton'
 import { StatusPopups } from '../../components/ui/StatusPopups'
+import { DeleteConfirmDialog } from '../../components/ui/DeleteConfirmDialog'
 import type { Tournament, TournamentEvent, TournamentEntry, Group, KnockoutBracketType } from '../../types'
 
 type AdminDivisionTab = 'participants' | 'late-check-in' | 'brackets'
@@ -96,6 +97,14 @@ type PendingLateEntry = {
   label: string
   mock: TournamentEntry
   input: LateJoinEntryInput
+}
+
+type DeleteConfirmState = {
+  title: string
+  description: string
+  confirmLabel?: string
+  confirmingLabel?: string
+  onConfirm: () => Promise<void>
 }
 
 function statusPillVariant(status: TournamentEvent['status']): 'live' | 'upcoming' | 'draft' | 'ended' {
@@ -135,6 +144,7 @@ export function AdminEventPage() {
   const [editingEntryRoster, setEditingEntryRoster] = useState<string[] | undefined>()
   const [entryEditError, setEntryEditError] = useState('')
   const [pageErrorDismissed, setPageErrorDismissed] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
   const loadSeq = useRef(0)
   const isInitialLoad = useRef(true)
 
@@ -833,30 +843,54 @@ export function AdminEventPage() {
     }
   }
 
-  const handleDeleteEntry = async (entry: TournamentEntry) => {
-    if (!confirm(`Remove ${getEntryDisplayName(entry)}?`)) return
+  const handleDeleteEntry = (entry: TournamentEntry) => {
+    setDeleteConfirm({
+      title: `Remove ${getEntryDisplayName(entry)}?`,
+      description: 'This entry will be permanently removed from the division.',
+      confirmLabel: 'Remove',
+      confirmingLabel: 'Removing…',
+      onConfirm: async () => {
+        await deleteEntry(entry)
+        setMessage('Entry removed')
+        await fetchEventData()
+      },
+    })
+  }
+
+  const handleDeleteEvent = () => {
+    if (!tournament || !event || !tournamentId) return
+    setDeleteConfirm({
+      title: `Delete "${getEventDisplayName(event)}"?`,
+      description: 'This permanently removes the division and all its data.',
+      onConfirm: async () => {
+        await deleteEvent(tournamentId, event.id)
+        navigate(`/admin/tournaments/${tournamentId}`)
+      },
+    })
+  }
+
+  const handleDeleteDivisionData = () => {
+    if (!tournamentId || !event) return
+    setDeleteConfirm({
+      title: 'Delete division data?',
+      description: 'This permanently removes all division records. This cannot be undone.',
+      onConfirm: async () => {
+        await updateEvent(tournamentId, event.id, { status: 'ended' })
+        navigate(`/admin/tournaments/${tournamentId}`)
+      },
+    })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirm || loading) return
     setLoading(true)
     setError('')
     try {
-      await deleteEntry(entry)
-      setMessage('Entry removed')
-      await fetchEventData()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove entry')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleDeleteEvent = async () => {
-    if (!tournament || !event || !tournamentId) return
-    if (!confirm(`Delete "${getEventDisplayName(event)}" and all its data?`)) return
-    setLoading(true)
-    try {
-      await deleteEvent(tournamentId, event.id)
-      navigate(`/admin/tournaments/${tournamentId}`)
+      await deleteConfirm.onConfirm()
+      setDeleteConfirm(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete')
+    } finally {
       setLoading(false)
     }
   }
@@ -1007,11 +1041,6 @@ export function AdminEventPage() {
           ? `${check.groupCount} groups (${check.groupSizes!.join('+')})`
           : `${check.groupCount} groups × ${check.entriesPerGroup}`
         statusMessage = `Group stage generated — ${freshEntries.length} entries → ${layoutLabel}`
-      } else if (status === 'ended') {
-        if (!confirm('Delete this division and all its data? This cannot be undone.')) return
-        await updateEvent(tournamentId, event.id, { status: 'ended' })
-        navigate(`/admin/tournaments/${tournamentId}`)
-        return
       } else {
         await updateEvent(tournamentId, event.id, { status })
       }
@@ -1516,7 +1545,7 @@ export function AdminEventPage() {
         )}
 
         {event.status === 'ongoing' && (
-        <DeleteDivisionButton onClick={() => changeStatus('ended')} disabled={loading} className="mt-6">
+        <DeleteDivisionButton onClick={handleDeleteDivisionData} disabled={loading} className="mt-6">
           Delete division data
         </DeleteDivisionButton>
       )}
@@ -1548,6 +1577,17 @@ export function AdminEventPage() {
           onSave={handleSaveEntryEdit}
         />
       )}
+
+      <DeleteConfirmDialog
+        open={!!deleteConfirm}
+        title={deleteConfirm?.title ?? ''}
+        description={deleteConfirm?.description ?? ''}
+        confirmLabel={deleteConfirm?.confirmLabel}
+        confirmingLabel={deleteConfirm?.confirmingLabel}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={handleConfirmDelete}
+        confirming={loading}
+      />
       </div>
     </AdminLayout>
   )

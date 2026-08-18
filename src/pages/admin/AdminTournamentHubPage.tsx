@@ -8,7 +8,6 @@ import {
   AddDivisionLink,
   BackLink,
   Button,
-  DeleteConfirmPanel,
   EmptyMessage,
   IconActionButton,
   MetaIconsRow,
@@ -17,6 +16,7 @@ import {
   TextInput,
 } from '../../components/ui/primitives'
 import { StatusPopups } from '../../components/ui/StatusPopups'
+import { DeleteConfirmDialog } from '../../components/ui/DeleteConfirmDialog'
 import {
   fetchTournament,
   fetchEvents,
@@ -85,7 +85,7 @@ export function AdminTournamentHubPage() {
   }
 
   const handleDeleteTournament = async () => {
-    if (!tournament) return
+    if (!tournament || loading) return
     setLoading(true)
     try {
       await deleteTournament(tournament.id)
@@ -166,15 +166,14 @@ export function AdminTournamentHubPage() {
           </div>
         )}
 
-        {showDeleteConfirm && (
-          <DeleteConfirmPanel
-            title="Delete this tournament?"
-            description="This permanently removes the tournament and all its divisions."
-            onCancel={() => setShowDeleteConfirm(false)}
-            onConfirm={handleDeleteTournament}
-            confirming={loading}
-          />
-        )}
+        <DeleteConfirmDialog
+          open={showDeleteConfirm}
+          title="Delete this tournament?"
+          description="This permanently removes the tournament and all its divisions."
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={handleDeleteTournament}
+          confirming={loading}
+        />
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
