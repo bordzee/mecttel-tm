@@ -5,12 +5,12 @@ import { FirebaseSetupBanner } from '../../components/FirebaseSetupBanner'
 import {
   DashboardTitle,
   EmptyMessage,
-  ErrorBanner,
   IconTextLink,
   LinkButton,
   Pill,
   ScreenSectionTitle,
 } from '../../components/ui/primitives'
+import { StatusPopups } from '../../components/ui/StatusPopups'
 import { fetchAllTournaments } from '../../lib/tournamentService'
 import { getEventDisplayName } from '../../lib/displayNames'
 import { useAuth } from '../../hooks/useAuth'
@@ -62,7 +62,7 @@ export function AdminDashboardPage() {
         <LinkButton to="/admin/tournaments/new">+ New tournament</LinkButton>
         <IconTextLink to="/admin/admins/new">Create admin account</IconTextLink>
 
-        {error && <ErrorBanner>{error}</ErrorBanner>}
+        <StatusPopups error={error} onErrorDismiss={() => setError('')} />
 
         <section className="space-y-3">
           <ScreenSectionTitle>All tournaments</ScreenSectionTitle>

@@ -11,9 +11,9 @@ import {
   EventPageTitle,
   BackLink,
   Button,
-  ErrorBanner,
-  InlineError,
+  EmptyMessage,
 } from '../../components/ui/primitives'
+import { StatusPopups } from '../../components/ui/StatusPopups'
 import { createEvent, fetchTournament } from '../../lib/tournamentService'
 import { useMinLoading } from '../../hooks/useMinLoading'
 import { AdminFormSkeleton } from '../../components/ui/Skeleton'
@@ -29,11 +29,13 @@ export function AddEventPage() {
   const showPageSkeleton = useMinLoading(pageLoading)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
+  const [pageErrorDismissed, setPageErrorDismissed] = useState(false)
 
   useEffect(() => {
     if (!tournamentId) return
     setPageLoading(true)
     setLoadError('')
+    setPageErrorDismissed(false)
     fetchTournament(tournamentId)
       .then(setTournament)
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'Tournament not found'))
@@ -65,25 +67,32 @@ export function AddEventPage() {
     )
   }
 
-  if (loadError) {
+  if (loadError || !tournament) {
+    const pageError = loadError || 'Tournament not found'
     return (
       <AdminLayout>
         <BackLink to="/admin">Dashboard</BackLink>
-        <ErrorBanner>{loadError}</ErrorBanner>
+        {!pageErrorDismissed ? (
+          <StatusPopups
+            error={pageError}
+            onErrorDismiss={() => setPageErrorDismissed(true)}
+          />
+        ) : (
+          <EmptyMessage>{pageError}</EmptyMessage>
+        )}
       </AdminLayout>
     )
   }
 
   return (
     <AdminLayout>
+      <StatusPopups error={error || undefined} onErrorDismiss={() => setError('')} />
       <div className="space-y-4">
         <FirebaseSetupBanner />
         <BackLink to={`/admin/tournaments/${tournamentId}`}>{tournament?.name ?? 'Tournament'}</BackLink>
         <EventPageTitle>Add division</EventPageTitle>
 
         <DivisionConfigForm draft={draft} onChange={setDraft} />
-
-        {error && <InlineError>{error}</InlineError>}
 
         <Button onClick={handleCreate} disabled={saving} fullWidth>
           {saving ? 'Adding…' : 'Add division'}

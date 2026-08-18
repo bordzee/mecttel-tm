@@ -4,12 +4,13 @@ import {
   Button,
   CaptionText,
   FormLabel,
+  InfoNoteCard,
   PanelSectionTitle,
   SelectInput,
-  SuccessBanner,
   TextActionButton,
   TextInput,
 } from './ui/primitives'
+import { StatusPopups } from './ui/StatusPopups'
 
 interface Props {
   groupLabel: string
@@ -135,7 +136,9 @@ export function GroupRankEditor({
           />
         </div>
 
-        {error && <p className="text-sm text-live">{error}</p>}
+        {error ? (
+          <StatusPopups error={error} onErrorDismiss={() => setError('')} />
+        ) : null}
 
         <Button type="button" onClick={handleSave} disabled={saving || disabled} fullWidth>
           {saving ? 'Saving…' : 'Save ranks'}
@@ -149,7 +152,7 @@ export function GroupRankEditor({
       </div>
 
       {hasManualSaved && (
-        <SuccessBanner>Saved. The knockout will use these positions.</SuccessBanner>
+        <InfoNoteCard>Saved. The knockout will use these positions.</InfoNoteCard>
       )}
     </div>
   )

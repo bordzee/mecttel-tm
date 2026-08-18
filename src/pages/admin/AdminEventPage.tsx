@@ -7,7 +7,7 @@ import {
   Button,
   CaptionText,
   DeleteDivisionButton,
-  ErrorMessage,
+  EmptyMessage,
   EventAdminTitle,
   FormLabel,
   InfoNoteCard,
@@ -15,7 +15,6 @@ import {
   PanelSectionTitle,
   Pill,
   SectionHeaderRow,
-  SuccessBanner,
   TextInput,
   WarningBanner,
 } from '../../components/ui/primitives'
@@ -88,6 +87,7 @@ import { STATUS_LABELS } from '../../lib/constants'
 import { useRealtimeEvent } from '../../hooks/useRealtimeEvent'
 import { useMinLoading } from '../../hooks/useMinLoading'
 import { AdminEventPageSkeleton } from '../../components/ui/Skeleton'
+import { StatusPopups } from '../../components/ui/StatusPopups'
 import type { Tournament, TournamentEvent, TournamentEntry, Group, KnockoutBracketType } from '../../types'
 
 type AdminDivisionTab = 'participants' | 'late-check-in' | 'brackets'
@@ -134,6 +134,7 @@ export function AdminEventPage() {
   const [editingEntry, setEditingEntry] = useState<TournamentEntry | null>(null)
   const [editingEntryRoster, setEditingEntryRoster] = useState<string[] | undefined>()
   const [entryEditError, setEntryEditError] = useState('')
+  const [pageErrorDismissed, setPageErrorDismissed] = useState(false)
   const loadSeq = useRef(0)
   const isInitialLoad = useRef(true)
 
@@ -182,6 +183,7 @@ export function AdminEventPage() {
     isInitialLoad.current = true
     setPageLoading(true)
     setLoadError('')
+    setPageErrorDismissed(false)
     setTournament(null)
     setEvent(null)
     void fetchEventData()
@@ -1038,12 +1040,20 @@ export function AdminEventPage() {
   }
 
   if (loadError || !tournament || !event) {
+    const pageError = loadError || 'Division not found'
     return (
       <AdminLayout>
         <BackLink to={tournamentId ? `/admin/tournaments/${tournamentId}` : '/admin'}>
           {tournament?.name ?? 'Tournament'}
         </BackLink>
-        <ErrorMessage>{loadError || 'Division not found'}</ErrorMessage>
+        {!pageErrorDismissed ? (
+          <StatusPopups
+            error={pageError}
+            onErrorDismiss={() => setPageErrorDismissed(true)}
+          />
+        ) : (
+          <EmptyMessage>{pageError}</EmptyMessage>
+        )}
       </AdminLayout>
     )
   }
@@ -1196,9 +1206,13 @@ export function AdminEventPage() {
           </div>
         )}
 
-        {message && <SuccessBanner>{message}</SuccessBanner>}
+        <StatusPopups
+          success={message}
+          error={error}
+          onSuccessDismiss={() => setMessage('')}
+          onErrorDismiss={() => setError('')}
+        />
         {refreshError && <WarningBanner>{refreshError}</WarningBanner>}
-        {error && <ErrorMessage>{error}</ErrorMessage>}
         <ConflictWarnings warnings={conflictWarnings} />
 
         {event.status === 'upcoming' && entries.length >= 2 && (
@@ -1528,6 +1542,7 @@ export function AdminEventPage() {
           allowRosterEdit={canEditEntries}
           initialRoster={editingEntryRoster}
           error={entryEditError}
+          onErrorDismiss={() => setEntryEditError('')}
           confirming={loading}
           onCancel={handleCloseEditEntry}
           onSave={handleSaveEntryEdit}

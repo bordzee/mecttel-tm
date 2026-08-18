@@ -6,7 +6,6 @@ import {
   BackLink,
   CenteredState,
   EmptyMessage,
-  ErrorMessage,
   EventPageTitle,
   MetaIconsRow,
   ScreenSectionTitle,
@@ -16,6 +15,7 @@ import { fetchTournament, fetchPublicEvents } from '../lib/tournamentService'
 import { isFirebaseConfigured } from '../lib/firebase'
 import { useMinLoading } from '../hooks/useMinLoading'
 import { TournamentDetailSkeleton } from '../components/ui/Skeleton'
+import { StatusPopups } from '../components/ui/StatusPopups'
 import type { Tournament, TournamentEvent } from '../types'
 
 function mapFetchError(err: unknown): string {
@@ -33,6 +33,7 @@ export function TournamentDetailPage() {
   const [loading, setLoading] = useState(true)
   const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
+  const [errorDismissed, setErrorDismissed] = useState(false)
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -60,6 +61,10 @@ export function TournamentDetailPage() {
       .finally(() => setLoading(false))
   }, [tournamentId])
 
+  useEffect(() => {
+    setErrorDismissed(false)
+  }, [error])
+
   if (!isFirebaseConfigured) {
     return (
       <AppLayout>
@@ -76,7 +81,11 @@ export function TournamentDetailPage() {
     return (
       <AppLayout>
         <CenteredState>
-          <ErrorMessage>{error}</ErrorMessage>
+          {!errorDismissed ? (
+            <StatusPopups error={error} onErrorDismiss={() => setErrorDismissed(true)} />
+          ) : (
+            <EmptyMessage>{error}</EmptyMessage>
+          )}
         </CenteredState>
       </AppLayout>
     )

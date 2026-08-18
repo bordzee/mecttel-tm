@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AdminLayout } from '../../components/AdminLayout'
+import { StatusPopups } from '../../components/ui/StatusPopups'
 import {
   AddDivisionButton,
   AdminPageTitle,
   BackButton,
   BackLink,
   Button,
-  ErrorMessage,
   FormLabel,
   QuickAddPill,
   StepIndicator,
@@ -87,6 +87,7 @@ export function TournamentWizardPage() {
 
   return (
     <AdminLayout>
+      <StatusPopups error={error} onErrorDismiss={() => setError('')} />
       {step === 0 && (
         <div className="space-y-5">
           <BackLink to="/admin">Dashboard</BackLink>
@@ -125,7 +126,6 @@ export function TournamentWizardPage() {
               Add divisions now (optional)
             </Button>
           </div>
-          {error && <ErrorMessage>{error}</ErrorMessage>}
         </div>
       )}
 
@@ -168,8 +168,6 @@ export function TournamentWizardPage() {
               ))}
             </div>
           )}
-
-          {error && <ErrorMessage>{error}</ErrorMessage>}
 
           <Button onClick={handleCreateWithDivisions} disabled={saving || divisions.length === 0} fullWidth>
             {saving ? 'Creating…' : `Create ${name || 'tournament'}`}

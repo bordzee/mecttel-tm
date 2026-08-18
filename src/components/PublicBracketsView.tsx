@@ -4,6 +4,7 @@ import { GroupStageNavigator } from './GroupStageNavigator'
 import { KnockoutBracket } from './KnockoutBracket'
 import { EmptyMessage } from './ui/primitives'
 import { BracketsTabSkeleton } from './ui/Skeleton'
+import { StatusPopups } from './ui/StatusPopups'
 import { useMinLoading } from '../hooks/useMinLoading'
 import {
   fetchGroups,
@@ -103,7 +104,12 @@ export function PublicBracketsView({
   }
 
   if (error) {
-    return <EmptyMessage>{error}</EmptyMessage>
+    return (
+      <>
+        <StatusPopups error={error} onErrorDismiss={() => setError('')} />
+        <EmptyMessage>Brackets could not be loaded.</EmptyMessage>
+      </>
+    )
   }
 
   if (!stageTabs.length) {

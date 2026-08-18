@@ -7,7 +7,7 @@ import { GroupStageNavigator } from '../components/GroupStageNavigator'
 import {
   BackLink,
   ConfigRowsCard,
-  ErrorMessage,
+  EmptyMessage,
   EventPageTitle,
   InfoNoteCard,
   Pill,
@@ -23,6 +23,7 @@ import { EVENT_TYPE_LABELS } from '../lib/constants'
 import { getCategoryDisplay, getEventDisplayName } from '../lib/displayNames'
 import { useMinLoading } from '../hooks/useMinLoading'
 import { EventDetailSkeleton } from '../components/ui/Skeleton'
+import { StatusPopups } from '../components/ui/StatusPopups'
 import type { Tournament, TournamentEvent, TournamentEntry } from '../types'
 
 type PublicDivisionTab = 'participants' | 'brackets'
@@ -49,6 +50,7 @@ export function EventDetailPage() {
   const [loading, setLoading] = useState(true)
   const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
+  const [errorDismissed, setErrorDismissed] = useState(false)
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -92,6 +94,10 @@ export function EventDetailPage() {
       .finally(() => setLoading(false))
   }, [tournamentId, eventId])
 
+  useEffect(() => {
+    setErrorDismissed(false)
+  }, [error])
+
   const layoutPreview = useMemo(() => {
     if (!event || entries.length < 2) return []
     if (event.config.group_count && event.config.entries_per_group) return []
@@ -116,7 +122,11 @@ export function EventDetailPage() {
   if (error) {
     return (
       <AppLayout>
-        <ErrorMessage>{error}</ErrorMessage>
+        {!errorDismissed ? (
+          <StatusPopups error={error} onErrorDismiss={() => setErrorDismissed(true)} />
+        ) : (
+          <EmptyMessage>{error}</EmptyMessage>
+        )}
       </AppLayout>
     )
   }

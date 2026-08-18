@@ -13,6 +13,7 @@ import { getEntryDisplayName } from '../lib/displayNames'
 import { validateSetScore, getBestOfForStage } from '../lib/scoring'
 import { forfeitScores } from '../lib/matchOutcomes'
 import { Button, CaptionText, Card, FormLabel, SelectInput } from './ui/primitives'
+import { StatusPopups } from './ui/StatusPopups'
 import { MatchCard } from './MatchCard'
 
 interface Props {
@@ -190,7 +191,9 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
         </>
       )}
 
-      {error && <p className="text-sm text-live">{error}</p>}
+      {error ? (
+        <StatusPopups error={error} onErrorDismiss={() => setError('')} />
+      ) : null}
 
       <Button type="button" onClick={handleSave} disabled={saving} fullWidth>
         {saving ? 'Saving…' : 'Save result'}

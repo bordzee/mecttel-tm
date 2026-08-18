@@ -4,10 +4,10 @@ import { useAuth } from '../../hooks/useAuth'
 import { useMinLoading } from '../../hooks/useMinLoading'
 import { isFirebaseConfigured } from '../../lib/firebase'
 import { AuthCheckingSkeleton } from '../../components/ui/Skeleton'
+import { StatusPopups } from '../../components/ui/StatusPopups'
 import {
   BackLink,
   Button,
-  ErrorMessage,
   FormLabelLight,
   TextInputLight,
 } from '../../components/ui/primitives'
@@ -64,6 +64,7 @@ export function AdminLoginPage() {
 
   return (
     <div className="min-h-screen bg-navy flex flex-col">
+      <StatusPopups error={error} onErrorDismiss={() => setError('')} />
       <header className="px-4 h-[52px] flex items-center">
         <BackLink to="/">Public site</BackLink>
       </header>
@@ -82,8 +83,6 @@ export function AdminLoginPage() {
               Firebase is not configured. Sign-in may be unavailable.
             </div>
           )}
-
-          {error && <ErrorMessage className="text-center">{error}</ErrorMessage>}
 
           {!authLoading && user && !isAdmin && (
             <div className="text-xs font-medium text-[#8A5A00] bg-[#FFF4E0] border border-[#F0C066] p-2.5 rounded-[10px]">

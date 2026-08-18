@@ -9,14 +9,14 @@ import {
   BackLink,
   Button,
   DeleteConfirmPanel,
-  ErrorMessage,
+  EmptyMessage,
   IconActionButton,
   MetaIconsRow,
   PanelSectionTitle,
   ScreenSectionTitle,
-  SuccessBanner,
   TextInput,
 } from '../../components/ui/primitives'
+import { StatusPopups } from '../../components/ui/StatusPopups'
 import {
   fetchTournament,
   fetchEvents,
@@ -43,6 +43,7 @@ export function AdminTournamentHubPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [pageErrorDismissed, setPageErrorDismissed] = useState(false)
 
   const load = useCallback(async () => {
     if (!tournamentId) return
@@ -57,6 +58,7 @@ export function AdminTournamentHubPage() {
   useEffect(() => {
     setPageLoading(true)
     setLoadError('')
+    setPageErrorDismissed(false)
     load()
       .catch((e) => setLoadError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setPageLoading(false))
@@ -104,10 +106,18 @@ export function AdminTournamentHubPage() {
   }
 
   if (loadError || !tournament) {
+    const pageError = loadError || 'Tournament not found'
     return (
       <AdminLayout>
         <BackLink to="/admin">Dashboard</BackLink>
-        <ErrorMessage>{loadError || 'Tournament not found'}</ErrorMessage>
+        {!pageErrorDismissed ? (
+          <StatusPopups
+            error={pageError}
+            onErrorDismiss={() => setPageErrorDismissed(true)}
+          />
+        ) : (
+          <EmptyMessage>{pageError}</EmptyMessage>
+        )}
       </AdminLayout>
     )
   }
@@ -137,8 +147,12 @@ export function AdminTournamentHubPage() {
           </div>
         </div>
 
-        {message && <SuccessBanner>{message}</SuccessBanner>}
-        {error && <ErrorMessage>{error}</ErrorMessage>}
+        <StatusPopups
+          success={message}
+          error={error}
+          onSuccessDismiss={() => setMessage('')}
+          onErrorDismiss={() => setError('')}
+        />
 
         {editing && (
           <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">

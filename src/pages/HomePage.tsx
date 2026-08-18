@@ -3,10 +3,10 @@ import { AppLayout } from '../components/AppLayout'
 import { TournamentCard } from '../components/TournamentCard'
 import {
   EmptyStatePanel,
-  ErrorBanner,
   SectionTitle,
   WarningBanner,
 } from '../components/ui/primitives'
+import { StatusPopups } from '../components/ui/StatusPopups'
 import { fetchPublicTournaments } from '../lib/tournamentService'
 import { isFirebaseConfigured } from '../lib/firebase'
 import { useMinLoading } from '../hooks/useMinLoading'
@@ -88,9 +88,8 @@ export function HomePage() {
 
   return (
     <AppLayout>
+      <StatusPopups error={error} onErrorDismiss={() => setError('')} />
       <div className="space-y-[26px] pt-1">
-        {error && <ErrorBanner>{error}</ErrorBanner>}
-
         <section className="space-y-3">
           <SectionTitle live>Ongoing</SectionTitle>
           {ongoing.length === 0 ? (

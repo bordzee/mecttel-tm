@@ -3,11 +3,11 @@ import type { EventType, TournamentEntry } from '../types'
 import { SeededSelect } from './SeededSelect'
 import {
   Button,
-  ErrorBanner,
   FormLabel,
   PanelSectionTitle,
   TextInput,
 } from './ui/primitives'
+import { StatusPopups } from './ui/StatusPopups'
 
 export type EntryEditFormState = {
   name: string
@@ -74,6 +74,7 @@ export function EntryEditDialog({
   allowRosterEdit,
   initialRoster,
   error,
+  onErrorDismiss,
   confirming,
   onCancel,
   onSave,
@@ -84,6 +85,7 @@ export function EntryEditDialog({
   allowRosterEdit: boolean
   initialRoster?: string[]
   error?: string
+  onErrorDismiss?: () => void
   confirming?: boolean
   onCancel: () => void
   onSave: (form: EntryEditFormState) => void
@@ -101,6 +103,9 @@ export function EntryEditDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60">
+      {error ? (
+        <StatusPopups error={error} onErrorDismiss={onErrorDismiss ?? (() => {})} />
+      ) : null}
       <div
         className="w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
         role="dialog"
@@ -212,8 +217,6 @@ export function EntryEditDialog({
             onChange={(seeded) => patch({ seeded })}
           />
         </div>
-
-        {error && <ErrorBanner>{error}</ErrorBanner>}
 
         <div className="grid grid-cols-2 gap-2.5">
           <Button variant="secondary" onClick={onCancel} disabled={confirming} fullWidth>

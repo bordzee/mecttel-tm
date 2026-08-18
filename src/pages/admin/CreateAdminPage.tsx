@@ -6,12 +6,11 @@ import {
   BackLink,
   Button,
   Card,
-  ErrorMessage,
   FormLabel,
   InfoNoteCard,
-  SuccessBanner,
   TextInput,
 } from '../../components/ui/primitives'
+import { StatusPopups } from '../../components/ui/StatusPopups'
 import { functions } from '../../lib/firebase'
 
 export function CreateAdminPage() {
@@ -53,10 +52,14 @@ export function CreateAdminPage() {
           Creating admins requires a configured Firebase Cloud Function. This will fail if setup is incomplete.
         </InfoNoteCard>
 
-        {message && <SuccessBanner>{message}</SuccessBanner>}
+        <StatusPopups
+          success={message}
+          error={error}
+          onSuccessDismiss={() => setMessage('')}
+          onErrorDismiss={() => setError('')}
+        />
 
         <Card as="form" onSubmit={handleSubmit} className="p-4 space-y-3.5">
-          {error && <ErrorMessage>{error}</ErrorMessage>}
           <div>
             <FormLabel>Email</FormLabel>
             <TextInput type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="newadmin@mecttel.org" />
