@@ -53,6 +53,22 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/tournaments/$(tournamentId)/events/$(eventId)).data.status in ['upcoming', 'ongoing'];
     }
 
+    function teamIsPublic(teamId) {
+      return exists(/databases/$(database)/documents/teams/$(teamId))
+        && eventIsPublic(
+          get(/databases/$(database)/documents/teams/$(teamId)).data.tournament_id,
+          get(/databases/$(database)/documents/teams/$(teamId)).data.event_id
+        );
+    }
+
+    function groupIsPublic(groupId) {
+      return exists(/databases/$(database)/documents/groups/$(groupId))
+        && eventIsPublic(
+          get(/databases/$(database)/documents/groups/$(groupId)).data.tournament_id,
+          get(/databases/$(database)/documents/groups/$(groupId)).data.event_id
+        );
+    }
+
     function scopedEventFields() {
       return isString(request.resource.data.tournament_id)
         && isString(request.resource.data.event_id);
@@ -78,7 +94,10 @@ service cloud.firestore {
     }
 
     match /tournaments/{tournamentId} {
-      allow read: if isAdmin() || resource.data.public_visible == true;
+      // Admins list all tournaments (dashboard, create flow). Public lists filter public_visible.
+      allow list: if isAdmin();
+      allow list: if resource.data.public_visible == true;
+      allow get: if isAdmin() || resource.data.public_visible == true;
       allow create: if isAdmin()
         && isString(request.resource.data.name)
         && isOptionalString(request.resource.data.venue)
@@ -95,7 +114,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /events/{eventId} {
-        allow read: if resource.data.status in ['upcoming', 'ongoing'] || isAdmin();
+        allow list: if isAdmin();
+        allow list: if resource.data.status in ['upcoming', 'ongoing'];
+        allow get: if isAdmin() || resource.data.status in ['upcoming', 'ongoing'];
         allow create, update: if isAdmin()
           && isString(request.resource.data.name)
           && eventType(request.resource.data.event_type)
@@ -109,19 +130,17 @@ service cloud.firestore {
     }
 
     match /teams/{docId} {
-      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow list: if isAdmin();
+      allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
+      allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow create, update: if isAdmin() && scopedEventFields() && isString(request.resource.data.name);
       allow delete: if isAdmin();
     }
 
     match /team_players/{docId} {
-      allow read: if isAdmin() || (
-        exists(/databases/$(database)/documents/teams/$(resource.data.team_id))
-        && eventIsPublic(
-          get(/databases/$(database)/documents/teams/$(resource.data.team_id)).data.tournament_id,
-          get(/databases/$(database)/documents/teams/$(resource.data.team_id)).data.event_id
-        )
-      );
+      allow list: if isAdmin();
+      allow list: if teamIsPublic(resource.data.team_id);
+      allow get: if isAdmin() || teamIsPublic(resource.data.team_id);
       allow create, update: if isAdmin()
         && isString(request.resource.data.team_id)
         && isString(request.resource.data.name);
@@ -129,13 +148,17 @@ service cloud.firestore {
     }
 
     match /players/{docId} {
-      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow list: if isAdmin();
+      allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
+      allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow create, update: if isAdmin() && scopedEventFields() && isString(request.resource.data.name);
       allow delete: if isAdmin();
     }
 
     match /pairs/{docId} {
-      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow list: if isAdmin();
+      allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
+      allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow create, update: if isAdmin()
         && scopedEventFields()
         && isString(request.resource.data.player_a)
@@ -144,7 +167,9 @@ service cloud.firestore {
     }
 
     match /tournament_entries/{docId} {
-      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow list: if isAdmin();
+      allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
+      allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow create, update: if isAdmin()
         && scopedEventFields()
         && entryType(request.resource.data.entry_type)
@@ -157,7 +182,9 @@ service cloud.firestore {
     }
 
     match /groups/{docId} {
-      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow list: if isAdmin();
+      allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
+      allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow create, update: if isAdmin()
         && scopedEventFields()
         && isString(request.resource.data.label);
@@ -165,13 +192,9 @@ service cloud.firestore {
     }
 
     match /group_members/{docId} {
-      allow read: if isAdmin() || (
-        exists(/databases/$(database)/documents/groups/$(resource.data.group_id))
-        && eventIsPublic(
-          get(/databases/$(database)/documents/groups/$(resource.data.group_id)).data.tournament_id,
-          get(/databases/$(database)/documents/groups/$(resource.data.group_id)).data.event_id
-        )
-      );
+      allow list: if isAdmin();
+      allow list: if groupIsPublic(resource.data.group_id);
+      allow get: if isAdmin() || groupIsPublic(resource.data.group_id);
       allow create, update: if isAdmin()
         && isString(request.resource.data.group_id)
         && isString(request.resource.data.entry_id);
@@ -179,13 +202,17 @@ service cloud.firestore {
     }
 
     match /group_matches/{docId} {
-      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow list: if isAdmin();
+      allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
+      allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow create, update: if isAdmin() && validMatchWrite() && isString(request.resource.data.group_id);
       allow delete: if isAdmin();
     }
 
     match /knockout_matches/{docId} {
-      allow read: if eventIsPublic(resource.data.tournament_id, resource.data.event_id) || isAdmin();
+      allow list: if isAdmin();
+      allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
+      allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow create, update: if isAdmin()
         && scopedEventFields()
         && knockoutRound(request.resource.data.round)

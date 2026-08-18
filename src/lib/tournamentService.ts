@@ -11,7 +11,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { deleteEventData, deleteTournamentData, deleteWhere, deleteQueryDocs, deleteEntryReferences, stripUndefined } from './firebaseHelpers'
+import { deleteEventData, deleteTournamentData, deleteWhere, deleteEventScopeWhere, deleteQueryDocs, deleteEntryReferences, stripUndefined } from './firebaseHelpers'
 import { deleteTournamentImageFiles } from './tournamentImageService'
 import type {
   EventType,
@@ -586,11 +586,11 @@ export async function setupGroupsAndMatches(
 
   const existingGroups = await fetchGroups(tournamentId, event.id)
   for (const g of existingGroups) {
-    await deleteWhere('group_members', 'group_id', g.id)
+    await deleteWhere('group_members', { field: 'group_id', value: g.id })
   }
-  await deleteWhere('groups', 'event_id', event.id)
-  await deleteWhere('group_matches', 'event_id', event.id)
-  await deleteWhere('knockout_matches', 'event_id', event.id)
+  await deleteEventScopeWhere('groups', tournamentId, event.id)
+  await deleteEventScopeWhere('group_matches', tournamentId, event.id)
+  await deleteEventScopeWhere('knockout_matches', tournamentId, event.id)
 
   // Groups must commit before members — Firestore rules check group_id exists.
   await commitBatchSets(groupWrites)
@@ -1162,7 +1162,7 @@ export async function deleteEntry(entry: TournamentEntry) {
     throw new Error('Cannot remove entries after the division has started')
   }
 
-  await deleteEntryReferences(entry.event_id, entry.id)
+  await deleteEntryReferences(entry.tournament_id, entry.event_id, entry.id)
 
   if (entry.team_id) {
     const roster = await getDocs(

@@ -33,18 +33,21 @@ export function LoadingStatus({ label = 'Loading' }: { label?: string }) {
 function TournamentCardSkeleton({ index }: { index: number }) {
   return (
     <div
-      className="bg-card rounded-2xl border border-border p-4 space-y-3"
+      className="bg-card rounded-2xl border border-border overflow-hidden"
       style={staggerStyle(index)}
     >
-      <div className="flex items-start justify-between gap-2">
-        <Skeleton className="h-5 w-[68%] rounded-md" />
-        <Skeleton className="h-6 w-16 rounded-full shrink-0" />
-      </div>
-      <Skeleton className="h-3.5 w-[45%] rounded-md" />
-      <div className="flex flex-wrap gap-1.5 pt-0.5">
-        <Skeleton className="h-6 w-20 rounded-full" />
-        <Skeleton className="h-6 w-24 rounded-full" />
-        <Skeleton className="h-6 w-[72px] rounded-full" />
+      <Skeleton className="aspect-[16/9] w-full rounded-none" />
+      <div className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <Skeleton className="h-5 w-[68%] rounded-md" />
+          <Skeleton className="h-6 w-16 rounded-full shrink-0" />
+        </div>
+        <Skeleton className="h-3.5 w-[45%] rounded-md" />
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          <Skeleton className="h-6 w-20 rounded-full" />
+          <Skeleton className="h-6 w-24 rounded-full" />
+          <Skeleton className="h-6 w-[72px] rounded-full" />
+        </div>
       </div>
     </div>
   )
