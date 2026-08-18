@@ -15,7 +15,6 @@ import {
   PanelSectionTitle,
   Pill,
   SectionHeaderRow,
-  SelectInput,
   TextInput,
   WarningBanner,
 } from '../../components/ui/primitives'
@@ -24,12 +23,12 @@ import { GroupRankEditor } from '../../components/GroupRankEditor'
 import { GroupStageNavigator } from '../../components/GroupStageNavigator'
 import { KnockoutBracket } from '../../components/KnockoutBracket'
 import { MatchScoreEntry } from '../../components/MatchScoreEntry'
-import { EntryRow } from '../../components/EntryRow'
 import { EntryEditDialog, type EntryEditFormState } from '../../components/EntryEditDialog'
 import { ConflictWarnings } from '../../components/ConflictWarnings'
 import { SeededSelect } from '../../components/SeededSelect'
 import { LateEntryDialog } from '../../components/LateEntryDialog'
 import { GenerateGroupStageDialog } from '../../components/GenerateGroupStageDialog'
+import { ParticipantsListDialog } from '../../components/ParticipantsListDialog'
 import {
   fetchTournament,
   fetchEvent,
@@ -59,12 +58,9 @@ import {
 } from '../../lib/tournamentService'
 import { assignEntriesToGroups, canAddEntryToGroup } from '../../lib/groupAssignment'
 import {
-  getEntryOrganization,
-  getEntrySeededFilterStatus,
   getStartLayoutOptions,
   isLayoutCompatibleWithBlock,
   parseSeededValue,
-  entrySortKey,
 } from '../../lib/groupLayout'
 import { suggestBalanceGroup, type GroupSummary } from '../../lib/lateJoinAssignment'
 import { buildKnockoutStageTabs, isKnockoutStage, knockoutRoundFromStageId } from '../../lib/knockoutTabs'
@@ -73,7 +69,6 @@ import { validateTournamentStart } from '../../lib/matchOutcomes'
 import { getEntryDisplayName, getEventDisplayName, isPlayerEventType } from '../../lib/displayNames'
 import {
   duplicateEntryWarnings,
-  getComparableNames,
   hasBlockingDuplicates,
   normalizeEntryName,
   rosterNameCollisionWarnings,
@@ -148,8 +143,7 @@ export function AdminEventPage() {
   const [entryEditError, setEntryEditError] = useState('')
   const [pageErrorDismissed, setPageErrorDismissed] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
-  const [participantSearch, setParticipantSearch] = useState('')
-  const [participantFilter, setParticipantFilter] = useState('all')
+  const [participantsDialogOpen, setParticipantsDialogOpen] = useState(false)
   const [readyDialogOpen, setReadyDialogOpen] = useState(false)
   const loadSeq = useRef(0)
   const isInitialLoad = useRef(true)
@@ -246,51 +240,6 @@ export function AdminEventPage() {
   }, [entries, event])
 
   const entryMap = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries])
-
-  const sortedEntries = useMemo(
-    () => [...entries].sort((a, b) => entrySortKey(a) - entrySortKey(b)),
-    [entries],
-  )
-
-  const participantOrgOptions = useMemo(() => {
-    const names = new Set<string>()
-    for (const entry of entries) {
-      const org = getEntryOrganization(entry)
-      if (org?.trim()) names.add(org.trim())
-    }
-    return [...names].sort((a, b) => a.localeCompare(b))
-  }, [entries])
-
-  const filteredEntries = useMemo(() => {
-    const query = normalizeEntryName(participantSearch)
-    return sortedEntries.filter((entry) => {
-      if (query) {
-        const matchesSearch = getComparableNames(entry).some((name) => name.includes(query))
-        if (!matchesSearch) return false
-      }
-      if (participantFilter === 'all') return true
-      if (participantFilter === 'seeded') {
-        return getEntrySeededFilterStatus(entry) === 'seeded'
-      }
-      if (participantFilter === 'non-seeded') {
-        return getEntrySeededFilterStatus(entry) === 'non-seeded'
-      }
-      if (participantFilter === 'not-set') {
-        return getEntrySeededFilterStatus(entry) === 'not-set'
-      }
-      if (participantFilter.startsWith('org:')) {
-        const org = participantFilter.slice(4)
-        return getEntryOrganization(entry) === org
-      }
-      return true
-    })
-  }, [sortedEntries, participantSearch, participantFilter])
-
-  useEffect(() => {
-    if (!participantFilter.startsWith('org:')) return
-    const org = participantFilter.slice(4)
-    if (!participantOrgOptions.includes(org)) setParticipantFilter('all')
-  }, [participantFilter, participantOrgOptions])
 
   const groupStageData = useMemo(() => {
     return groups.map((group) => {
@@ -1140,7 +1089,6 @@ export function AdminEventPage() {
   const canEditEntryDetails =
     canEditDivisionSettings || (event.status === 'ongoing' && !knockoutGenerated)
   const canLateJoin = event.status === 'ongoing' && !knockoutGenerated && groups.length > 0
-  const showParticipantsSection = entries.length > 0
   const entryCountLabel =
     cfg.total_slots != null ? `${entries.length} / ${cfg.total_slots}` : String(entries.length)
   const rosterSize = cfg.roster_size ?? 3
@@ -1231,6 +1179,16 @@ export function AdminEventPage() {
       >
         {addingEntry ? 'Adding…' : lateOnly ? 'Add late entry' : 'Add entry'}
       </AddEntryButton>
+      {!lateOnly && (
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setParticipantsDialogOpen(true)}
+          fullWidth
+        >
+          Show participants
+        </Button>
+      )}
     </form>
   )
 
@@ -1305,80 +1263,34 @@ export function AdminEventPage() {
             <SectionHeaderRow
               title="Participants"
               trailing={
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-bold text-text-steel tabular-nums">
-                    {entryCountLabel}
-                  </span>
-                  {canShowReadyButton && (
-                    <Button
-                      onClick={() => setReadyDialogOpen(true)}
-                      className="!h-9 !px-3.5 !text-[13px]"
-                    >
-                      Ready
-                    </Button>
-                  )}
-                </div>
+                <span className="text-[13px] font-bold text-text-steel tabular-nums">
+                  {entryCountLabel}
+                </span>
               }
             />
             {canEditEntries && renderEntryForm(false)}
-            {showParticipantsSection && (
-              <div className="space-y-2.5">
-                <TextInput
-                  value={participantSearch}
-                  onChange={(e) => setParticipantSearch(e.target.value)}
-                  placeholder="Search by name…"
-                  aria-label="Search participants"
-                />
-                <div>
-                  <FormLabel>Filter</FormLabel>
-                  <SelectInput
-                    value={participantFilter}
-                    onChange={(e) => setParticipantFilter(e.target.value)}
-                    aria-label="Filter participants"
-                  >
-                    <option value="all">All participants</option>
-                    {participantOrgOptions.length > 0 && (
-                      <optgroup label="Organization">
-                        {participantOrgOptions.map((org) => (
-                          <option key={org} value={`org:${org}`}>
-                            {org}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    <optgroup label="Seeded status">
-                      <option value="seeded">Seeded</option>
-                      <option value="non-seeded">Non-seeded</option>
-                      <option value="not-set">Seeded not set</option>
-                    </optgroup>
-                  </SelectInput>
-                </div>
-                {(participantSearch.trim() || participantFilter !== 'all') && (
-                  <CaptionText>
-                    Showing {filteredEntries.length} of {entries.length}
-                  </CaptionText>
-                )}
-                <div className="max-h-[min(420px,50vh)] overflow-y-auto space-y-2 pr-0.5">
-                  {filteredEntries.length === 0 ? (
-                    <EmptyMessage>No participants match your search or filter.</EmptyMessage>
-                  ) : (
-                    filteredEntries.map((entry) => (
-                      <EntryRow
-                        key={entry.id}
-                        entry={entry}
-                        onEdit={
-                          canEditEntryDetails ? () => handleOpenEditEntry(entry) : undefined
-                        }
-                        onRemove={canEditEntries ? () => handleDeleteEntry(entry) : undefined}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
+            {!canEditEntries && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setParticipantsDialogOpen(true)}
+                fullWidth
+              >
+                Show participants
+              </Button>
             )}
             {event.status === 'draft' && (
               <Button disabled={loading} onClick={() => changeStatus('upcoming')} fullWidth>
                 Open registration
+              </Button>
+            )}
+            {canShowReadyButton && (
+              <Button
+                onClick={() => setReadyDialogOpen(true)}
+                disabled={loading}
+                fullWidth
+              >
+                Ready
               </Button>
             )}
             {canEditEntries && (
@@ -1617,6 +1529,16 @@ export function AdminEventPage() {
           onSave={handleSaveEntryEdit}
         />
       )}
+
+      <ParticipantsListDialog
+        open={participantsDialogOpen}
+        onClose={() => setParticipantsDialogOpen(false)}
+        entries={entries}
+        canEditEntryDetails={canEditEntryDetails}
+        canEditEntries={canEditEntries}
+        onEdit={handleOpenEditEntry}
+        onRemove={handleDeleteEntry}
+      />
 
       <GenerateGroupStageDialog
         open={readyDialogOpen}
