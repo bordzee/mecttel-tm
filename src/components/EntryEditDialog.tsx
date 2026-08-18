@@ -120,11 +120,11 @@ export function EntryEditDialog({
               />
             </div>
             <div>
-              <FormLabel>Organization</FormLabel>
+              <FormLabel>Organization (optional)</FormLabel>
               <TextInput
                 value={form.organization}
                 onChange={(e) => patch({ organization: e.target.value })}
-                placeholder="Organization"
+                placeholder="Club or organization"
               />
             </div>
             {allowRosterEdit ? (
@@ -156,11 +156,11 @@ export function EntryEditDialog({
               />
             </div>
             <div>
-              <FormLabel>Organization</FormLabel>
+              <FormLabel>Organization (optional)</FormLabel>
               <TextInput
                 value={form.organization}
                 onChange={(e) => patch({ organization: e.target.value })}
-                placeholder="Organization"
+                placeholder="Club or organization"
               />
             </div>
           </>
@@ -195,11 +195,11 @@ export function EntryEditDialog({
               />
             </div>
             <div>
-              <FormLabel>Organization</FormLabel>
+              <FormLabel>Organization (optional)</FormLabel>
               <TextInput
                 value={form.organization}
                 onChange={(e) => patch({ organization: e.target.value })}
-                placeholder="Organization"
+                placeholder="Club or organization"
               />
             </div>
           </>

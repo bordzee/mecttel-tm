@@ -15,6 +15,8 @@ import { fetchAllTournaments } from '../../lib/tournamentService'
 import { getEventDisplayName } from '../../lib/displayNames'
 import { useAuth } from '../../hooks/useAuth'
 import { STATUS_LABELS } from '../../lib/constants'
+import { useMinLoading } from '../../hooks/useMinLoading'
+import { AdminDashboardSkeleton } from '../../components/ui/Skeleton'
 import type { Tournament, TournamentEvent } from '../../types'
 
 function eventPillVariant(status: TournamentEvent['status']): 'live' | 'upcoming' | 'draft' | 'ended' {
@@ -28,6 +30,7 @@ export function AdminDashboardPage() {
   const { signOut } = useAuth()
   const [tournaments, setTournaments] = useState<(Tournament & { events: TournamentEvent[] })[]>([])
   const [loading, setLoading] = useState(true)
+  const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -63,8 +66,8 @@ export function AdminDashboardPage() {
 
         <section className="space-y-3">
           <ScreenSectionTitle>All tournaments</ScreenSectionTitle>
-          {loading ? (
-            <EmptyMessage>Loading tournaments…</EmptyMessage>
+          {showSkeleton ? (
+            <AdminDashboardSkeleton />
           ) : tournaments.length === 0 ? (
             <EmptyMessage>No tournaments yet.</EmptyMessage>
           ) : (

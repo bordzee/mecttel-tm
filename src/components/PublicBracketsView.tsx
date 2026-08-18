@@ -3,6 +3,8 @@ import { GroupStandingsTable } from './GroupStandingsTable'
 import { GroupStageNavigator } from './GroupStageNavigator'
 import { KnockoutBracket } from './KnockoutBracket'
 import { EmptyMessage } from './ui/primitives'
+import { BracketsTabSkeleton } from './ui/Skeleton'
+import { useMinLoading } from '../hooks/useMinLoading'
 import {
   fetchGroups,
   fetchGroupMembers,
@@ -29,6 +31,7 @@ export function PublicBracketsView({
   const [members, setMembers] = useState<{ group_id: string; entry_id: string }[]>([])
   const [activeStage, setActiveStage] = useState('')
   const [loading, setLoading] = useState(true)
+  const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
 
   const fetchEventData = useCallback(async () => {
@@ -95,8 +98,8 @@ export function PublicBracketsView({
     ? knockoutMatches.filter((m) => m.round === activeKnockoutRound)
     : []
 
-  if (loading) {
-    return <EmptyMessage>Loading brackets…</EmptyMessage>
+  if (showSkeleton) {
+    return <BracketsTabSkeleton />
   }
 
   if (error) {

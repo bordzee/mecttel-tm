@@ -11,11 +11,12 @@ import {
   EventPageTitle,
   BackLink,
   Button,
-  EmptyMessage,
   ErrorBanner,
   InlineError,
 } from '../../components/ui/primitives'
 import { createEvent, fetchTournament } from '../../lib/tournamentService'
+import { useMinLoading } from '../../hooks/useMinLoading'
+import { AdminFormSkeleton } from '../../components/ui/Skeleton'
 import type { Tournament } from '../../types'
 
 export function AddEventPage() {
@@ -25,6 +26,7 @@ export function AddEventPage() {
   const [draft, setDraft] = useState(createDivisionDraft())
   const [saving, setSaving] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
+  const showPageSkeleton = useMinLoading(pageLoading)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
 
@@ -52,10 +54,13 @@ export function AddEventPage() {
     }
   }
 
-  if (pageLoading) {
+  if (showPageSkeleton) {
     return (
       <AdminLayout>
-        <EmptyMessage>Loading…</EmptyMessage>
+        <div className="space-y-4">
+          <FirebaseSetupBanner />
+          <AdminFormSkeleton rows={5} />
+        </div>
       </AdminLayout>
     )
   }

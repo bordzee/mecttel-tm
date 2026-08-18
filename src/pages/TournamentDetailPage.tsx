@@ -14,6 +14,8 @@ import {
 } from '../components/ui/primitives'
 import { fetchTournament, fetchPublicEvents } from '../lib/tournamentService'
 import { isFirebaseConfigured } from '../lib/firebase'
+import { useMinLoading } from '../hooks/useMinLoading'
+import { TournamentDetailSkeleton } from '../components/ui/Skeleton'
 import type { Tournament, TournamentEvent } from '../types'
 
 function mapFetchError(err: unknown): string {
@@ -29,6 +31,7 @@ export function TournamentDetailPage() {
   const [tournament, setTournament] = useState<Tournament | null>(null)
   const [events, setEvents] = useState<TournamentEvent[]>([])
   const [loading, setLoading] = useState(true)
+  const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -79,10 +82,10 @@ export function TournamentDetailPage() {
     )
   }
 
-  if (loading || !tournament) {
+  if (showSkeleton || !tournament) {
     return (
       <AppLayout>
-        <EmptyMessage>Loading…</EmptyMessage>
+        <TournamentDetailSkeleton />
       </AppLayout>
     )
   }

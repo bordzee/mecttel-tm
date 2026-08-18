@@ -1,11 +1,14 @@
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useMinLoading } from '../hooks/useMinLoading'
 import { isFirebaseConfigured } from '../lib/firebase'
 import { AdminLayout } from './AdminLayout'
+import { AuthCheckingSkeleton } from './ui/Skeleton'
 import { Button, WarningBanner } from './ui/primitives'
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, loading, signOut } = useAuth()
+  const showAuthSkeleton = useMinLoading(loading)
   const location = useLocation()
 
   if (!isFirebaseConfigured) {
@@ -28,10 +31,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (loading) {
+  if (showAuthSkeleton) {
     return (
       <AdminLayout>
-        <p className="text-text-steel py-8">Loading…</p>
+        <AuthCheckingSkeleton />
       </AdminLayout>
     )
   }

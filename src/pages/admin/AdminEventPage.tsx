@@ -86,6 +86,8 @@ import {
 } from '../../components/DivisionConfigForm'
 import { STATUS_LABELS } from '../../lib/constants'
 import { useRealtimeEvent } from '../../hooks/useRealtimeEvent'
+import { useMinLoading } from '../../hooks/useMinLoading'
+import { AdminEventPageSkeleton } from '../../components/ui/Skeleton'
 import type { Tournament, TournamentEvent, TournamentEntry, Group, KnockoutBracketType } from '../../types'
 
 type AdminDivisionTab = 'participants' | 'late-check-in' | 'brackets'
@@ -117,6 +119,7 @@ export function AdminEventPage() {
   const [loading, setLoading] = useState(false)
   const [addingEntry, setAddingEntry] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
+  const showPageSkeleton = useMinLoading(pageLoading)
   const [loadError, setLoadError] = useState('')
   const [refreshError, setRefreshError] = useState('')
   const [rosterWarnings, setRosterWarnings] = useState<string[]>([])
@@ -741,7 +744,7 @@ export function AdminEventPage() {
 
         await updateTeamEntry(editingEntry, {
           name: form.name.trim(),
-          organization: form.organization.trim(),
+          organization: form.organization.trim() || null,
           seeded,
           roster: allowRosterEdit ? rosterNames : undefined,
         })
@@ -775,7 +778,7 @@ export function AdminEventPage() {
 
         await updatePlayerEntry(editingEntry, {
           name: form.name.trim(),
-          organization: form.organization.trim(),
+          organization: form.organization.trim() || null,
           seeded,
         })
       } else if (event.event_type === 'doubles') {
@@ -813,7 +816,7 @@ export function AdminEventPage() {
           pair_name: form.pair_name.trim(),
           player_a: form.player_a.trim(),
           player_b: form.player_b.trim(),
-          organization: form.organization.trim(),
+          organization: form.organization.trim() || null,
           seeded,
         })
       }
@@ -1026,10 +1029,10 @@ export function AdminEventPage() {
     }
   }
 
-  if (pageLoading) {
+  if (showPageSkeleton) {
     return (
       <AdminLayout>
-        <p className="text-text-steel">Loading…</p>
+        <AdminEventPageSkeleton />
       </AdminLayout>
     )
   }
@@ -1086,8 +1089,8 @@ export function AdminEventPage() {
             <TextInput name="name" placeholder="Enter team name" required />
           </div>
           <div>
-            <FormLabel>Organization</FormLabel>
-            <TextInput name="organization" placeholder="Enter organization" />
+            <FormLabel>Organization (optional)</FormLabel>
+            <TextInput name="organization" placeholder="Club or organization" />
           </div>
           <div>
             <FormLabel>Roster</FormLabel>
@@ -1103,8 +1106,8 @@ export function AdminEventPage() {
             <TextInput name="name" placeholder="Enter player name" required />
           </div>
           <div>
-            <FormLabel>Organization *</FormLabel>
-            <TextInput name="organization" placeholder="Enter organization" required />
+            <FormLabel>Organization (optional)</FormLabel>
+            <TextInput name="organization" placeholder="Club or organization" />
           </div>
           <SeededSelect />
         </>

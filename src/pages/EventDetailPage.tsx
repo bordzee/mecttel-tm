@@ -7,7 +7,6 @@ import { GroupStageNavigator } from '../components/GroupStageNavigator'
 import {
   BackLink,
   ConfigRowsCard,
-  EmptyMessage,
   ErrorMessage,
   EventPageTitle,
   InfoNoteCard,
@@ -22,6 +21,8 @@ import { entrySortKey, getStartLayoutOptions } from '../lib/groupLayout'
 import { isFirebaseConfigured } from '../lib/firebase'
 import { EVENT_TYPE_LABELS } from '../lib/constants'
 import { getCategoryDisplay, getEventDisplayName } from '../lib/displayNames'
+import { useMinLoading } from '../hooks/useMinLoading'
+import { EventDetailSkeleton } from '../components/ui/Skeleton'
 import type { Tournament, TournamentEvent, TournamentEntry } from '../types'
 
 type PublicDivisionTab = 'participants' | 'brackets'
@@ -46,6 +47,7 @@ export function EventDetailPage() {
   const [groupCount, setGroupCount] = useState(0)
   const [rostersByTeamId, setRostersByTeamId] = useState<Map<string, string[]>>(new Map())
   const [loading, setLoading] = useState(true)
+  const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -119,10 +121,10 @@ export function EventDetailPage() {
     )
   }
 
-  if (loading || !tournament || !event) {
+  if (showSkeleton || !tournament || !event) {
     return (
       <AppLayout>
-        <EmptyMessage>Loading…</EmptyMessage>
+        <EventDetailSkeleton />
       </AppLayout>
     )
   }

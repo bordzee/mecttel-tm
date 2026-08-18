@@ -4,18 +4,20 @@ import { TournamentCard } from '../components/TournamentCard'
 import {
   EmptyStatePanel,
   ErrorBanner,
-  EmptyMessage,
   SectionTitle,
   WarningBanner,
 } from '../components/ui/primitives'
 import { fetchPublicTournaments } from '../lib/tournamentService'
 import { isFirebaseConfigured } from '../lib/firebase'
+import { useMinLoading } from '../hooks/useMinLoading'
+import { HomePageSkeleton } from '../components/ui/Skeleton'
 import type { Tournament, TournamentEvent } from '../types'
 
 export function HomePage() {
   const [ongoing, setOngoing] = useState<(Tournament & { events: TournamentEvent[] })[]>([])
   const [upcoming, setUpcoming] = useState<(Tournament & { events: TournamentEvent[] })[]>([])
   const [loading, setLoading] = useState(isFirebaseConfigured)
+  const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -57,10 +59,10 @@ export function HomePage() {
     )
   }
 
-  if (loading) {
+  if (showSkeleton) {
     return (
       <AppLayout>
-        <EmptyMessage>Loading tournaments…</EmptyMessage>
+        <HomePageSkeleton />
       </AppLayout>
     )
   }

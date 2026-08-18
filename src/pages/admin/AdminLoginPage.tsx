@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { useMinLoading } from '../../hooks/useMinLoading'
 import { isFirebaseConfigured } from '../../lib/firebase'
+import { AuthCheckingSkeleton } from '../../components/ui/Skeleton'
 import {
   BackLink,
   Button,
@@ -12,6 +14,7 @@ import {
 
 export function AdminLoginPage() {
   const { signIn, signOut, user, isAdmin, loading: authLoading } = useAuth()
+  const showAuthSkeleton = useMinLoading(authLoading)
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/admin'
@@ -51,10 +54,10 @@ export function AdminLoginPage() {
     }
   }
 
-  if (authLoading || (user && isAdmin)) {
+  if (showAuthSkeleton || (user && isAdmin)) {
     return (
-      <div className="min-h-screen bg-navy flex items-center justify-center text-text-steel">
-        Loading…
+      <div className="min-h-screen bg-navy flex items-center justify-center">
+        <AuthCheckingSkeleton message="Signing in" />
       </div>
     )
   }

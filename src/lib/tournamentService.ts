@@ -376,7 +376,7 @@ export async function addPairEntry(
 
 export async function updatePlayerEntry(
   entry: TournamentEntry,
-  update: { name: string; organization: string; seeded: boolean | null },
+  update: { name: string; organization: string | null; seeded: boolean | null },
 ) {
   if (!entry.player_id) throw new Error('Not a player entry')
   const batch = writeBatch(db)
@@ -395,7 +395,7 @@ export async function updatePairEntry(
     pair_name: string
     player_a: string
     player_b: string
-    organization: string
+    organization: string | null
     seeded: boolean | null
   },
 ) {
@@ -416,7 +416,7 @@ export async function updateTeamEntry(
   entry: TournamentEntry,
   update: {
     name: string
-    organization: string
+    organization: string | null
     seeded: boolean | null
     roster?: string[]
   },

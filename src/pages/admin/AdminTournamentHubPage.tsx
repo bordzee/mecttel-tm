@@ -23,6 +23,8 @@ import {
   updateTournament,
   deleteTournament,
 } from '../../lib/tournamentService'
+import { useMinLoading } from '../../hooks/useMinLoading'
+import { AdminHubSkeleton } from '../../components/ui/Skeleton'
 import type { Tournament, TournamentEvent } from '../../types'
 
 export function AdminTournamentHubPage() {
@@ -36,6 +38,7 @@ export function AdminTournamentHubPage() {
   const [editDate, setEditDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
+  const showPageSkeleton = useMinLoading(pageLoading)
   const [loadError, setLoadError] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -92,10 +95,10 @@ export function AdminTournamentHubPage() {
     }
   }
 
-  if (pageLoading) {
+  if (showPageSkeleton) {
     return (
       <AdminLayout>
-        <p className="text-text-steel">Loading…</p>
+        <AdminHubSkeleton />
       </AdminLayout>
     )
   }
