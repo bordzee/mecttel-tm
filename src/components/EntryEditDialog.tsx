@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { EventType, TournamentEntry } from '../types'
 import { SeededSelect } from './SeededSelect'
 import {
@@ -101,14 +102,16 @@ export function EntryEditDialog({
   const isDoubles = eventType === 'doubles'
   const isTeam = eventType === 'team'
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60">
+  return createPortal(
+    <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" aria-hidden />
       {error ? (
         <StatusPopups error={error} onErrorDismiss={onErrorDismiss ?? (() => {})} />
       ) : null}
       <div
-        className="w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+        className="relative w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
         role="dialog"
+        aria-modal="true"
         aria-labelledby="entry-edit-title"
       >
         <PanelSectionTitle>Edit entry</PanelSectionTitle>
@@ -227,6 +230,7 @@ export function EntryEditDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

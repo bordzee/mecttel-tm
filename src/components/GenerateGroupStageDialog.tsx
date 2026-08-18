@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { KnockoutBracketPicker } from './KnockoutBracketPicker'
 import { StartLayoutPicker } from './StartLayoutPicker'
@@ -50,34 +49,17 @@ export function GenerateGroupStageDialog({
   onKnockoutBracketChange: (value: KnockoutBracketType) => void
   onGenerate: () => void
 }) {
-  useEffect(() => {
-    if (!open || loading) return
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, loading, onClose])
-
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4 bg-black/60">
-      <button
-        type="button"
-        className="absolute inset-0 border-0 cursor-default"
-        aria-label="Close dialog"
-        onClick={() => !loading && onClose()}
-      />
+    <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" aria-hidden />
 
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="generate-group-stage-title"
         className="relative w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
       >
         <PanelSectionTitle>Ready to start</PanelSectionTitle>
         <p id="generate-group-stage-title" className="text-sm text-text-steel leading-snug">

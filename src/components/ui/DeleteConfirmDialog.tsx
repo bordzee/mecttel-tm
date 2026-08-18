@@ -45,17 +45,6 @@ export function DeleteConfirmDialog({
     return () => clearTimeout(timer)
   }, [open])
 
-  useEffect(() => {
-    if (!open || confirming) return
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancel()
-    }
-
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, confirming, onCancel])
-
   if (!mounted) return null
 
   const requestClose = () => {
@@ -65,11 +54,9 @@ export function DeleteConfirmDialog({
 
   return createPortal(
     <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4">
-      <button
-        type="button"
-        className={`confirm-backdrop confirm-backdrop--${phase} absolute inset-0 bg-black/60 border-0 cursor-default`}
-        aria-label="Close dialog"
-        onClick={requestClose}
+      <div
+        className={`confirm-backdrop confirm-backdrop--${phase} absolute inset-0 bg-black/60`}
+        aria-hidden
       />
 
       <div

@@ -96,7 +96,6 @@ export function ParticipantsListDialog({
         aria-modal="true"
         aria-labelledby="participants-list-title"
         className="relative w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
       >
         <PanelSectionTitle>Participants</PanelSectionTitle>
         <p id="participants-list-title" className="sr-only">

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   validateLateJoinTarget,
   type GroupSummary,
@@ -60,11 +61,13 @@ export function LateEntryDialog({
           : 'Selected group'
         : 'New group'
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60">
+  return createPortal(
+    <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" aria-hidden />
       <div
-        className="w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+        className="relative w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
         role="dialog"
+        aria-modal="true"
         aria-labelledby="late-entry-title"
       >
         <PanelSectionTitle>Late check-in</PanelSectionTitle>
@@ -151,6 +154,7 @@ export function LateEntryDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
