@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore'
 import { db } from './firebase'
 import { deleteEventData, deleteTournamentData, deleteWhere, deleteQueryDocs, deleteEntryReferences, stripUndefined } from './firebaseHelpers'
+import { deleteTournamentImageFiles } from './tournamentImageService'
 import type {
   EventType,
   Category,
@@ -258,6 +259,7 @@ export async function fetchEntries(tournamentId: string, eventId: string): Promi
 
 export async function deleteTournament(id: string) {
   await deleteTournamentData(id)
+  await deleteTournamentImageFiles(id)
 }
 
 export async function deleteEvent(tournamentId: string, eventId: string) {

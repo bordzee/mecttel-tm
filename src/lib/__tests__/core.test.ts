@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { getEntrySeededFilterStatus, isEntrySeeded } from '../groupLayout'
+import { validateImageUrl } from '../tournamentImageService'
 import { calculateTieFromRubbers, validateSetScore } from '../scoring'
 import { needsManualRankResolution, computeStandings } from '../standings'
 import { normalizeEntryName, rosterNameCollisionWarnings } from '../entryValidation'
@@ -126,6 +128,57 @@ describe('standings', () => {
     expect(rows[1]?.rank).toBe(2)
     expect(rows[0]?.seeded).toBe(true)
     expect(rows[2]?.seeded).toBe(false)
+  })
+})
+
+describe('groupLayout', () => {
+  it('classifies seeded filter status', () => {
+    const seeded: TournamentEntry = {
+      id: '1',
+      tournament_id: 't',
+      event_id: 'e',
+      entry_type: 'player',
+      team_id: null,
+      player_id: 'p1',
+      pair_id: null,
+      seeded: true,
+      player: {
+        id: 'p1',
+        tournament_id: 't',
+        event_id: 'e',
+        name: 'Seeded',
+        organization: null,
+        seeded: true,
+      },
+    }
+    const nonSeeded: TournamentEntry = {
+      ...seeded,
+      id: '2',
+      player_id: 'p2',
+      seeded: false,
+      player: { ...seeded.player!, id: 'p2', name: 'Not seeded', seeded: false },
+    }
+    const notSet: TournamentEntry = {
+      ...seeded,
+      id: '3',
+      player_id: 'p3',
+      seeded: null,
+      player: { ...seeded.player!, id: 'p3', name: 'Unset', seeded: null },
+    }
+
+    expect(isEntrySeeded(seeded)).toBe(true)
+    expect(getEntrySeededFilterStatus(seeded)).toBe('seeded')
+    expect(getEntrySeededFilterStatus(nonSeeded)).toBe('non-seeded')
+    expect(getEntrySeededFilterStatus(notSet)).toBe('not-set')
+  })
+})
+
+describe('tournamentImageService', () => {
+  it('validates image URLs', () => {
+    expect(validateImageUrl('')).toBeNull()
+    expect(validateImageUrl('https://example.com/cover.jpg')).toBeNull()
+    expect(validateImageUrl('not-a-url')).toBeTruthy()
+    expect(validateImageUrl('ftp://example.com/a.jpg')).toBeTruthy()
   })
 })
 

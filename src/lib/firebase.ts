@@ -2,6 +2,7 @@ import { initializeApp, getApps, type FirebaseOptions } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
+import { getStorage } from 'firebase/storage'
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -19,6 +20,17 @@ export const isFirebaseConfigured = Boolean(
     !String(firebaseConfig.apiKey).includes('your-'),
 )
 
+export const isStorageConfigured = Boolean(
+  isFirebaseConfigured &&
+    firebaseConfig.storageBucket &&
+    !String(firebaseConfig.storageBucket).includes('your-'),
+)
+
+/** File upload requires Storage on the Blaze plan — opt in via VITE_FIREBASE_IMAGE_UPLOAD=true */
+export const isImageUploadEnabled = Boolean(
+  isStorageConfigured && import.meta.env.VITE_FIREBASE_IMAGE_UPLOAD === 'true',
+)
+
 const demoConfig: FirebaseOptions = { apiKey: 'demo', projectId: 'demo', appId: 'demo' }
 
 const app = isFirebaseConfigured
@@ -30,3 +42,4 @@ const app = isFirebaseConfigured
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const functions = getFunctions(app)
+export const storage = getStorage(app)

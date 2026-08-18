@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 const AUTO_DISMISS_MS = 4200
-const EXIT_MS = 280
 
 type PopupKind = 'success' | 'error'
 
@@ -16,43 +15,70 @@ function PopupCard({
   onDismiss: () => void
 }) {
   const [phase, setPhase] = useState<'enter' | 'idle' | 'exit'>('enter')
-  const [visible, setVisible] = useState(true)
+  const [mounted, setMounted] = useState(true)
+  const finishedRef = useRef(false)
   const isSuccess = kind === 'success'
 
   useEffect(() => {
-    setVisible(true)
+    finishedRef.current = false
+    setMounted(true)
     setPhase('enter')
-    const raf = requestAnimationFrame(() => setPhase('idle'))
-    const timer = setTimeout(() => setPhase('exit'), AUTO_DISMISS_MS)
-    return () => {
-      cancelAnimationFrame(raf)
-      clearTimeout(timer)
-    }
   }, [message])
+
+  const finishExit = useCallback(() => {
+    if (finishedRef.current) return
+    finishedRef.current = true
+    setMounted(false)
+    onDismiss()
+  }, [onDismiss])
+
+  useEffect(() => {
+    if (phase !== 'idle') return
+    const timer = setTimeout(() => setPhase('exit'), AUTO_DISMISS_MS)
+    return () => clearTimeout(timer)
+  }, [phase, message])
+
+  useEffect(() => {
+    if (phase !== 'enter') return
+    const timer = setTimeout(() => setPhase((current) => (current === 'enter' ? 'idle' : current)), 360)
+    return () => clearTimeout(timer)
+  }, [phase, message])
 
   useEffect(() => {
     if (phase !== 'exit') return
-    const timer = setTimeout(() => {
-      setVisible(false)
-      onDismiss()
-    }, EXIT_MS)
+    const timer = setTimeout(finishExit, 300)
     return () => clearTimeout(timer)
-  }, [phase, onDismiss])
+  }, [phase, finishExit])
+
+  const handleAnimationEnd = useCallback(
+    (event: React.AnimationEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) return
+      if (phase === 'enter') {
+        setPhase('idle')
+        return
+      }
+      if (phase === 'exit') {
+        finishExit()
+      }
+    },
+    [phase, finishExit],
+  )
 
   const dismissNow = useCallback(() => {
-    setPhase('exit')
-  }, [])
+    if (phase !== 'exit') setPhase('exit')
+  }, [phase])
 
-  if (!visible) return null
+  if (!mounted) return null
 
   return (
     <div
       role={isSuccess ? 'status' : 'alert'}
       aria-live={isSuccess ? 'polite' : 'assertive'}
+      onAnimationEnd={handleAnimationEnd}
       className={`status-popup status-popup--${phase} pointer-events-auto flex items-start gap-2.5 max-w-sm w-full rounded-2xl border px-4 py-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] ${
         isSuccess
           ? 'bg-green-soft border-winner text-text-bluewhite'
-          : 'bg-[#FF3B3B14] border-live text-live'
+          : 'bg-red-soft border-live text-text-bluewhite'
       }`}
     >
       {isSuccess ? (
@@ -82,7 +108,7 @@ function PopupCard({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="shrink-0 mt-0.5"
+          className="text-live shrink-0 mt-0.5"
           aria-hidden
         >
           <circle cx="12" cy="12" r="10" />
@@ -96,11 +122,7 @@ function PopupCard({
       <button
         type="button"
         onClick={dismissNow}
-        className={`shrink-0 rounded-lg p-1 transition-colors ${
-          isSuccess
-            ? 'text-text-steel hover:text-text-bluewhite'
-            : 'text-live/70 hover:text-live'
-        }`}
+        className="shrink-0 rounded-lg p-1 text-text-steel transition-colors hover:text-text-bluewhite"
         aria-label="Dismiss"
       >
         <svg

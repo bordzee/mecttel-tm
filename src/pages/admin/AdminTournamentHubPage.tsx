@@ -23,6 +23,8 @@ import {
   updateTournament,
   deleteTournament,
 } from '../../lib/tournamentService'
+import { resolveTournamentImageForSave } from '../../lib/tournamentImageService'
+import { TournamentImageUpload } from '../../components/TournamentImageUpload'
 import { useMinLoading } from '../../hooks/useMinLoading'
 import { AdminHubSkeleton } from '../../components/ui/Skeleton'
 import type { Tournament, TournamentEvent } from '../../types'
@@ -36,6 +38,9 @@ export function AdminTournamentHubPage() {
   const [editName, setEditName] = useState('')
   const [editVenue, setEditVenue] = useState('')
   const [editDate, setEditDate] = useState('')
+  const [editImageFile, setEditImageFile] = useState<File | null>(null)
+  const [editImageUrlInput, setEditImageUrlInput] = useState('')
+  const [clearImage, setClearImage] = useState(false)
   const [loading, setLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
   const showPageSkeleton = useMinLoading(pageLoading)
@@ -53,6 +58,9 @@ export function AdminTournamentHubPage() {
     setEditName(t.name)
     setEditVenue(t.venue ?? '')
     setEditDate(t.start_date ?? '')
+    setEditImageFile(null)
+    setEditImageUrlInput(t.image_url ?? '')
+    setClearImage(false)
   }, [tournamentId])
 
   useEffect(() => {
@@ -69,12 +77,23 @@ export function AdminTournamentHubPage() {
     setLoading(true)
     setError('')
     try {
+      const imageUrl = await resolveTournamentImageForSave(tournamentId, {
+        file: editImageFile,
+        urlInput: editImageUrlInput,
+        clear: clearImage,
+        existingUrl: tournament?.image_url,
+      })
+
       await updateTournament(tournamentId, {
         name: editName,
         venue: editVenue,
         start_date: editDate,
+        image_url: imageUrl,
       })
       setEditing(false)
+      setEditImageFile(null)
+      setEditImageUrlInput('')
+      setClearImage(false)
       setMessage('Changes saved.')
       await load()
     } catch (err) {
@@ -160,6 +179,20 @@ export function AdminTournamentHubPage() {
             <TextInput value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Tournament name" />
             <TextInput value={editVenue} onChange={(e) => setEditVenue(e.target.value)} placeholder="Venue" />
             <TextInput type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+            <TournamentImageUpload
+              imageUrl={clearImage ? null : tournament.image_url}
+              urlInput={editImageUrlInput}
+              onUrlInputChange={(url) => {
+                setEditImageUrlInput(url)
+                if (url.trim()) setClearImage(false)
+              }}
+              onFileChange={(file) => {
+                setEditImageFile(file)
+                if (file) setClearImage(false)
+              }}
+              onClear={() => setClearImage(true)}
+              disabled={loading}
+            />
             <Button onClick={handleSave} disabled={loading} fullWidth>
               Save changes
             </Button>

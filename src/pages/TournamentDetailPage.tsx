@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AppLayout } from '../components/AppLayout'
 import { DivisionRow } from '../components/DivisionRow'
+import { TournamentCoverImage } from '../components/TournamentCoverImage'
 import {
   BackLink,
   CenteredState,
@@ -108,6 +109,8 @@ export function TournamentDetailPage() {
           <EventPageTitle>{tournament.name}</EventPageTitle>
           <MetaIconsRow date={tournament.start_date} venue={tournament.venue} />
         </div>
+
+        <TournamentCoverImage imageUrl={tournament.image_url} alt={tournament.name} />
 
         <section className="space-y-3">
           <ScreenSectionTitle>Choose a division</ScreenSectionTitle>

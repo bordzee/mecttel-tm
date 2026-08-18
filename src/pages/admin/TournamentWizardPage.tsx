@@ -20,7 +20,9 @@ import {
   divisionDraftToEventInput,
   type DivisionDraft,
 } from '../../components/DivisionConfigForm'
-import { createTournament, createTournamentWithEvents } from '../../lib/tournamentService'
+import { createTournament, createTournamentWithEvents, updateTournament } from '../../lib/tournamentService'
+import { resolveTournamentImageForSave } from '../../lib/tournamentImageService'
+import { TournamentImageUpload } from '../../components/TournamentImageUpload'
 
 function chunkPresets<T>(items: T[], size: number): T[][] {
   const rows: T[][] = []
@@ -39,6 +41,8 @@ export function TournamentWizardPage() {
   const [name, setName] = useState('')
   const [venue, setVenue] = useState('')
   const [startDate, setStartDate] = useState('')
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imageUrlInput, setImageUrlInput] = useState('')
   const [divisions, setDivisions] = useState<DivisionDraft[]>([])
 
   const presetRows = useMemo(() => chunkPresets(DIVISION_PRESETS, 2), [])
@@ -51,11 +55,22 @@ export function TournamentWizardPage() {
     setDivisions((prev) => [...prev, createDivisionDraft(preset)])
   }
 
+  const persistImage = async (tournamentId: string) => {
+    const imageUrl = await resolveTournamentImageForSave(tournamentId, {
+      file: imageFile,
+      urlInput: imageUrlInput,
+    })
+    if (imageUrl) {
+      await updateTournament(tournamentId, { image_url: imageUrl })
+    }
+  }
+
   const handleCreateHubOnly = async () => {
     setError('')
     setSaving(true)
     try {
       const tournament = await createTournament({ name, venue, start_date: startDate })
+      await persistImage(tournament.id)
       navigate(`/admin/tournaments/${tournament.id}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create')
@@ -77,6 +92,7 @@ export function TournamentWizardPage() {
         { name, venue, start_date: startDate },
         events,
       )
+      await persistImage(tournament.id)
       navigate(`/admin/tournaments/${tournament.id}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create')
@@ -119,6 +135,12 @@ export function TournamentWizardPage() {
                 onChange={(e) => setStartDate(e.target.value)}
               />
             </div>
+            <TournamentImageUpload
+              urlInput={imageUrlInput}
+              onUrlInputChange={setImageUrlInput}
+              onFileChange={setImageFile}
+              disabled={saving}
+            />
             <Button onClick={handleCreateHubOnly} disabled={!name || saving} fullWidth>
               {saving ? 'Creating…' : 'Create tournament'}
             </Button>

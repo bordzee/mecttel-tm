@@ -41,6 +41,8 @@ export interface Tournament {
   created_at: string
   /** True when at least one division is upcoming or ongoing (public listing). */
   public_visible?: boolean
+  /** Cover image URL (Firebase Storage). */
+  image_url?: string | null
 }
 
 /** A division/category inside a tournament (e.g. Singles – U12). */

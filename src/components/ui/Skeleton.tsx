@@ -80,10 +80,11 @@ export function TournamentDetailSkeleton() {
         <Skeleton className="h-8 w-[85%] rounded-lg" style={staggerStyle(1)} />
         <Skeleton className="h-4 w-52 rounded-md" style={staggerStyle(2)} />
       </div>
+      <Skeleton className="aspect-[16/9] w-full rounded-2xl" style={staggerStyle(3)} />
       <section className="space-y-3">
-        <Skeleton className="h-5 w-40 rounded-md" style={staggerStyle(3)} />
+        <Skeleton className="h-5 w-40 rounded-md" style={staggerStyle(4)} />
         <div className="space-y-2.5">
-          {[4, 5, 6].map((i) => (
+          {[5, 6, 7].map((i) => (
             <div
               key={i}
               className="bg-card border border-border rounded-2xl p-4 flex items-center justify-between gap-3"
@@ -104,7 +105,7 @@ export function TournamentDetailSkeleton() {
 
 export function EventDetailSkeleton() {
   return (
-    <div className="space-y-[18px]">
+    <div className="space-y-4">
       <LoadingStatus label="Loading division" />
       <Skeleton className="h-4 w-32 rounded-md" style={staggerStyle(0)} />
       <Skeleton className="h-8 w-[90%] rounded-lg" style={staggerStyle(1)} />
@@ -113,8 +114,9 @@ export function EventDetailSkeleton() {
         <Skeleton className="h-7 w-16 rounded-full" style={staggerStyle(3)} />
         <Skeleton className="h-7 w-28 rounded-full" style={staggerStyle(4)} />
       </div>
-      <ConfigCardSkeleton index={5} />
-      <ParticipantsListSkeleton startIndex={6} />
+      <Skeleton className="aspect-[16/9] w-full rounded-2xl" style={staggerStyle(5)} />
+      <Skeleton className="h-10 w-full rounded-[10px]" style={staggerStyle(6)} />
+      <ConfigCardSkeleton index={7} />
     </div>
   )
 }

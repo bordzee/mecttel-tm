@@ -116,21 +116,22 @@ body {
 }
 
 .status-popup {
-  animation-fill-mode: forwards;
   will-change: transform, opacity;
 }
 
 .status-popup--enter {
-  animation: status-popup-enter 340ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: status-popup-enter 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .status-popup--idle {
   opacity: 1;
   transform: translateY(0) scale(1);
+  animation: none;
 }
 
 .status-popup--exit {
-  animation: status-popup-exit 280ms cubic-bezier(0.4, 0, 0.8, 1);
+  animation: status-popup-exit 280ms cubic-bezier(0.4, 0, 0.8, 1) forwards;
+  pointer-events: none;
 }
 
 @keyframes confirm-backdrop-enter {

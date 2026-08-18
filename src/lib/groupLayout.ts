@@ -226,6 +226,23 @@ export function isEntrySeeded(entry: TournamentEntry): boolean {
   return false
 }
 
+export type EntrySeededFilterStatus = 'seeded' | 'non-seeded' | 'not-set'
+
+export function getEntrySeededFilterStatus(entry: TournamentEntry): EntrySeededFilterStatus {
+  if (isEntrySeeded(entry)) return 'seeded'
+  const raw =
+    entry.seeded ??
+    (entry.entry_type === 'team'
+      ? entry.team?.seeded
+      : entry.entry_type === 'player'
+        ? entry.player?.seeded
+        : entry.entry_type === 'pair'
+          ? entry.pair?.seeded
+          : null)
+  if (raw === false) return 'non-seeded'
+  return 'not-set'
+}
+
 export function entrySortKey(entry: TournamentEntry): number {
   if (isEntrySeeded(entry)) return 0
   if (entry.seeded === false) return 1

@@ -1,0 +1,21 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/profiles/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /tournaments/{tournamentId}/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin()
+        && fileName.matches('cover\\.(jpg|jpeg|png|webp)')
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin()
+        && fileName.matches('cover\\.(jpg|jpeg|png|webp)');
+    }
+  }
+}

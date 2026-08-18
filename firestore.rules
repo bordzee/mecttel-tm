@@ -83,12 +83,14 @@ service cloud.firestore {
         && isString(request.resource.data.name)
         && isOptionalString(request.resource.data.venue)
         && isOptionalString(request.resource.data.start_date)
+        && isOptionalString(request.resource.data.image_url)
         && isBool(request.resource.data.public_visible)
         && isString(request.resource.data.created_at);
       allow update: if isAdmin()
         && isString(request.resource.data.name)
         && isOptionalString(request.resource.data.venue)
         && isOptionalString(request.resource.data.start_date)
+        && isOptionalString(request.resource.data.image_url)
         && isBool(request.resource.data.public_visible);
       allow delete: if isAdmin();
 
