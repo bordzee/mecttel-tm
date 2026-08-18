@@ -7,13 +7,16 @@ export function TournamentCoverImage({
   alt: string
   className?: string
 }) {
+  const frameClass = `relative w-full overflow-hidden ${className}`
+
   if (!imageUrl) {
     return (
       <div
-        className={`overflow-hidden rounded-2xl border border-border bg-card-raised ${className}`}
+        className={`${frameClass} border border-border bg-gradient-to-br from-card-raised to-navy`}
         aria-hidden
       >
-        <div className="flex aspect-[16/9] items-center justify-center bg-gradient-to-br from-card-raised to-navy text-text-steel">
+        <div className="w-full pt-[56.25%]" />
+        <div className="absolute inset-0 flex items-center justify-center text-text-steel">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="44"
@@ -35,8 +38,15 @@ export function TournamentCoverImage({
   }
 
   return (
-    <div className={`overflow-hidden rounded-2xl border border-border ${className}`}>
-      <img src={imageUrl} alt={alt} className="w-full aspect-[16/9] object-cover" />
+    <div className={`${frameClass} border border-border bg-card-raised`}>
+      <div className="w-full pt-[56.25%]" />
+      <img
+        src={imageUrl}
+        alt={alt}
+        className="absolute inset-0 h-full w-full object-cover"
+        loading="lazy"
+        decoding="async"
+      />
     </div>
   )
 }

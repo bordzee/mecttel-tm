@@ -36,7 +36,7 @@ export function TournamentCard({
       <TournamentCoverImage
         imageUrl={tournament.image_url}
         alt={tournament.name}
-        className="rounded-none border-0 border-b border-border"
+        className="rounded-none border-x-0 border-t-0 border-b border-border"
       />
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">

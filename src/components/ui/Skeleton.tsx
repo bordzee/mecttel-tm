@@ -36,7 +36,7 @@ function TournamentCardSkeleton({ index }: { index: number }) {
       className="bg-card rounded-2xl border border-border overflow-hidden"
       style={staggerStyle(index)}
     >
-      <Skeleton className="aspect-[16/9] w-full rounded-none" />
+      <Skeleton className="w-full pt-[56.25%] rounded-none" />
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
           <Skeleton className="h-5 w-[68%] rounded-md" />
