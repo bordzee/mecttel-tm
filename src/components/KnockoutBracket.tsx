@@ -13,7 +13,8 @@ function entryName(match: KnockoutMatch, side: 'a' | 'b'): string {
   const entry = side === 'a' ? match.entry_a : match.entry_b
   if (entry) return getEntryDisplayName(entry)
   if (side === 'b' && match.outcome === 'bye') return 'BYE'
-  if (side === 'a' && !entry && match.pending_odd_round) return 'Winner play-in'
+  if (side === 'a' && !entry && match.is_odd_play_in) return 'Winner play-in'
+  if (side === 'a' && !entry && match.pending_odd_round) return 'Top seed (bye)'
   if (side === 'b' && !entry && match.pending_odd_round) return 'TBD'
   return 'TBD'
 }

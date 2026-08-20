@@ -1441,6 +1441,14 @@ export function AdminEventPage() {
             )
             const finalMatch = knockoutMatches.find((m) => m.round === 'final')
             const knockoutDone = finalMatch?.status === 'completed'
+            const waitingOnEarlierRound = knockoutMatches.some(
+              (m) =>
+                (m.round === 'quarter' || m.round === 'semi') &&
+                m.status !== 'completed' &&
+                m.entry_a_id &&
+                m.entry_b_id &&
+                m.outcome !== 'bye',
+            )
 
             return (
               <section className="space-y-4">
@@ -1466,7 +1474,11 @@ export function AdminEventPage() {
                     ))}
                   </div>
                 )}
-                {scorable.length === 0 && activeKnockoutRound === 'semi' && finalMatch && finalMatch.status !== 'completed' && (
+                {scorable.length === 0 &&
+                  activeKnockoutRound === 'semi' &&
+                  finalMatch &&
+                  finalMatch.status !== 'completed' &&
+                  !waitingOnEarlierRound && (
                   <div className="rounded-xl border border-border bg-[#0C284780] p-3.5 space-y-2">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-text-steel">FINAL · WAITING</p>
                     <div className="flex items-center justify-between gap-3 text-sm">
@@ -1480,7 +1492,7 @@ export function AdminEventPage() {
                     </div>
                   </div>
                 )}
-                {scorable.length === 0 && activeKnockoutRound !== 'final' && !knockoutDone && activeKnockoutRound !== 'semi' && (
+                {scorable.length === 0 && activeKnockoutRound !== 'final' && !knockoutDone && waitingOnEarlierRound && (
                   <p className="text-sm text-text-steel">
                     Waiting for earlier round results — winners advance automatically.
                   </p>

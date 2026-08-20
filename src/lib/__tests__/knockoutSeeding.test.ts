@@ -97,39 +97,79 @@ describe('knockoutSeeding', () => {
     }
   })
 
-  it('advances block quarter winners to semis for 6 groups', () => {
-    const { advancersByGroup, groupOrder } = mockAdvancers(6, 2)
-    const { tree } = generateKnockoutPairings(
-      advancersByGroup,
-      groupOrder,
-      entries,
-      2,
-      'block',
-    )
-    const matches = treeToMatches(tree)
+  it.each(['cross', 'block'] as const)(
+    'uses seeded bye bracket for 12 advancers (6 groups × 2, %s)',
+    (bracketType) => {
+      const { advancersByGroup, groupOrder } = mockAdvancers(6, 2)
+      const { tree, warnings } = generateKnockoutPairings(
+        advancersByGroup,
+        groupOrder,
+        entries,
+        2,
+        bracketType,
+      )
 
-    completeRound(matches, 'quarter')
-    const updates = computeKnockoutAdvancement(matches)
+      expect(warnings.some((w) => w.message.includes('seeded bye bracket'))).toBe(true)
+      expect(warnings.some((w) => w.message.includes(`${bracketType} knockout`))).toBe(true)
 
-    expect(updates.get('s-0')).toMatchObject({
-      entry_a_id: 'g0-0',
-      entry_b_id: 'g1-0',
-      status: 'scheduled',
-    })
-    expect(updates.get('s-1')).toMatchObject({
-      entry_a_id: 'g2-0',
-      entry_b_id: 'g3-0',
-      status: 'scheduled',
-    })
-    expect(updates.get('s-2')).toMatchObject({
-      entry_a_id: 'g4-0',
-      entry_b_id: 'g5-0',
-      status: 'scheduled',
-    })
-  })
+      const quarters = tree.filter((n) => n.slot.round === 'quarter')
+      expect(quarters).toHaveLength(8)
+      expect(quarters.filter((n) => n.slot.isBye)).toHaveLength(4)
+      expect(quarters.filter((n) => n.slot.entryAId && n.slot.entryBId)).toHaveLength(4)
+
+      const matches = treeToMatches(tree)
+      completeRound(matches, 'quarter')
+      const updates = computeKnockoutAdvancement(matches)
+
+      expect(updates.get('s-0')).toMatchObject({
+        entry_a_id: 'g0-0',
+        entry_b_id: 'g1-1',
+        status: 'scheduled',
+      })
+      expect(updates.get('s-1')).toMatchObject({
+        entry_a_id: 'g3-0',
+        entry_b_id: 'g4-0',
+        status: 'scheduled',
+      })
+    },
+  )
+
+  it.each(['cross', 'block'] as const)(
+    'keeps group-rank pairing for 8 advancers (4 groups × 2, %s)',
+    (bracketType) => {
+      const { advancersByGroup, groupOrder } = mockAdvancers(4, 2)
+      const { tree, warnings } = generateKnockoutPairings(
+        advancersByGroup,
+        groupOrder,
+        entries,
+        2,
+        bracketType,
+      )
+
+      expect(warnings.some((w) => w.message.includes('seeded bye bracket'))).toBe(false)
+
+      const matches = treeToMatches(tree)
+      expect(matches.filter((m) => m.round === 'quarter')).toHaveLength(4)
+      expect(matches.filter((m) => m.round === 'quarter' && m.outcome === 'bye')).toHaveLength(0)
+
+      completeRound(matches, 'quarter')
+      const updates = computeKnockoutAdvancement(matches)
+
+      expect(updates.get('s-0')).toMatchObject({
+        entry_a_id: 'g0-0',
+        entry_b_id: 'g1-0',
+        status: 'scheduled',
+      })
+      expect(updates.get('s-1')).toMatchObject({
+        entry_a_id: 'g2-0',
+        entry_b_id: 'g3-0',
+        status: 'scheduled',
+      })
+    },
+  )
 
   it('advances quarters to semis without source links using slot order (legacy)', () => {
-    const { advancersByGroup, groupOrder } = mockAdvancers(6, 2)
+    const { advancersByGroup, groupOrder } = mockAdvancers(4, 2)
     const { tree } = generateKnockoutPairings(
       advancersByGroup,
       groupOrder,
@@ -162,6 +202,40 @@ describe('knockoutSeeding', () => {
 
     expect(updates.get('s-0')?.status).toBe('scheduled')
     expect(updates.get('s-1')?.status).toBe('scheduled')
-    expect(updates.get('s-2')?.status).toBe('scheduled')
+  })
+
+  it('does not use legacy slot pairing when quarter count exceeds semi pairs', () => {
+    const { advancersByGroup, groupOrder } = mockAdvancers(6, 2)
+    const { tree } = generateKnockoutPairings(
+      advancersByGroup,
+      groupOrder,
+      entries,
+      2,
+      'cross',
+    )
+
+    const matches = tree
+      .filter((n) => ['quarter', 'semi', 'final'].includes(n.slot.round))
+      .map((n) => ({
+        id: n.key,
+        round: n.slot.round,
+        slot: n.slot.slot,
+        bracket_side: n.slot.bracketSide,
+        entry_a_id: n.slot.entryAId,
+        entry_b_id: n.slot.entryBId,
+        winner_entry_id: n.slot.winnerEntryId ?? null,
+        source_match_a_id: null,
+        source_match_b_id: null,
+        status: n.slot.isBye ? 'completed' : n.slot.entryAId && n.slot.entryBId ? 'scheduled' : 'pending',
+        outcome: n.slot.isBye ? 'bye' : 'normal',
+        pending_odd_round: n.slot.pendingOddRound ?? false,
+        is_odd_play_in: n.slot.isOddPlayIn ?? false,
+        feeder_source_match_ids: [] as string[],
+      }))
+
+    completeRound(matches, 'quarter')
+    const updates = computeKnockoutAdvancement(matches)
+
+    expect(updates.size).toBe(0)
   })
 })

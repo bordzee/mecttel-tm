@@ -216,17 +216,10 @@ function buildStandardBracketWithByes(
   const warnings: SeedingWarning[] = []
   const n = advancers.length
   const bracketSize = nextPowerOf2(n)
-  const byeCount = bracketSize - n
   const ordered = [...advancers].sort(compareStandingStrength)
   const seedOrder = getBracketSeedOrder(bracketSize)
   const matchCount = bracketSize / 2
   const slots: KnockoutSlot[] = []
-
-  if (byeCount > 0) {
-    warnings.push({
-      message: `${byeCount} bye${byeCount === 1 ? '' : 's'} after group stage — top seed${byeCount === 1 ? '' : 's'} skip quarters`,
-    })
-  }
 
   for (let i = 0; i < matchCount; i++) {
     const seedA = seedOrder[i * 2]
@@ -270,6 +263,13 @@ function buildStandardBracketWithByes(
         winnerEntryId: rowB.entryId,
       })
     }
+  }
+
+  const actualByeCount = slots.filter((s) => s.isBye).length
+  if (actualByeCount > 0) {
+    warnings.push({
+      message: `${actualByeCount} bye${actualByeCount === 1 ? '' : 's'} after group stage — top seed${actualByeCount === 1 ? '' : 's'} skip quarters`,
+    })
   }
 
   return { slots, warnings }
@@ -575,6 +575,11 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
   return nodes
 }
 
+/**
+ * Build knockout pairings after group stage.
+ * Cross and block both use group-rank pairing when advancer count is a power of 2 (8, 16, …).
+ * Otherwise both fall back to the seeded bye bracket (strength order → pad → standard tree).
+ */
 export function generateKnockoutPairings(
   advancersByGroup: Map<string, StandingRow[]>,
   groupOrder: string[],
@@ -630,36 +635,14 @@ export function generateKnockoutPairings(
   }
 
   const useGroupRankPairing = supportsGroupRankPairing(advancersByGroup, groupOrder, advanceCount)
-  const useByeBracket = !useGroupRankPairing && !isPowerOf2(allAdvancers.length)
+  const useByeBracket = !isPowerOf2(allAdvancers.length)
   let firstRound: KnockoutSlot[]
 
-  if (useGroupRankPairing) {
-    const { slots, warnings: rankWarnings } = buildFirstRoundGroupRankPairings(
-      advancersByGroup,
-      groupOrder,
-      effectiveType,
-    )
-    warnings.push(...rankWarnings)
-    firstRound = slots
-    const playPairings: Pairing[] = firstRound
-      .filter((s) => s.entryAId && s.entryBId)
-      .map((s) => {
-        const a = allAdvancers.find((r) => r.entryId === s.entryAId)
-        const b = allAdvancers.find((r) => r.entryId === s.entryBId)
-        return a && b
-          ? { a, b, side: s.bracketSide, rankA: 0, rankB: 1 }
-          : null
-      })
-      .filter((p): p is Pairing => !!p)
-    warnings.push(...assertUniqueTeams(playPairings))
-    warnings.push(...pairingWarnings(playPairings, entries))
-  } else if (useByeBracket) {
-    if (bracketType === 'block') {
-      warnings.push({
-        message:
-          'Cannot use group rank pairing — falling back to seeded bye bracket after group stage',
-      })
-    }
+  if (useByeBracket) {
+    const bracketLabel = bracketType === 'block' ? 'block' : 'cross'
+    warnings.push({
+      message: `${allAdvancers.length} advancers — ${bracketLabel} knockout uses seeded bye bracket (top seeds skip quarters)`,
+    })
     const { slots, warnings: byeWarnings } = buildStandardBracketWithByes(allAdvancers)
     warnings.push(...byeWarnings)
     firstRound = slots
@@ -679,6 +662,26 @@ export function generateKnockoutPairings(
         buildEntryGroupMap(advancersByGroup, groupOrder),
       ),
     )
+  } else if (useGroupRankPairing) {
+    const { slots, warnings: rankWarnings } = buildFirstRoundGroupRankPairings(
+      advancersByGroup,
+      groupOrder,
+      effectiveType,
+    )
+    warnings.push(...rankWarnings)
+    firstRound = slots
+    const playPairings: Pairing[] = firstRound
+      .filter((s) => s.entryAId && s.entryBId)
+      .map((s) => {
+        const a = allAdvancers.find((r) => r.entryId === s.entryAId)
+        const b = allAdvancers.find((r) => r.entryId === s.entryBId)
+        return a && b
+          ? { a, b, side: s.bracketSide, rankA: 0, rankB: 1 }
+          : null
+      })
+      .filter((p): p is Pairing => !!p)
+    warnings.push(...assertUniqueTeams(playPairings))
+    warnings.push(...pairingWarnings(playPairings, entries))
   } else {
     let pairings: Pairing[]
     if (effectiveType === 'block') {
@@ -896,6 +899,10 @@ export function computeKnockoutAdvancement(
     .filter((m) => m.round === 'semi' && !m.pending_odd_round && !m.is_odd_play_in)
     .sort((a, b) => a.slot - b.slot)
   const final = matches.find((m) => m.round === 'final')
+
+  if (early.length !== semis.length * 2) {
+    return updates
+  }
 
   for (let i = 0; i < semis.length; i++) {
     const semi = semis[i]!
