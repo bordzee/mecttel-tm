@@ -521,11 +521,18 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
       continue
     }
 
+    let pairingKeys = roundKeys
+    let loneFeederKey: string | null = null
+    if (roundKeys.length % 2 === 1) {
+      loneFeederKey = roundKeys[roundKeys.length - 1]!
+      pairingKeys = roundKeys.slice(0, -1)
+    }
+
     const nextKeys: string[] = []
-    const isFinal = roundKeys.length === 2
+    const isFinal = pairingKeys.length === 2 && !loneFeederKey
     const round: 'semi' | 'final' = isFinal ? 'final' : 'semi'
 
-    for (let i = 0; i < roundKeys.length; i += 2) {
+    for (let i = 0; i < pairingKeys.length; i += 2) {
       const key = isFinal ? 'f-0' : `s-${semiSlot}`
       if (!isFinal) semiSlot++
 
@@ -534,14 +541,32 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
         slot: {
           round,
           slot: isFinal ? 0 : semiSlot - 1,
-          bracketSide: sideForSlot(i, roundKeys.length),
+          bracketSide: sideForSlot(i, pairingKeys.length),
           entryAId: null,
           entryBId: null,
-          sourceAKey: roundKeys[i],
-          sourceBKey: roundKeys[i + 1],
+          sourceAKey: pairingKeys[i],
+          sourceBKey: pairingKeys[i + 1],
         },
       })
       nextKeys.push(key)
+    }
+
+    if (loneFeederKey) {
+      const passKey = `pass-${semiSlot}`
+      if (!isFinal) semiSlot++
+      nodes.push({
+        key: passKey,
+        slot: {
+          round: isFinal ? 'final' : 'semi',
+          slot: isFinal ? 0 : semiSlot - 1,
+          bracketSide: 'right',
+          entryAId: null,
+          entryBId: null,
+          sourceAKey: loneFeederKey,
+          sourceBKey: null,
+        },
+      })
+      nextKeys.push(passKey)
     }
 
     roundKeys = nextKeys
@@ -686,16 +711,7 @@ export function generateKnockoutPairings(
     }))
   }
 
-  const tree =
-    useGroupRankPairing || useByeBracket || firstRound.length > 4
-      ? buildCompleteKnockoutTree(firstRound)
-      : [
-          ...firstRound.map((slot, i) => ({ key: `q-${i}`, slot })),
-          ...buildSemisAndFinal(firstRound).map((slot, i) => ({
-            key: slot.round === 'final' ? 'f-0' : `s-${i}`,
-            slot,
-          })),
-        ]
+  const tree = buildCompleteKnockoutTree(firstRound)
 
   return { tree, warnings }
 }
@@ -827,6 +843,30 @@ export function computeKnockoutAdvancement(
 
       const sourceA = m.source_match_a_id ? byId.get(m.source_match_a_id) : undefined
       const sourceB = m.source_match_b_id ? byId.get(m.source_match_b_id) : undefined
+
+      if (m.source_match_a_id && !m.source_match_b_id) {
+        const winner = winnerOf(sourceA)
+        if (
+          winner &&
+          (m.entry_a_id !== winner ||
+            m.winner_entry_id !== winner ||
+            m.status !== 'completed')
+        ) {
+          updates.set(m.id, {
+            entry_a_id: winner,
+            entry_b_id: null,
+            winner_entry_id: winner,
+            status: 'completed',
+            outcome: 'bye',
+            score_a: 1,
+            score_b: 0,
+          })
+        }
+        continue
+      }
+
+      if (!m.source_match_a_id || !m.source_match_b_id) continue
+
       const entryA = winnerOf(sourceA) ?? m.entry_a_id
       const entryB = winnerOf(sourceB) ?? m.entry_b_id
 
@@ -852,33 +892,33 @@ export function computeKnockoutAdvancement(
   const early = matches
     .filter((m) => m.round === earlyRound)
     .sort((a, b) => a.slot - b.slot || a.bracket_side.localeCompare(b.bracket_side))
-  const semis = matches.filter((m) => m.round === 'semi').sort((a, b) => a.slot - b.slot)
+  const semis = matches
+    .filter((m) => m.round === 'semi' && !m.pending_odd_round && !m.is_odd_play_in)
+    .sort((a, b) => a.slot - b.slot)
   const final = matches.find((m) => m.round === 'final')
 
-  const leftEarly = early.filter((m) => m.bracket_side === 'left')
-  const rightEarly = early.filter((m) => m.bracket_side === 'right')
-  const leftSemis = semis.filter((m) => m.bracket_side === 'left')
-  const rightSemis = semis.filter((m) => m.bracket_side === 'right')
+  for (let i = 0; i < semis.length; i++) {
+    const semi = semis[i]!
+    const qfA = early[i * 2]
+    const qfB = early[i * 2 + 1]
+    if (!qfA) continue
 
-  for (let i = 0; i < leftSemis.length; i++) {
-    const semi = leftSemis[i]
-    const qfA = leftEarly[i * 2]
-    const qfB = leftEarly[i * 2 + 1]
-    if (!qfA || !qfB) continue
-    const entryA = winnerOf(qfA) ?? semi.entry_a_id
-    const entryB = winnerOf(qfB) ?? semi.entry_b_id
-    updates.set(semi.id, {
-      entry_a_id: entryA,
-      entry_b_id: entryB,
-      status: scheduledStatus(entryA, entryB),
-    })
-  }
+    if (!qfB) {
+      const entryA = winnerOf(qfA) ?? semi.entry_a_id
+      if (entryA && semi.status !== 'completed') {
+        updates.set(semi.id, {
+          entry_a_id: entryA,
+          entry_b_id: null,
+          winner_entry_id: entryA,
+          status: 'completed',
+          outcome: 'bye',
+          score_a: 1,
+          score_b: 0,
+        })
+      }
+      continue
+    }
 
-  for (let i = 0; i < rightSemis.length; i++) {
-    const semi = rightSemis[i]
-    const qfA = rightEarly[i * 2]
-    const qfB = rightEarly[i * 2 + 1]
-    if (!qfA || !qfB) continue
     const entryA = winnerOf(qfA) ?? semi.entry_a_id
     const entryB = winnerOf(qfB) ?? semi.entry_b_id
     updates.set(semi.id, {
@@ -892,12 +932,7 @@ export function computeKnockoutAdvancement(
     let entryA = final.entry_a_id
     let entryB = final.entry_b_id
 
-    if (leftSemis.length === 1 && rightSemis.length === 1) {
-      const leftWinner = winnerOf(leftSemis[0])
-      const rightWinner = winnerOf(rightSemis[0])
-      if (leftWinner) entryA = leftWinner
-      if (rightWinner) entryB = rightWinner
-    } else if (semis.length >= 2) {
+    if (semis.length >= 2) {
       const semiA = semis[0]
       const semiB = semis[semis.length - 1]
       const wA = winnerOf(semiA)
