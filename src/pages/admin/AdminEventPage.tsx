@@ -58,7 +58,6 @@ import {
   saveGroupRankOrder,
   clearGroupRankOrder,
   regenerateKnockoutFromRanks,
-  recreateGroupStageFromEntries,
   saveKnockoutMatchResult,
   fetchTeamRosters,
 } from '../../lib/tournamentService'
@@ -1070,25 +1069,6 @@ export function AdminEventPage() {
     }
   }
 
-  const handleRecreateGroupStage = () => {
-    if (!tournamentId || !eventId) return
-    setDeleteConfirm({
-      title: 'Recreate group assignment?',
-      description:
-        'This removes all group-stage scores and the knockout bracket, then re-assigns every participant to groups using the current org-spread rules. Registrations and seeded flags are kept. Knockout is not generated — you can review groups first.',
-      confirmLabel: 'Recreate groups',
-      confirmingLabel: 'Recreating…',
-      onConfirm: async () => {
-        const { warnings: recreateWarnings, layoutLabel } =
-          await recreateGroupStageFromEntries(tournamentId, eventId, startLayoutKey)
-        if (recreateWarnings.length) setWarnings(recreateWarnings)
-        setMessage(`Group stage recreated — ${layoutLabel}`)
-        setActiveStage('')
-        await fetchEventData()
-      },
-    })
-  }
-
   const handleGenerateKnockout = async () => {
     if (!tournamentId || !eventId) return
     const unresolved = groupStageData.filter(
@@ -1544,15 +1524,6 @@ export function AdminEventPage() {
                 Once knockout scoring starts, ranks can no longer update the bracket.
               </WarningBanner>
             )}
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleRecreateGroupStage}
-              disabled={loading}
-              fullWidth
-            >
-              Recreate group assignment (same participants)
-            </Button>
           </div>
 
           {activeGroupStage && (

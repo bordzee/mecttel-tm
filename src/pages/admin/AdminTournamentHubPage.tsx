@@ -22,7 +22,6 @@ import {
   fetchEvents,
   updateTournament,
   deleteTournament,
-  duplicateTournamentWithParticipants,
 } from '../../lib/tournamentService'
 import { resolveTournamentImageForSave } from '../../lib/tournamentImageService'
 import { TournamentImageUpload } from '../../components/TournamentImageUpload'
@@ -50,7 +49,6 @@ export function AdminTournamentHubPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false)
   const [pageErrorDismissed, setPageErrorDismissed] = useState(false)
 
   const load = useCallback(async () => {
@@ -124,26 +122,6 @@ export function AdminTournamentHubPage() {
       setError(err instanceof Error ? err.message : 'Failed to delete')
       setLoading(false)
       setShowDeleteConfirm(false)
-    }
-  }
-
-  const handleDuplicateTournament = async () => {
-    if (!tournament || loading) return
-    setLoading(true)
-    setError('')
-    try {
-      const { tournament: copy, entryCount } = await duplicateTournamentWithParticipants(
-        tournament.id,
-        { name: `${tournament.name} (Copy)` },
-      )
-      setShowDuplicateConfirm(false)
-      navigate(`/admin/tournaments/${copy.id}`, {
-        state: { message: `Tournament duplicated — ${entryCount} participant${entryCount === 1 ? '' : 's'} copied, no groups yet` },
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to duplicate tournament')
-      setLoading(false)
-      setShowDuplicateConfirm(false)
     }
   }
 
@@ -238,27 +216,6 @@ export function AdminTournamentHubPage() {
           onConfirm={handleDeleteTournament}
           confirming={loading}
         />
-
-        <DeleteConfirmDialog
-          open={showDuplicateConfirm}
-          title="Duplicate this tournament?"
-          description="Creates a new tournament with the same divisions and participants (names, organizations, seeded flags). No groups, scores, or knockout — ready for registration or to start group stage fresh."
-          confirmLabel="Duplicate"
-          confirmingLabel="Duplicating…"
-          onCancel={() => setShowDuplicateConfirm(false)}
-          onConfirm={handleDuplicateTournament}
-          confirming={loading}
-        />
-
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => setShowDuplicateConfirm(true)}
-          disabled={loading || events.length === 0}
-          fullWidth
-        >
-          Duplicate tournament (participants only)
-        </Button>
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
