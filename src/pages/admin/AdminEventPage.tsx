@@ -30,11 +30,14 @@ import { LateEntryDialog } from '../../components/LateEntryDialog'
 import { MoveEntryDialog } from '../../components/MoveEntryDialog'
 import { GenerateGroupStageDialog } from '../../components/GenerateGroupStageDialog'
 import { ParticipantsListDialog } from '../../components/ParticipantsListDialog'
+import { SetRulesEditorDialog } from '../../components/SetRulesEditorDialog'
+import { formatSetRulesSummary, normalizeSetRules } from '../../lib/setRules'
 import {
   fetchTournament,
   fetchEvent,
   fetchEntries,
   updateEvent,
+  updateEventSetRules,
   deleteEvent,
   deleteEntry,
   moveEntryToGroup,
@@ -147,6 +150,7 @@ export function AdminEventPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
   const [participantsDialogOpen, setParticipantsDialogOpen] = useState(false)
   const [movingEntry, setMovingEntry] = useState<TournamentEntry | null>(null)
+  const [setRulesDialogOpen, setSetRulesDialogOpen] = useState(false)
   const [readyDialogOpen, setReadyDialogOpen] = useState(false)
   const loadSeq = useRef(0)
   const isInitialLoad = useRef(true)
@@ -909,6 +913,22 @@ export function AdminEventPage() {
     }
   }
 
+  const handleSaveSetRules = async (setRules: ReturnType<typeof normalizeSetRules>) => {
+    if (!tournamentId || !eventId) return
+    setLoading(true)
+    setError('')
+    try {
+      await updateEventSetRules(tournamentId, eventId, setRules)
+      setMessage('Set rules saved')
+      setSetRulesDialogOpen(false)
+      await fetchEventData()
+    } catch (err) {
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleDeleteEvent = () => {
     if (!tournament || !event || !tournamentId) return
     setDeleteConfirm({
@@ -1142,6 +1162,7 @@ export function AdminEventPage() {
 
   const cfg = event.config
   const canEditDivisionSettings = event.status === 'draft' || event.status === 'upcoming'
+  const canEditSetRules = event.status === 'ongoing'
   const canEditEntries = canEditDivisionSettings
   const canRemoveEntry = canEditEntries || canManageOngoingParticipants
   const canMoveEntry = canManageOngoingParticipants
@@ -1150,6 +1171,7 @@ export function AdminEventPage() {
   const canLateJoin = event.status === 'ongoing' && !knockoutGenerated && groups.length > 0
   const entryCountLabel =
     cfg.total_slots != null ? `${entries.length} / ${cfg.total_slots}` : String(entries.length)
+  const setRulesSummary = formatSetRulesSummary(normalizeSetRules(cfg.set_rules))
   const rosterSize = cfg.roster_size ?? 3
   const groupAssignmentBlocked = assignmentWarnings.some((w) => w.startsWith('Cannot assign'))
   const startDisabled =
@@ -1271,7 +1293,22 @@ export function AdminEventPage() {
               </svg>
               Knockout type — {cfg.knockout_bracket === 'cross' ? 'Cross' : 'Block'}
             </p>
+            <p className="text-xs text-text-steel font-medium">
+              Group {setRulesSummary.group.replace('Best of ', 'Bo')}
+              {' · '}
+              Knockout {setRulesSummary.knockout.replace('Best of ', 'Bo')}
+              {' · '}
+              Finals {setRulesSummary.finals.replace('Best of ', 'Bo')}
+            </p>
           </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {canEditSetRules && (
+              <IconActionButton onClick={() => setSetRulesDialogOpen(true)}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 20h9" /><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z" />
+                </svg>
+              </IconActionButton>
+            )}
           {canEditDivisionSettings && (
             <IconActionButton onClick={editingDivision ? closeDivisionEdit : openDivisionEdit}>
               <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -1279,6 +1316,7 @@ export function AdminEventPage() {
               </svg>
             </IconActionButton>
           )}
+          </div>
         </div>
 
         {editingDivision && editDraft && (
@@ -1632,6 +1670,14 @@ export function AdminEventPage() {
         onEdit={handleOpenEditEntry}
         onMove={handleOpenMoveEntry}
         onRemove={handleDeleteEntry}
+      />
+
+      <SetRulesEditorDialog
+        open={setRulesDialogOpen}
+        initialRules={normalizeSetRules(cfg.set_rules)}
+        saving={loading}
+        onClose={() => setSetRulesDialogOpen(false)}
+        onSave={handleSaveSetRules}
       />
 
       <GenerateGroupStageDialog

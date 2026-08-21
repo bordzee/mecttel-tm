@@ -38,6 +38,9 @@ import {
 } from './knockoutSeeding'
 import { computeStandings, getTopAdvancers, resolveGroupStandings, needsManualRankResolution } from './standings'
 import { validateMatchResultSave } from './matchValidation'
+import { validateSetRulesAgainstCompletedMatches } from './setRulesValidation'
+import { normalizeSetRules } from './setRules'
+import type { SetRules } from '../types'
 import { entrySortKey } from './groupLayout'
 
 function withId<T>(id: string, data: T): T & { id: string } {
@@ -251,6 +254,40 @@ export async function updateEvent(
   await updateDoc(doc(db, 'tournaments', tournamentId, 'events', eventId), stripUndefined(patch))
   if (patch.status) await syncTournamentPublicVisibility(tournamentId)
   return fetchEvent(tournamentId, eventId)
+}
+
+export async function updateEventSetRules(
+  tournamentId: string,
+  eventId: string,
+  setRules: SetRules,
+) {
+  const event = await fetchEvent(tournamentId, eventId)
+  if (event.status !== 'ongoing') {
+    throw new Error('Set rules can only be changed while the division is live')
+  }
+
+  const normalized = normalizeSetRules(setRules)
+  const [groupMatches, knockoutMatches] = await Promise.all([
+    fetchGroupMatches(tournamentId, eventId),
+    fetchKnockoutMatches(tournamentId, eventId),
+  ])
+
+  const validationError = validateSetRulesAgainstCompletedMatches(
+    event.event_type,
+    normalized,
+    groupMatches,
+    knockoutMatches,
+  )
+  if (validationError) {
+    throw new Error(validationError)
+  }
+
+  await updateEvent(tournamentId, eventId, {
+    config: {
+      ...event.config,
+      set_rules: normalized,
+    },
+  })
 }
 
 export async function fetchEntries(tournamentId: string, eventId: string): Promise<TournamentEntry[]> {

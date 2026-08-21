@@ -4,6 +4,8 @@ import { validateImageUrl } from '../tournamentImageService'
 import { calculateTieFromRubbers, validateSetScore } from '../scoring'
 import { needsManualRankResolution, computeStandings } from '../standings'
 import { normalizeEntryName, rosterNameCollisionWarnings } from '../entryValidation'
+import { validateSetRulesAgainstCompletedMatches } from '../setRulesValidation'
+import { normalizeSetRules } from '../setRules'
 import type { TournamentEntry } from '../../types'
 
 describe('scoring', () => {
@@ -216,5 +218,59 @@ describe('entryValidation', () => {
     const warnings = rosterNameCollisionWarnings(entries, rosters)
     expect(warnings.length).toBe(1)
     expect(normalizeEntryName('Alex Chen')).toBe('alex chen')
+  })
+})
+
+describe('setRulesValidation', () => {
+  it('allows rule changes when completed scores remain valid', () => {
+    const rules = normalizeSetRules({ group: 3, knockout_early: 5, finals: 7 })
+    const error = validateSetRulesAgainstCompletedMatches(
+      'single',
+      rules,
+      [
+        {
+          id: 'g1',
+          tournament_id: 't',
+          event_id: 'e',
+          group_id: 'grp',
+          entry_a_id: 'a',
+          entry_b_id: 'b',
+          score_a: 2,
+          score_b: 1,
+          rubber_results: null,
+          winner_entry_id: 'a',
+          status: 'completed',
+          outcome: 'normal',
+        },
+      ],
+      [],
+    )
+    expect(error).toBeNull()
+  })
+
+  it('blocks group rule changes that invalidate completed scores', () => {
+    const rules = normalizeSetRules({ group: 5 })
+    const error = validateSetRulesAgainstCompletedMatches(
+      'single',
+      rules,
+      [
+        {
+          id: 'g1',
+          tournament_id: 't',
+          event_id: 'e',
+          group_id: 'grp',
+          entry_a_id: 'a',
+          entry_b_id: 'b',
+          score_a: 2,
+          score_b: 0,
+          rubber_results: null,
+          winner_entry_id: 'a',
+          status: 'completed',
+          outcome: 'normal',
+        },
+      ],
+      [],
+    )
+    expect(error).toContain('Group stage')
   })
 })
