@@ -138,6 +138,22 @@ function collectWarnings(buckets: TournamentEntry[][]): AssignmentWarning[] {
   return warnings
 }
 
+/** Warnings from actual group membership (ongoing divisions), not a simulated re-assignment. */
+export function assignmentWarningsForMembers(
+  entries: TournamentEntry[],
+  groups: { id: string }[],
+  members: { group_id: string; entry_id: string }[],
+): AssignmentWarning[] {
+  const entryMap = new Map(entries.map((e) => [e.id, e]))
+  const buckets = groups.map((g) =>
+    members
+      .filter((m) => m.group_id === g.id)
+      .map((m) => entryMap.get(m.entry_id))
+      .filter((e): e is TournamentEntry => !!e),
+  )
+  return collectWarnings(buckets)
+}
+
 function snakePreferredIndex(entryIndex: number, groupCount: number): number {
   const round = Math.floor(entryIndex / groupCount)
   const pos = entryIndex % groupCount
@@ -157,7 +173,7 @@ function scoreGroupForEntry(
   const entryOrg = normalizeOrg(getEntryOrganization(entry))
   if (entryOrg) {
     for (const existing of groupEntries) {
-      if (normalizeOrg(getEntryOrganization(existing)) === entryOrg) score += 8
+      if (normalizeOrg(getEntryOrganization(existing)) === entryOrg) score += 100
     }
   }
 

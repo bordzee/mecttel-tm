@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { SetRules } from '../types'
 import { SetRulesPicker } from './SetRulesPicker'
@@ -21,12 +21,14 @@ export function SetRulesEditorDialog({
 }) {
   const [draft, setDraft] = useState(() => normalizeSetRules(initialRules))
   const [error, setError] = useState('')
+  const wasOpen = useRef(false)
 
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpen.current) {
       setDraft(normalizeSetRules(initialRules))
       setError('')
     }
+    wasOpen.current = open
   }, [open, initialRules])
 
   useEffect(() => {

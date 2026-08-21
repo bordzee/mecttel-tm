@@ -45,7 +45,7 @@ function scoreGroupForBalance(group: GroupSummary, entry: TournamentEntry): numb
   const entryOrg = normalizeOrg(getEntryOrganization(entry))
   if (entryOrg) {
     for (const existing of group.entries) {
-      if (normalizeOrg(getEntryOrganization(existing)) === entryOrg) score += 8
+      if (normalizeOrg(getEntryOrganization(existing)) === entryOrg) score += 100
     }
   }
   if (isEntrySeeded(entry)) {

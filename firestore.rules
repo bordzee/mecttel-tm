@@ -94,38 +94,16 @@ service cloud.firestore {
     }
 
     match /tournaments/{tournamentId} {
-      // Admins list all tournaments (dashboard, create flow). Public lists filter public_visible.
       allow list: if isAdmin();
       allow list: if resource.data.public_visible == true;
       allow get: if isAdmin() || resource.data.public_visible == true;
-      allow create: if isAdmin()
-        && isString(request.resource.data.name)
-        && isOptionalString(request.resource.data.venue)
-        && isOptionalString(request.resource.data.start_date)
-        && isOptionalString(request.resource.data.image_url)
-        && isBool(request.resource.data.public_visible)
-        && isString(request.resource.data.created_at);
-      allow update: if isAdmin()
-        && isString(request.resource.data.name)
-        && isOptionalString(request.resource.data.venue)
-        && isOptionalString(request.resource.data.start_date)
-        && isOptionalString(request.resource.data.image_url)
-        && isBool(request.resource.data.public_visible);
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
 
       match /events/{eventId} {
         allow list: if isAdmin();
         allow list: if resource.data.status in ['upcoming', 'ongoing'];
         allow get: if isAdmin() || resource.data.status in ['upcoming', 'ongoing'];
-        allow create, update: if isAdmin()
-          && isString(request.resource.data.name)
-          && eventType(request.resource.data.event_type)
-          && eventStatus(request.resource.data.status)
-          && request.resource.data.status != 'ended'
-          && isInt(request.resource.data.sort_order)
-          && isString(request.resource.data.created_at)
-          && request.resource.data.config is map;
-        allow delete: if isAdmin();
+        allow create, update, delete: if isAdmin();
       }
     }
 
@@ -133,52 +111,35 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
-      allow create, update: if isAdmin() && scopedEventFields() && isString(request.resource.data.name);
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /team_players/{docId} {
       allow list: if isAdmin();
       allow list: if teamIsPublic(resource.data.team_id);
       allow get: if isAdmin() || teamIsPublic(resource.data.team_id);
-      allow create, update: if isAdmin()
-        && isString(request.resource.data.team_id)
-        && isString(request.resource.data.name);
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /players/{docId} {
       allow list: if isAdmin();
       allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
-      allow create, update: if isAdmin() && scopedEventFields() && isString(request.resource.data.name);
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /pairs/{docId} {
       allow list: if isAdmin();
       allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
-      allow create, update: if isAdmin()
-        && scopedEventFields()
-        && isString(request.resource.data.player_a)
-        && isString(request.resource.data.player_b);
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /tournament_entries/{docId} {
       allow list: if isAdmin();
       allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
-      allow create, update: if isAdmin()
-        && scopedEventFields()
-        && entryType(request.resource.data.entry_type)
-        && (
-          (request.resource.data.entry_type == 'team' && request.resource.data.team_id is string)
-          || (request.resource.data.entry_type == 'player' && request.resource.data.player_id is string)
-          || (request.resource.data.entry_type == 'pair' && request.resource.data.pair_id is string)
-        );
-      allow delete: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /groups/{docId} {

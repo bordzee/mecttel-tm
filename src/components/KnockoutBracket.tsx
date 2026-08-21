@@ -1,12 +1,11 @@
 import type { KnockoutMatch, KnockoutRound } from '../types'
+import { compareKnockoutRounds, effectiveKnockoutRound, isKnockoutRound, knockoutMatchPrefix, knockoutRoundTitle, resolveEffectiveKnockoutRounds } from '../lib/knockoutRounds'
 import { getEntryDisplayName } from '../lib/displayNames'
 import { PanelSectionTitle } from './ui/primitives'
 import { MatchCard } from './MatchCard'
 
 function roundLabel(round: KnockoutRound): string {
-  if (round === 'quarter') return 'Quarterfinals'
-  if (round === 'semi') return 'Semifinals'
-  return 'Final'
+  return knockoutRoundTitle(round)
 }
 
 function entryName(match: KnockoutMatch, side: 'a' | 'b'): string {
@@ -19,21 +18,36 @@ function entryName(match: KnockoutMatch, side: 'a' | 'b'): string {
   return 'TBD'
 }
 
-export function knockoutMatchLabel(match: KnockoutMatch, index: number): string {
+export function knockoutMatchLabel(
+  match: KnockoutMatch,
+  index: number,
+  allMatches?: KnockoutMatch[],
+): string {
   if (match.is_odd_play_in) {
     return match.status === 'completed' ? 'PLAY-IN · COMPLETED' : 'PLAY-IN · PENDING'
   }
 
-  const roundPrefix =
-    match.round === 'final' ? 'FINAL' : match.round === 'semi' ? 'SEMIFINAL' : 'QUARTERFINAL'
+  const round =
+    allMatches && allMatches.length > 0
+      ? effectiveKnockoutRound(match, allMatches)
+      : match.round
+  const roundPrefix = knockoutMatchPrefix(round)
 
   if (match.outcome === 'bye') return `${roundPrefix} ${index + 1} · BYE`
   if (match.pending_odd_round) return `${roundPrefix} ${index + 1} · AWAITING`
   return `${roundPrefix} ${index + 1}`
 }
 
-function MatchRow({ match, index }: { match: KnockoutMatch; index: number }) {
-  const label = knockoutMatchLabel(match, index)
+function MatchRow({
+  match,
+  index,
+  allMatches,
+}: {
+  match: KnockoutMatch
+  index: number
+  allMatches: KnockoutMatch[]
+}) {
+  const label = knockoutMatchLabel(match, index, allMatches)
   const aWon = match.winner_entry_id === match.entry_a_id
   const bWon = match.winner_entry_id === match.entry_b_id
   const isBye = match.outcome === 'bye'
@@ -95,20 +109,25 @@ function MatchRow({ match, index }: { match: KnockoutMatch; index: number }) {
 export function KnockoutBracket({
   matches,
   round,
+  allMatches,
   hideRoundTitle = false,
 }: {
   matches: KnockoutMatch[]
   round?: KnockoutRound
+  /** Full knockout list — used to infer correct round labels on legacy brackets. */
+  allMatches?: KnockoutMatch[]
   hideRoundTitle?: boolean
 }) {
   if (matches.length === 0) {
     return <p className="text-sm text-text-steel">Knockout bracket not generated yet.</p>
   }
 
+  const context = allMatches ?? matches
+
   const list = (
     <div className="space-y-2.5">
       {matches.map((match, index) => (
-        <MatchRow key={match.id} match={match} index={index} />
+        <MatchRow key={match.id} match={match} index={index} allMatches={context} />
       ))}
     </div>
   )
@@ -122,23 +141,26 @@ export function KnockoutBracket({
     )
   }
 
-  const rounds: KnockoutRound[] = ['quarter', 'semi', 'final']
-  const grouped = rounds
-    .map((r) => ({ round: r, items: matches.filter((m) => m.round === r) }))
-    .filter((g) => g.items.length > 0)
+  const effective = resolveEffectiveKnockoutRounds(context)
+  const rounds = [
+    ...new Set(matches.map((m) => effective.get(m.id) ?? m.round).filter(isKnockoutRound)),
+  ].sort(compareKnockoutRounds)
 
   return (
     <div className="space-y-6">
-      {grouped.map(({ round: r, items }) => (
-        <section key={r} className="space-y-3">
-          {!hideRoundTitle && <PanelSectionTitle>{roundLabel(r)}</PanelSectionTitle>}
-          <div className="space-y-2.5">
-            {items.map((match, index) => (
-              <MatchRow key={match.id} match={match} index={index} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {rounds.map((r) => {
+        const items = matches.filter((m) => (effective.get(m.id) ?? m.round) === r)
+        return (
+          <section key={r} className="space-y-3">
+            {!hideRoundTitle && <PanelSectionTitle>{roundLabel(r)}</PanelSectionTitle>}
+            <div className="space-y-2.5">
+              {items.map((match, index) => (
+                <MatchRow key={match.id} match={match} index={index} allMatches={context} />
+              ))}
+            </div>
+          </section>
+        )
+      })}
     </div>
   )
 }

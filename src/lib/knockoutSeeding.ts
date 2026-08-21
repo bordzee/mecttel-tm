@@ -1,8 +1,16 @@
-import type { StandingRow, TournamentEntry, KnockoutBracketType } from '../types'
+import type { StandingRow, TournamentEntry, KnockoutBracketType, KnockoutRound } from '../types'
 import { getEntryOrganization, isEntrySeeded } from './groupLayout'
+import {
+  compareKnockoutRounds,
+  firstKnockoutRoundLabel,
+  isKnockoutRound,
+  knockoutRoundFromBracketSize,
+  knockoutRoundTitle,
+  resolveEffectiveKnockoutRounds,
+} from './knockoutRounds'
 
 export interface KnockoutSlot {
-  round: 'quarter' | 'semi' | 'final'
+  round: KnockoutRound
   slot: number
   bracketSide: 'left' | 'right'
   entryAId: string | null
@@ -174,7 +182,9 @@ function buildFirstRoundGroupRankPairings(
   const entryGroup = buildEntryGroupMap(playingMap, groupOrder)
   warnings.push(...assertNoSameGroupPairings(pairings, entryGroup))
 
-  const round = allAdvancers.length <= 4 ? 'semi' : 'quarter'
+  const round = knockoutRoundFromBracketSize(
+    nextPowerOf2(allAdvancers.length),
+  )
   const slots: KnockoutSlot[] = []
   let slotNum = 0
 
@@ -230,7 +240,7 @@ function buildStandardBracketWithByes(
 
     if (rowA && rowB) {
       slots.push({
-        round: 'quarter',
+        round: knockoutRoundFromBracketSize(bracketSize),
         slot: i,
         bracketSide: side,
         entryAId: rowA.entryId,
@@ -238,10 +248,10 @@ function buildStandardBracketWithByes(
       })
     } else if (rowA && !rowB) {
       warnings.push({
-        message: `Bye: ${rowA.name} advances to semifinals`,
+        message: `Bye: ${rowA.name} advances to ${knockoutRoundTitle(knockoutRoundFromBracketSize(bracketSize / 2)).toLowerCase()}`,
       })
       slots.push({
-        round: 'quarter',
+        round: knockoutRoundFromBracketSize(bracketSize),
         slot: i,
         bracketSide: side,
         entryAId: rowA.entryId,
@@ -251,10 +261,10 @@ function buildStandardBracketWithByes(
       })
     } else if (!rowA && rowB) {
       warnings.push({
-        message: `Bye: ${rowB.name} advances to semifinals`,
+        message: `Bye: ${rowB.name} advances to ${knockoutRoundTitle(knockoutRoundFromBracketSize(bracketSize / 2)).toLowerCase()}`,
       })
       slots.push({
-        round: 'quarter',
+        round: knockoutRoundFromBracketSize(bracketSize),
         slot: i,
         bracketSide: side,
         entryAId: rowB.entryId,
@@ -267,10 +277,192 @@ function buildStandardBracketWithByes(
 
   const actualByeCount = slots.filter((s) => s.isBye).length
   if (actualByeCount > 0) {
+    const skipRound = firstKnockoutRoundLabel(n)
     warnings.push({
-      message: `${actualByeCount} bye${actualByeCount === 1 ? '' : 's'} after group stage — top seed${actualByeCount === 1 ? '' : 's'} skip quarters`,
+      message: `${actualByeCount} bye${actualByeCount === 1 ? '' : 's'} after group stage — top seed${actualByeCount === 1 ? '' : 's'} skip ${skipRound}`,
     })
   }
+
+  return { slots, warnings }
+}
+
+function findAdvancerRow(
+  entryId: string,
+  advancersByGroup: Map<string, StandingRow[]>,
+): StandingRow | undefined {
+  for (const rows of advancersByGroup.values()) {
+    const row = rows.find((r) => r.entryId === entryId)
+    if (row) return row
+  }
+  return undefined
+}
+
+function pickPlayInPlayer(
+  rows: StandingRow[],
+  playInIds: Set<string>,
+  used: Set<string>,
+  preferRank: number,
+): StandingRow | undefined {
+  const preferred = rows[preferRank]
+  if (preferred && playInIds.has(preferred.entryId) && !used.has(preferred.entryId)) {
+    return preferred
+  }
+  return rows.find((r) => playInIds.has(r.entryId) && !used.has(r.entryId))
+}
+
+/** Cross/block play-in pairings among non-bye advancers (avoids same-group QF rematches). */
+function buildPlayInGroupRankPairings(
+  advancersByGroup: Map<string, StandingRow[]>,
+  groupOrder: string[],
+  playInIds: Set<string>,
+  bracketType: KnockoutBracketType,
+  matchCount: number,
+): { pairings: Pairing[]; warnings: SeedingWarning[] } {
+  const warnings: SeedingWarning[] = []
+  const pairings: Pairing[] = []
+  const used = new Set<string>()
+  const entryGroup = buildEntryGroupMap(advancersByGroup, groupOrder)
+
+  let effectiveType = bracketType
+  if (bracketType === 'block' && groupOrder.length % 2 !== 0) {
+    effectiveType = 'cross'
+  }
+
+  if (effectiveType === 'cross') {
+    const g = groupOrder.length
+    for (let i = 0; i < g && pairings.length < matchCount; i++) {
+      const rowsA = advancersByGroup.get(groupOrder[i]) ?? []
+      const rowsB = advancersByGroup.get(groupOrder[(i + 1) % g]) ?? []
+      const a = pickPlayInPlayer(rowsA, playInIds, used, 0)
+      const b = pickPlayInPlayer(rowsB, playInIds, used, 1)
+      if (!a || !b) continue
+      pairings.push({
+        a,
+        b,
+        side: pairings.length % 2 === 0 ? 'left' : 'right',
+        rankA: rowsA.indexOf(a),
+        rankB: rowsB.indexOf(b),
+      })
+      used.add(a.entryId)
+      used.add(b.entryId)
+    }
+  } else {
+    for (let i = 0; i + 1 < groupOrder.length && pairings.length < matchCount; i += 2) {
+      const rowsA = advancersByGroup.get(groupOrder[i]) ?? []
+      const rowsB = advancersByGroup.get(groupOrder[i + 1]) ?? []
+      const side = (i / 2) % 2 === 0 ? 'left' : 'right'
+
+      const tryPair = (a: StandingRow | undefined, b: StandingRow | undefined) => {
+        if (!a || !b || used.has(a.entryId) || used.has(b.entryId)) return
+        if (!playInIds.has(a.entryId) || !playInIds.has(b.entryId)) return
+        pairings.push({
+          a,
+          b,
+          side,
+          rankA: rowsA.indexOf(a) >= 0 ? rowsA.indexOf(a) : 0,
+          rankB: rowsB.indexOf(b) >= 0 ? rowsB.indexOf(b) : 0,
+        })
+        used.add(a.entryId)
+        used.add(b.entryId)
+      }
+
+      tryPair(pickPlayInPlayer(rowsA, playInIds, used, 0), pickPlayInPlayer(rowsB, playInIds, used, 1))
+      if (pairings.length < matchCount) {
+        tryPair(pickPlayInPlayer(rowsB, playInIds, used, 0), pickPlayInPlayer(rowsA, playInIds, used, 1))
+      }
+    }
+  }
+
+  const remaining = [...playInIds].filter((id) => !used.has(id))
+  while (pairings.length < matchCount && remaining.length >= 2) {
+    const aId = remaining.shift()!
+    const diffGroupIdx = remaining.findIndex((id) => entryGroup.get(id) !== entryGroup.get(aId))
+    const bId =
+      diffGroupIdx >= 0 ? remaining.splice(diffGroupIdx, 1)[0]! : remaining.shift()!
+    const a = findAdvancerRow(aId, advancersByGroup)
+    const b = findAdvancerRow(bId, advancersByGroup)
+    if (!a || !b) continue
+    if (entryGroup.get(aId) === entryGroup.get(bId)) {
+      warnings.push({
+        message: `Play-in pairing could not avoid same group: ${a.name} vs ${b.name}`,
+      })
+    }
+    pairings.push({
+      a,
+      b,
+      side: pairings.length % 2 === 0 ? 'left' : 'right',
+      rankA: 0,
+      rankB: 0,
+    })
+    used.add(aId)
+    used.add(bId)
+  }
+
+  return { pairings, warnings }
+}
+
+/**
+ * Bye bracket with group-rank play-in: top seeds get byes; remaining advancers
+ * play cross/block first round instead of pure strength seeding.
+ */
+function buildByeBracketWithGroupPairings(
+  advancersByGroup: Map<string, StandingRow[]>,
+  groupOrder: string[],
+  allAdvancers: StandingRow[],
+  bracketType: KnockoutBracketType,
+): { slots: KnockoutSlot[]; warnings: SeedingWarning[] } {
+  const warnings: SeedingWarning[] = []
+  const n = allAdvancers.length
+  const bracketSize = nextPowerOf2(n)
+  const ordered = [...allAdvancers].sort(compareStandingStrength)
+  const byeCount = bracketSize - n
+  const playInIds = new Set(ordered.slice(byeCount).map((r) => r.entryId))
+  const playMatchCount = playInIds.size / 2
+
+  const { pairings: playInPairings, warnings: playWarnings } = buildPlayInGroupRankPairings(
+    advancersByGroup,
+    groupOrder,
+    playInIds,
+    bracketType,
+    playMatchCount,
+  )
+  warnings.push(...playWarnings)
+  warnings.push(...assertUniqueTeams(playInPairings))
+
+  if (playInPairings.length < playMatchCount) {
+    warnings.push({
+      message: `Only ${playInPairings.length} of ${playMatchCount} group-rank play-in matches could be built`,
+    })
+  }
+
+  const coveredPlayIn = new Set(
+    playInPairings.flatMap((p) => [p.a.entryId, p.b.entryId]),
+  )
+  for (const id of playInIds) {
+    if (!coveredPlayIn.has(id)) {
+      const row = findAdvancerRow(id, advancersByGroup)
+      warnings.push({
+        message: `Play-in advancer not placed in knockout: ${row?.name ?? id}`,
+      })
+    }
+  }
+
+  const { slots: stdSlots, warnings: stdWarnings } = buildStandardBracketWithByes(allAdvancers)
+  warnings.push(...stdWarnings)
+
+  let playIdx = 0
+  const slots = stdSlots.map((slot) => {
+    if (slot.isBye || playIdx >= playInPairings.length) return slot
+    const p = playInPairings[playIdx++]!
+    return {
+      ...slot,
+      entryAId: p.a.entryId,
+      entryBId: p.b.entryId,
+    }
+  })
+
+  const entryGroup = buildEntryGroupMap(advancersByGroup, groupOrder)
+  warnings.push(...assertNoSameGroupPairings(playInPairings, entryGroup))
 
   return { slots, warnings }
 }
@@ -473,29 +665,35 @@ export function buildSemisAndFinal(firstRound: KnockoutSlot[]): KnockoutSlot[] {
 
 /**
  * Build the full knockout tree after group stage.
- * Byes are applied upfront when needed so every match fits Quarters → Semis → Final tabs.
+ * Round names follow bracket size (R16, QF, SF, F, …).
  */
 export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutTreeNode[] {
+  const firstBracketSize = firstRound.length * 2
   const nodes: KnockoutTreeNode[] = firstRound.map((slot, i) => ({
     key: `q-${i}`,
-    slot: { ...slot, round: slot.round === 'semi' ? 'semi' : 'quarter', slot: i },
+    slot: {
+      ...slot,
+      round: slot.round ?? knockoutRoundFromBracketSize(firstBracketSize),
+      slot: i,
+    },
   }))
 
   let roundKeys = nodes.map((n) => n.key)
-  let semiSlot = 0
+  let nextSlot = 0
 
   while (roundKeys.length > 1) {
     if (roundKeys.length === 3) {
       const feederKeys = [...roundKeys]
-      const playKey = `odd-play-${semiSlot}`
-      const byeKey = `odd-bye-${semiSlot}`
-      semiSlot++
+      const playKey = `odd-play-${nextSlot}`
+      const byeKey = `odd-bye-${nextSlot}`
+      const round = knockoutRoundFromBracketSize(roundKeys.length)
+      nextSlot++
 
       nodes.push({
         key: playKey,
         slot: {
-          round: 'semi',
-          slot: semiSlot,
+          round,
+          slot: nextSlot,
           bracketSide: 'right',
           entryAId: null,
           entryBId: null,
@@ -507,8 +705,8 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
       nodes.push({
         key: byeKey,
         slot: {
-          round: 'semi',
-          slot: semiSlot + 1,
+          round,
+          slot: nextSlot + 1,
           bracketSide: 'left',
           entryAId: null,
           entryBId: null,
@@ -517,7 +715,7 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
         },
       })
       roundKeys = [byeKey, playKey]
-      semiSlot += 2
+      nextSlot += 2
       continue
     }
 
@@ -529,18 +727,18 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
     }
 
     const nextKeys: string[] = []
-    const isFinal = pairingKeys.length === 2 && !loneFeederKey
-    const round: 'semi' | 'final' = isFinal ? 'final' : 'semi'
+    const round = knockoutRoundFromBracketSize(roundKeys.length)
+    const isFinal = round === 'final'
 
     for (let i = 0; i < pairingKeys.length; i += 2) {
-      const key = isFinal ? 'f-0' : `s-${semiSlot}`
-      if (!isFinal) semiSlot++
+      const key = isFinal ? 'f-0' : `s-${nextSlot}`
+      if (!isFinal) nextSlot++
 
       nodes.push({
         key,
         slot: {
           round,
-          slot: isFinal ? 0 : semiSlot - 1,
+          slot: isFinal ? 0 : nextSlot - 1,
           bracketSide: sideForSlot(i, pairingKeys.length),
           entryAId: null,
           entryBId: null,
@@ -552,13 +750,13 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
     }
 
     if (loneFeederKey) {
-      const passKey = `pass-${semiSlot}`
-      if (!isFinal) semiSlot++
+      const passKey = `pass-${nextSlot}`
+      if (!isFinal) nextSlot++
       nodes.push({
         key: passKey,
         slot: {
-          round: isFinal ? 'final' : 'semi',
-          slot: isFinal ? 0 : semiSlot - 1,
+          round: isFinal ? 'final' : round,
+          slot: isFinal ? 0 : nextSlot - 1,
           bracketSide: 'right',
           entryAId: null,
           entryBId: null,
@@ -578,7 +776,7 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
 /**
  * Build knockout pairings after group stage.
  * Cross and block both use group-rank pairing when advancer count is a power of 2 (8, 16, …).
- * Otherwise both fall back to the seeded bye bracket (strength order → pad → standard tree).
+ * Otherwise both use seeded byes; when every group sends top 2, play-in uses group-rank pairing.
  */
 export function generateKnockoutPairings(
   advancersByGroup: Map<string, StandingRow[]>,
@@ -640,28 +838,44 @@ export function generateKnockoutPairings(
 
   if (useByeBracket) {
     const bracketLabel = bracketType === 'block' ? 'block' : 'cross'
-    warnings.push({
-      message: `${allAdvancers.length} advancers — ${bracketLabel} knockout uses seeded bye bracket (top seeds skip quarters)`,
-    })
-    const { slots, warnings: byeWarnings } = buildStandardBracketWithByes(allAdvancers)
-    warnings.push(...byeWarnings)
-    firstRound = slots
+    if (useGroupRankPairing) {
+      warnings.push({
+        message: `${allAdvancers.length} advancers — ${bracketLabel} knockout uses seeded byes with group-rank play-in`,
+      })
+      const { slots, warnings: byeWarnings } = buildByeBracketWithGroupPairings(
+        advancersByGroup,
+        groupOrder,
+        allAdvancers,
+        effectiveType,
+      )
+      warnings.push(...byeWarnings)
+      firstRound = slots
+    } else {
+      warnings.push({
+        message: `${allAdvancers.length} advancers — ${bracketLabel} knockout uses seeded bye bracket (top seeds skip ${firstKnockoutRoundLabel(allAdvancers.length)})`,
+      })
+      const { slots, warnings: byeWarnings } = buildStandardBracketWithByes(allAdvancers)
+      warnings.push(...byeWarnings)
+      firstRound = slots
+    }
 
     const advancerById = new Map(allAdvancers.map((r) => [r.entryId, r]))
     const playPairings: Pairing[] = []
-    for (const s of slots) {
+    for (const s of firstRound) {
       if (s.isBye || !s.entryAId || !s.entryBId) continue
       const a = advancerById.get(s.entryAId)
       const b = advancerById.get(s.entryBId)
       if (a && b) playPairings.push({ a, b, side: s.bracketSide, rankA: 0, rankB: 0 })
     }
     warnings.push(...pairingWarnings(playPairings, entries))
-    warnings.push(
-      ...assertNoSameGroupPairings(
-        playPairings,
-        buildEntryGroupMap(advancersByGroup, groupOrder),
-      ),
-    )
+    if (!useGroupRankPairing) {
+      warnings.push(
+        ...assertNoSameGroupPairings(
+          playPairings,
+          buildEntryGroupMap(advancersByGroup, groupOrder),
+        ),
+      )
+    }
   } else if (useGroupRankPairing) {
     const { slots, warnings: rankWarnings } = buildFirstRoundGroupRankPairings(
       advancersByGroup,
@@ -704,7 +918,9 @@ export function generateKnockoutPairings(
     warnings.push(...pairingWarnings(pairings, entries))
     warnings.push(...assertNoSameGroupPairings(pairings, buildEntryGroupMap(advancersByGroup, groupOrder)))
 
-    const round = allAdvancers.length <= 4 ? 'semi' : 'quarter'
+    const round = knockoutRoundFromBracketSize(
+    nextPowerOf2(allAdvancers.length),
+  )
     firstRound = pairings.map((p, idx) => ({
       round,
       slot: idx,
@@ -731,7 +947,7 @@ export function generateCrossGroupPairings(
 
 export interface KnockoutMatchLike {
   id: string
-  round: 'quarter' | 'semi' | 'final'
+  round: KnockoutRound | string
   slot: number
   bracket_side: 'left' | 'right'
   entry_a_id: string | null
@@ -884,36 +1100,56 @@ export function computeKnockoutAdvancement(
     return updates
   }
 
-  const hasQuarter = matches.some((m) => m.round === 'quarter')
-  const hasSemi = matches.some((m) => m.round === 'semi')
+  const effective = resolveEffectiveKnockoutRounds(matches)
+  const usesExtendedRounds = matches.some(
+    (m) => typeof m.round === 'string' && m.round.startsWith('r'),
+  )
+  if (usesExtendedRounds) return updates
+
+  const roundsPresent = [
+    ...new Set(
+      matches.map((m) => effective.get(m.id) ?? m.round).filter(isKnockoutRound),
+    ),
+  ].sort(compareKnockoutRounds)
+
   const onlyFinal =
-    matches.some((m) => m.round === 'final') && !hasQuarter && !hasSemi
+    roundsPresent.length === 1 && roundsPresent[0] === 'final'
 
   if (onlyFinal) return updates
 
-  const earlyRound: 'quarter' | 'semi' = hasQuarter ? 'quarter' : 'semi'
-  const early = matches
-    .filter((m) => m.round === earlyRound)
-    .sort((a, b) => a.slot - b.slot || a.bracket_side.localeCompare(b.bracket_side))
-  const semis = matches
-    .filter((m) => m.round === 'semi' && !m.pending_odd_round && !m.is_odd_play_in)
-    .sort((a, b) => a.slot - b.slot)
-  const final = matches.find((m) => m.round === 'final')
+  if (roundsPresent.length < 2) return updates
 
-  if (early.length !== semis.length * 2) {
+  const earlyRound = roundsPresent[0]!
+  const nextRound = roundsPresent[1]!
+
+  const early = matches
+    .filter((m) => (effective.get(m.id) ?? m.round) === earlyRound)
+    .sort((a, b) => a.slot - b.slot || a.bracket_side.localeCompare(b.bracket_side))
+  const nextMatches = matches
+    .filter(
+      (m) =>
+        (effective.get(m.id) ?? m.round) === nextRound &&
+        !m.pending_odd_round &&
+        !m.is_odd_play_in,
+    )
+    .sort((a, b) => a.slot - b.slot)
+  const finalRound = roundsPresent[roundsPresent.length - 1]
+  const final = matches.find((m) => (effective.get(m.id) ?? m.round) === finalRound)
+
+  if (early.length !== nextMatches.length * 2) {
     return updates
   }
 
-  for (let i = 0; i < semis.length; i++) {
-    const semi = semis[i]!
+  for (let i = 0; i < nextMatches.length; i++) {
+    const nextMatch = nextMatches[i]!
     const qfA = early[i * 2]
     const qfB = early[i * 2 + 1]
     if (!qfA) continue
 
     if (!qfB) {
-      const entryA = winnerOf(qfA) ?? semi.entry_a_id
-      if (entryA && semi.status !== 'completed') {
-        updates.set(semi.id, {
+      const entryA = winnerOf(qfA) ?? nextMatch.entry_a_id
+      if (entryA && nextMatch.status !== 'completed') {
+        updates.set(nextMatch.id, {
           entry_a_id: entryA,
           entry_b_id: null,
           winner_entry_id: entryA,
@@ -926,18 +1162,28 @@ export function computeKnockoutAdvancement(
       continue
     }
 
-    const entryA = winnerOf(qfA) ?? semi.entry_a_id
-    const entryB = winnerOf(qfB) ?? semi.entry_b_id
-    updates.set(semi.id, {
+    const entryA = winnerOf(qfA) ?? nextMatch.entry_a_id
+    const entryB = winnerOf(qfB) ?? nextMatch.entry_b_id
+    updates.set(nextMatch.id, {
       entry_a_id: entryA,
       entry_b_id: entryB,
       status: scheduledStatus(entryA, entryB),
     })
   }
 
-  if (final) {
+  if (final && finalRound === 'final') {
     let entryA = final.entry_a_id
     let entryB = final.entry_b_id
+
+    const semiRound = roundsPresent[roundsPresent.length - 2]
+    const semis = matches
+      .filter(
+        (m) =>
+          (effective.get(m.id) ?? m.round) === semiRound &&
+          !m.pending_odd_round &&
+          !m.is_odd_play_in,
+      )
+      .sort((a, b) => a.slot - b.slot)
 
     if (semis.length >= 2) {
       const semiA = semis[0]

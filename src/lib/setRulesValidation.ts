@@ -1,4 +1,5 @@
 import type { EventType, GroupMatch, KnockoutMatch, SetRules, TournamentConfig } from '../types'
+import { effectiveKnockoutRound, knockoutRoundTitle, setRulesStageForRound } from './knockoutRounds'
 import { getBestOfForStage, validateSetScore } from './scoring'
 
 function validateCompletedMatchScore(
@@ -41,11 +42,10 @@ export function validateSetRulesAgainstCompletedMatches(
     if (match.status !== 'completed' || match.outcome !== 'normal') continue
     if (match.score_a == null || match.score_b == null) continue
 
-    const stage =
-      match.round === 'final' ? 'finals' : match.round === 'semi' ? 'semis' : 'quarters'
+    const round = effectiveKnockoutRound(match, knockoutMatches)
+    const stage = setRulesStageForRound(round)
     const bestOf = getBestOfForStage(stage, config)
-    const roundLabel =
-      match.round === 'final' ? 'Final' : match.round === 'semi' ? 'Semifinal' : 'Quarterfinal'
+    const roundLabel = knockoutRoundTitle(round)
 
     const error = validateCompletedMatchScore(
       match.score_a,

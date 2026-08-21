@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assignEntriesToGroups,
+  assignmentWarningsForMembers,
   canAddEntryToGroup,
   validateSeededPlacementPossible,
 } from '../groupAssignment'
@@ -83,6 +84,53 @@ describe('groupAssignment', () => {
     expect(orgWarnings).toHaveLength(1)
     expect(orgWarnings[0]?.message).toContain('CIT')
     expect(orgWarnings[0]?.message).toContain('up to')
+  })
+
+  it('spreads same-org entries across groups when possible', () => {
+    const entries = [
+      ...Array.from({ length: 6 }, (_, i) => playerEntry(`a${i}`, `A${i}`, 'OrgA', null)),
+      ...Array.from({ length: 6 }, (_, i) => playerEntry(`b${i}`, `B${i}`, 'OrgB', null)),
+    ]
+    const result = assignEntriesToGroups(entries, 6, [2, 2, 2, 2, 2, 2])
+    expect(result.error).toBeUndefined()
+    for (const group of result.groups) {
+      const orgs = group.entryIds.map(
+        (id) => entries.find((e) => e.id === id)!.player!.organization,
+      )
+      expect(new Set(orgs).size).toBe(2)
+    }
+    expect(result.warnings.filter((w) => w.type === 'org_sibling')).toHaveLength(0)
+  })
+
+  it('allows same org in one group only when mathematically required', () => {
+    const entries = Array.from({ length: 7 }, (_, i) =>
+      playerEntry(String(i), `P${i}`, 'CIT', null),
+    )
+    const result = assignEntriesToGroups(entries, 6, [2, 1, 1, 1, 1, 1])
+    expect(result.error).toBeUndefined()
+    const citCounts = result.groups.map(
+      (g) =>
+        g.entryIds.filter(
+          (id) => entries.find((e) => e.id === id)?.player?.organization === 'CIT',
+        ).length,
+    )
+    expect(citCounts.filter((c) => c > 1)).toHaveLength(1)
+  })
+
+  it('warns from actual group membership without re-simulating placement', () => {
+    const entries = [
+      playerEntry('1', 'A', 'CIT', null),
+      playerEntry('2', 'B', 'CIT', null),
+      playerEntry('3', 'C', 'Other', null),
+    ]
+    const groups = [{ id: 'g1' }, { id: 'g2' }]
+    const members = [
+      { group_id: 'g1', entry_id: '1' },
+      { group_id: 'g1', entry_id: '2' },
+      { group_id: 'g2', entry_id: '3' },
+    ]
+    const warnings = assignmentWarningsForMembers(entries, groups, members)
+    expect(warnings.some((w) => w.type === 'org_sibling')).toBe(true)
   })
 })
 

@@ -58,17 +58,19 @@ import {
   saveGroupRankOrder,
   clearGroupRankOrder,
   regenerateKnockoutFromRanks,
+  recreateGroupStageFromEntries,
   saveKnockoutMatchResult,
   fetchTeamRosters,
 } from '../../lib/tournamentService'
-import { assignEntriesToGroups, canAddEntryToGroup } from '../../lib/groupAssignment'
+import { assignEntriesToGroups, assignmentWarningsForMembers, canAddEntryToGroup } from '../../lib/groupAssignment'
 import {
   getStartLayoutOptions,
   isLayoutCompatibleWithBlock,
   parseSeededValue,
 } from '../../lib/groupLayout'
 import { suggestBalanceGroup, type GroupSummary } from '../../lib/lateJoinAssignment'
-import { buildKnockoutStageTabs, isKnockoutStage, knockoutRoundFromStageId } from '../../lib/knockoutTabs'
+import { buildKnockoutStageTabs, filterKnockoutMatchesForStage, isKnockoutStage, knockoutRoundFromStageId, matchEffectiveRound } from '../../lib/knockoutTabs'
+import { hasPendingEarlierKnockoutRound, setRulesStageForRound } from '../../lib/knockoutRounds'
 import { computeStandings, resolveGroupStandings, needsManualRankResolution } from '../../lib/standings'
 import { validateTournamentStart } from '../../lib/matchOutcomes'
 import { getEntryDisplayName, getEventDisplayName, isPlayerEventType } from '../../lib/displayNames'
@@ -272,6 +274,9 @@ export function AdminEventPage() {
   const allGroupPlayComplete =
     groupStageData.length > 0 && groupStageData.every((g) => g.groupPlayComplete)
 
+  const pendingGroupMatchCount = groupStageData.reduce((n, g) => n + g.pending.length, 0)
+  const groupsAwaitingScores = groupStageData.filter((g) => !g.groupPlayComplete)
+
   const knockoutHasScores = knockoutMatches.some((m) => m.status === 'completed')
 
   const stageTabs = useMemo(() => {
@@ -292,8 +297,8 @@ export function AdminEventPage() {
   const activeGroupStage = groupStageData.find((g) => g.group.id === activeStage)
 
   const activeKnockoutRound = isKnockoutStage(activeStage) ? knockoutRoundFromStageId(activeStage) : null
-  const activeKnockoutMatches = activeKnockoutRound
-    ? knockoutMatches.filter((m) => m.round === activeKnockoutRound)
+  const activeKnockoutMatches = isKnockoutStage(activeStage)
+    ? filterKnockoutMatchesForStage(knockoutMatches, activeStage)
     : []
 
   const isBlockBracket = (event?.config.knockout_bracket ?? 'cross') === 'block'
@@ -341,20 +346,33 @@ export function AdminEventPage() {
   )
 
   const assignmentWarnings = useMemo(() => {
+    if (entries.length === 0) return []
+
+    if (event?.status === 'ongoing' && groups.length > 0) {
+      const assignedCount = members.filter((m) => entries.some((e) => e.id === m.entry_id)).length
+      if (assignedCount === entries.length) {
+        return assignmentWarningsForMembers(entries, groups, members).map((x) => x.message)
+      }
+      if (assignedCount < entries.length) {
+        const unassigned = entries.length - assignedCount
+        return [
+          `${unassigned} participant${unassigned === 1 ? '' : 's'} not assigned to a group`,
+        ]
+      }
+      return []
+    }
+
     let groupCount: number | undefined
     let groupSizes: number[] | undefined
-    if (event?.status === 'ongoing') {
-      groupCount = event.config.group_count
-      groupSizes = event.config.group_sizes
-    } else if (startPreview?.ok) {
+    if (startPreview?.ok) {
       groupCount = startPreview.groupCount
       groupSizes = startPreview.groupSizes
     }
-    if (!groupCount || entries.length === 0) return []
+    if (!groupCount) return []
     const result = assignEntriesToGroups(entries, groupCount, groupSizes)
     if (result.error) return [result.error]
     return result.warnings.map((x) => x.message)
-  }, [entries, event, startPreview])
+  }, [entries, event, startPreview, groups, members])
 
   const knockoutGenerated = knockoutMatches.length > 0
 
@@ -394,6 +412,12 @@ export function AdminEventPage() {
     const currentGroupId = members.find((m) => m.entry_id === movingEntry.id)?.group_id
     return groupSummaries.filter((g) => g.groupId !== currentGroupId)
   }, [movingEntry, members, groupSummaries])
+
+  useEffect(() => {
+    if (movingEntry && moveTargetGroups.length === 0) {
+      setMovingEntry(null)
+    }
+  }, [movingEntry, moveTargetGroups.length])
 
   const lateJoinSuggestion = useMemo(() => {
     if (!pendingLateEntry) return null
@@ -873,6 +897,7 @@ export function AdminEventPage() {
       confirmingLabel: 'Removing…',
       onConfirm: async () => {
         await deleteEntry(entry)
+        if (editingEntry?.id === entry.id) handleCloseEditEntry()
         setMessage('Entry removed')
         setParticipantsDialogOpen(false)
         await fetchEventData()
@@ -995,8 +1020,16 @@ export function AdminEventPage() {
       await fetchEventData()
       const km = await fetchKnockoutMatches(tournamentId, eventId)
       if (km.length > 0 && !km.some((m) => m.status === 'completed')) {
-        await refreshKnockoutFromRanks()
-        setMessage('Group ranks saved — knockout bracket updated')
+        try {
+          await refreshKnockoutFromRanks()
+          setMessage('Group ranks saved — knockout bracket updated')
+        } catch (regenErr) {
+          setError(
+            regenErr instanceof Error
+              ? regenErr.message
+              : 'Group ranks saved but knockout bracket could not be regenerated',
+          )
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save ranks')
@@ -1019,14 +1052,41 @@ export function AdminEventPage() {
       await fetchEventData()
       const km = await fetchKnockoutMatches(tournamentId, eventId)
       if (km.length > 0 && !km.some((m) => m.status === 'completed')) {
-        await refreshKnockoutFromRanks()
-        setMessage('Ranks reset — knockout bracket updated')
+        try {
+          await refreshKnockoutFromRanks()
+          setMessage('Ranks reset — knockout bracket updated')
+        } catch (regenErr) {
+          setError(
+            regenErr instanceof Error
+              ? regenErr.message
+              : 'Ranks reset but knockout bracket could not be regenerated',
+          )
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset ranks')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleRecreateGroupStage = () => {
+    if (!tournamentId || !eventId) return
+    setDeleteConfirm({
+      title: 'Recreate group assignment?',
+      description:
+        'This removes all group-stage scores and the knockout bracket, then re-assigns every participant to groups using the current org-spread rules. Registrations and seeded flags are kept. Knockout is not generated — you can review groups first.',
+      confirmLabel: 'Recreate groups',
+      confirmingLabel: 'Recreating…',
+      onConfirm: async () => {
+        const { warnings: recreateWarnings, layoutLabel } =
+          await recreateGroupStageFromEntries(tournamentId, eventId, startLayoutKey)
+        if (recreateWarnings.length) setWarnings(recreateWarnings)
+        setMessage(`Group stage recreated — ${layoutLabel}`)
+        setActiveStage('')
+        await fetchEventData()
+      },
+    })
   }
 
   const handleGenerateKnockout = async () => {
@@ -1428,6 +1488,73 @@ export function AdminEventPage() {
         <>
           <GroupStageNavigator tabs={stageTabs} activeId={activeStage} onChange={setActiveStage} />
 
+          <div className="space-y-3">
+            <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
+              <PanelSectionTitle>Knockout stage</PanelSectionTitle>
+              {!allGroupPlayComplete ? (
+                <>
+                  <CaptionText>
+                    Finish all group-stage matches before generating the knockout bracket.
+                    {pendingGroupMatchCount > 0
+                      ? ` ${pendingGroupMatchCount} match${pendingGroupMatchCount === 1 ? '' : 'es'} still to score`
+                      : groupsAwaitingScores.length > 0
+                        ? ` — group${groupsAwaitingScores.length === 1 ? '' : 's'} ${groupsAwaitingScores.map((g) => g.group.label).join(', ')} ${groupsAwaitingScores.length === 1 ? 'has' : 'have'} no completed matches yet`
+                        : ''}
+                    .
+                  </CaptionText>
+                  <Button type="button" disabled fullWidth>
+                    Generate knockout bracket
+                  </Button>
+                </>
+              ) : knockoutHasScores ? (
+                <CaptionText>
+                  Knockout scoring has started — the bracket can no longer be regenerated from group
+                  ranks.
+                </CaptionText>
+              ) : knockoutMatches.length === 0 ? (
+                <>
+                  <CaptionText>
+                    Save any manual group ranks first, then generate the bracket from the final
+                    positions.
+                  </CaptionText>
+                  <Button type="button" onClick={handleGenerateKnockout} disabled={loading} fullWidth>
+                    Generate knockout bracket
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <CaptionText>
+                    Update manual group ranks if needed, then regenerate the bracket from the latest
+                    standings.
+                  </CaptionText>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleGenerateKnockout}
+                    disabled={loading}
+                    fullWidth
+                  >
+                    Regenerate knockout from ranks
+                  </Button>
+                </>
+              )}
+            </div>
+            {knockoutMatches.length > 0 && !knockoutHasScores && (
+              <WarningBanner>
+                Once knockout scoring starts, ranks can no longer update the bracket.
+              </WarningBanner>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleRecreateGroupStage}
+              disabled={loading}
+              fullWidth
+            >
+              Recreate group assignment (same participants)
+            </Button>
+          </div>
+
           {activeGroupStage && (
             <section className="space-y-4">
               <PanelSectionTitle>Group {activeGroupStage.group.label} standings</PanelSectionTitle>
@@ -1505,60 +1632,25 @@ export function AdminEventPage() {
             </section>
           )}
 
-          {allGroupPlayComplete && (
-            <div className="space-y-3">
-              <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
-                <PanelSectionTitle>Knockout stage</PanelSectionTitle>
-                <CaptionText>
-                  The knockout is not generated automatically. Save any manual group ranks first, then
-                  generate the bracket from the final positions.
-                </CaptionText>
-                {knockoutMatches.length === 0 ? (
-                  <Button type="button" onClick={handleGenerateKnockout} disabled={loading} fullWidth>
-                    Generate knockout bracket
-                  </Button>
-                ) : (
-                  <>
-                    {!knockoutHasScores && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={handleGenerateKnockout}
-                        disabled={loading}
-                        fullWidth
-                      >
-                        Regenerate knockout from ranks
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-              {knockoutMatches.length > 0 && (
-                <WarningBanner>
-                  Once knockout scoring starts, ranks can no longer update the bracket.
-                </WarningBanner>
-              )}
-            </div>
-          )}
-
           {activeKnockoutRound && activeKnockoutMatches.length > 0 && (() => {
             const scorable = activeKnockoutMatches.filter(
               (m) => m.status !== 'completed' && m.entry_a_id && m.entry_b_id && m.outcome !== 'bye',
             )
-            const finalMatch = knockoutMatches.find((m) => m.round === 'final')
-            const knockoutDone = finalMatch?.status === 'completed'
-            const waitingOnEarlierRound = knockoutMatches.some(
-              (m) =>
-                (m.round === 'quarter' || m.round === 'semi') &&
-                m.status !== 'completed' &&
-                m.entry_a_id &&
-                m.entry_b_id &&
-                m.outcome !== 'bye',
+            const finalMatch = knockoutMatches.find(
+              (m) => matchEffectiveRound(m, knockoutMatches) === 'final',
             )
+            const knockoutDone = finalMatch?.status === 'completed'
+            const waitingOnEarlierRound =
+              activeKnockoutRound != null &&
+              hasPendingEarlierKnockoutRound(knockoutMatches, activeKnockoutRound)
 
             return (
               <section className="space-y-4">
-                <KnockoutBracket matches={activeKnockoutMatches} round={activeKnockoutRound} />
+                <KnockoutBracket
+                  matches={activeKnockoutMatches}
+                  round={activeKnockoutRound ?? undefined}
+                  allMatches={knockoutMatches}
+                />
                 {scorable.length > 0 && (
                   <div className="space-y-3">
                     {scorable.map((m) => (
@@ -1567,12 +1659,11 @@ export function AdminEventPage() {
                         eventType={event.event_type}
                         config={cfg}
                         match={m}
-                        stage={
-                          m.round === 'final' ? 'finals' : m.round === 'semi' ? 'semis' : 'quarters'
-                        }
+                        stage={setRulesStageForRound(matchEffectiveRound(m, knockoutMatches))}
                         onSave={async (data) => {
-                          const stage =
-                            m.round === 'final' ? 'finals' : m.round === 'semi' ? 'semis' : 'quarters'
+                          const stage = setRulesStageForRound(
+                            matchEffectiveRound(m, knockoutMatches),
+                          )
                           await saveKnockoutMatchResult(m.id, data, stage)
                           await fetchEventData()
                         }}

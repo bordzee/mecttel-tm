@@ -14,7 +14,7 @@ import {
   fetchEntries,
 } from '../lib/tournamentService'
 import { resolveGroupStandings } from '../lib/standings'
-import { buildKnockoutStageTabs, isKnockoutStage, knockoutRoundFromStageId } from '../lib/knockoutTabs'
+import { buildKnockoutStageTabs, filterKnockoutMatchesForStage, isKnockoutStage, knockoutRoundFromStageId } from '../lib/knockoutTabs'
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent'
 import type { Group, GroupMatch, KnockoutMatch, TournamentEntry } from '../types'
 
@@ -95,8 +95,8 @@ export function PublicBracketsView({
 
   const activeGroupStage = groupStageData.find((g) => g.group.id === activeStage)
   const activeKnockoutRound = isKnockoutStage(activeStage) ? knockoutRoundFromStageId(activeStage) : null
-  const activeKnockoutMatches = activeKnockoutRound
-    ? knockoutMatches.filter((m) => m.round === activeKnockoutRound)
+  const activeKnockoutMatches = isKnockoutStage(activeStage)
+    ? filterKnockoutMatchesForStage(knockoutMatches, activeStage)
     : []
 
   if (showSkeleton) {
@@ -134,6 +134,7 @@ export function PublicBracketsView({
         <KnockoutBracket
           matches={activeKnockoutMatches}
           round={activeKnockoutRound}
+          allMatches={knockoutMatches}
           hideRoundTitle
         />
       )}

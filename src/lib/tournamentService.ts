@@ -10,7 +10,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore'
-import { db } from './firebase'
+import { db, auth } from './firebase'
 import { deleteEventData, deleteTournamentData, deleteWhere, deleteEventScopeWhere, deleteQueryDocs, deleteEntryReferences, stripUndefined } from './firebaseHelpers'
 import { deleteTournamentImageFiles } from './tournamentImageService'
 import type {
@@ -29,6 +29,9 @@ import type {
   StandingRow,
 } from '../types'
 import { assignEntriesToGroups } from './groupAssignment'
+import { sortKnockoutMatches } from './knockoutRounds'
+import { getStartLayoutOptions } from './groupLayout'
+import { validateTournamentStart } from './matchOutcomes'
 import { generateRoundRobinPairs } from './roundRobin'
 import { newRoundRobinPairsForEntry, nextGroupLabel, validateLateJoinTarget, type LateJoinMode } from './lateJoinAssignment'
 import {
@@ -75,9 +78,21 @@ async function commitBatchSets(pendingSets: PendingWrite[]) {
 }
 
 async function syncTournamentPublicVisibility(tournamentId: string) {
-  const events = await fetchEvents(tournamentId)
+  const [events, tournament] = await Promise.all([
+    fetchEvents(tournamentId),
+    fetchTournament(tournamentId),
+  ])
   const visible = events.some((e) => e.status === 'upcoming' || e.status === 'ongoing')
-  await updateDoc(doc(db, 'tournaments', tournamentId), { public_visible: visible })
+  await updateDoc(
+    doc(db, 'tournaments', tournamentId),
+    stripUndefined({
+      name: tournament.name,
+      venue: tournament.venue ?? '',
+      start_date: tournament.start_date ?? '',
+      image_url: tournament.image_url ?? null,
+      public_visible: visible,
+    }),
+  )
 }
 
 async function hydrateEntries(tournamentId: string, eventId: string): Promise<TournamentEntry[]> {
@@ -181,7 +196,10 @@ export async function createTournament(input: {
   const ref = await addDoc(
     collection(db, 'tournaments'),
     stripUndefined({
-      ...input,
+      name: input.name,
+      venue: input.venue || null,
+      start_date: input.start_date || null,
+      image_url: null,
       public_visible: false,
       created_at: new Date().toISOString(),
     }),
@@ -198,9 +216,11 @@ export async function createEvent(
     category: Category | null
     config: TournamentConfig
     sort_order?: number
+    status?: TournamentEvent['status']
   },
 ) {
   const existing = await fetchEvents(tournamentId)
+  const status = input.status ?? 'draft'
   const ref = await addDoc(
     eventsRef(tournamentId),
     stripUndefined({
@@ -209,13 +229,16 @@ export async function createEvent(
       event_type: input.event_type,
       category: input.category,
       config: input.config,
-      status: 'draft',
-      sort_order: input.sort_order ?? existing.length,
+      status,
+      sort_order: Math.trunc(input.sort_order ?? existing.length),
       created_at: new Date().toISOString(),
     }),
   )
+  if (status === 'upcoming' || status === 'ongoing') {
+    await syncTournamentPublicVisibility(tournamentId)
+  }
   const snap = await getDoc(ref)
-  return withId(snap.id, snap.data() as Omit<TournamentEvent, 'id'>)
+  return withId(snap.id, { tournament_id: tournamentId, ...snap.data() } as Omit<TournamentEvent, 'id'>)
 }
 
 export async function createTournamentWithEvents(
@@ -302,6 +325,183 @@ export async function deleteTournament(id: string) {
 export async function deleteEvent(tournamentId: string, eventId: string) {
   await deleteEventData(tournamentId, eventId)
   await syncTournamentPublicVisibility(tournamentId)
+}
+
+async function assertFirestoreAdmin(): Promise<string> {
+  const uid = auth.currentUser?.uid
+  if (!uid) {
+    throw new Error('Not signed in — open /admin/login and sign in again.')
+  }
+  const snap = await getDoc(doc(db, 'profiles', uid))
+  if (!snap.exists()) {
+    throw new Error(
+      `Missing admin profile at profiles/${uid}. In Firestore, create that document with { "role": "admin" }.`,
+    )
+  }
+  const role = snap.data().role
+  if (role !== 'admin') {
+    throw new Error(`Profile profiles/${uid} has role "${String(role)}" — needs "admin".`)
+  }
+  return uid
+}
+
+async function runDuplicateStep<T>(step: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (err) {
+    const base = err instanceof Error ? err.message : String(err)
+    if (/permission|insufficient/i.test(base)) {
+      throw new Error(`Duplicate failed while ${step}: ${base}`)
+    }
+    throw new Error(`Duplicate failed while ${step}: ${base}`)
+  }
+}
+
+/** Config for a fresh division copy — no group stage generated yet. */
+function configForParticipantCopy(config: TournamentConfig): TournamentConfig {
+  const { group_count: _gc, group_sizes: _gs, ...rest } = config
+  return rest
+}
+
+async function copyEntriesToEvent(
+  tournamentId: string,
+  eventId: string,
+  entries: TournamentEntry[],
+): Promise<number> {
+  const teamIds = [...new Set(entries.filter((e) => e.team_id).map((e) => e.team_id!))]
+  const rosters = teamIds.length > 0 ? await fetchTeamRosters(teamIds) : []
+  const rosterByTeam = new Map<string, string[]>()
+  for (const teamId of teamIds) {
+    rosterByTeam.set(
+      teamId,
+      rosters.filter((r) => r.team_id === teamId).map((r) => r.name),
+    )
+  }
+
+  let count = 0
+  for (const entry of entries) {
+    if (entry.entry_type === 'pair' && entry.pair) {
+      await addPairEntry(tournamentId, eventId, {
+        pair_name: entry.pair.pair_name ?? '',
+        player_a: entry.pair.player_a,
+        player_b: entry.pair.player_b,
+        organization: entry.pair.organization ?? '',
+        seeded: entry.seeded ?? entry.pair.seeded,
+      })
+      count++
+    } else if (entry.entry_type === 'player' && entry.player) {
+      await addPlayerEntry(tournamentId, eventId, {
+        name: entry.player.name,
+        organization: entry.player.organization ?? '',
+        seeded: entry.seeded ?? entry.player.seeded,
+      })
+      count++
+    } else if (entry.entry_type === 'team' && entry.team) {
+      await addTeamEntry(tournamentId, eventId, {
+        name: entry.team.name,
+        organization: entry.team.organization ?? '',
+        seeded: entry.seeded ?? entry.team.seeded,
+        roster: rosterByTeam.get(entry.team_id!) ?? [],
+      })
+      count++
+    }
+  }
+
+  return count
+}
+
+/**
+ * Duplicate a tournament with the same divisions and participants (org + seeded flags).
+ * No groups, scores, or knockout — divisions start at registration (upcoming).
+ */
+export async function duplicateTournamentWithParticipants(
+  sourceTournamentId: string,
+  options?: {
+    name?: string
+    /** Defaults to upcoming (registration open, no group stage). */
+    status?: 'draft' | 'upcoming'
+    /** Copy only these division IDs; default = all divisions. */
+    eventIds?: string[]
+  },
+): Promise<{ tournament: Tournament; events: TournamentEvent[]; entryCount: number }> {
+  await assertFirestoreAdmin()
+
+  const source = await runDuplicateStep('loading source tournament', () =>
+    fetchTournament(sourceTournamentId),
+  )
+  const sourceEvents = await runDuplicateStep('loading source divisions', () =>
+    fetchEvents(sourceTournamentId),
+  )
+  const eventsToCopy = options?.eventIds?.length
+    ? sourceEvents.filter((e) => options.eventIds!.includes(e.id))
+    : sourceEvents
+
+  if (!eventsToCopy.length) {
+    throw new Error('No divisions to copy')
+  }
+
+  let createdTournamentId: string | null = null
+
+  try {
+    const tournament = await runDuplicateStep('creating tournament', () =>
+      createTournament({
+        name: options?.name ?? `${source.name} (Copy)`,
+        venue: source.venue ?? '',
+        start_date: source.start_date ?? new Date().toISOString().slice(0, 10),
+      }),
+    )
+    createdTournamentId = tournament.id
+
+    if (source.image_url) {
+      await runDuplicateStep('copying cover image', () =>
+        updateTournament(tournament.id, { image_url: source.image_url }),
+      )
+    }
+
+    const divisionStatus = options?.status ?? 'upcoming'
+    const createdEvents: TournamentEvent[] = []
+    let entryCount = 0
+
+    for (const srcEvent of eventsToCopy) {
+      const newEvent = await runDuplicateStep(`creating division "${srcEvent.name}"`, () =>
+        createEvent(tournament.id, {
+          name: srcEvent.name,
+          event_type: srcEvent.event_type,
+          category: srcEvent.category,
+          config: configForParticipantCopy(srcEvent.config),
+          sort_order: Math.trunc(srcEvent.sort_order ?? 0),
+          status: divisionStatus,
+        }),
+      )
+
+      const entries = await runDuplicateStep(`loading participants for "${srcEvent.name}"`, () =>
+        hydrateEntries(sourceTournamentId, srcEvent.id),
+      )
+      entryCount += await runDuplicateStep(`copying participants for "${srcEvent.name}"`, () =>
+        copyEntriesToEvent(tournament.id, newEvent.id, entries),
+      )
+      createdEvents.push(
+        await runDuplicateStep(`loading new division "${srcEvent.name}"`, () =>
+          fetchEvent(tournament.id, newEvent.id),
+        ),
+      )
+    }
+
+    return {
+      tournament: await fetchTournament(tournament.id),
+      events: createdEvents,
+      entryCount,
+    }
+  } catch (err) {
+    if (createdTournamentId) {
+      try {
+        await deleteTournament(createdTournamentId)
+      } catch {
+        /* best-effort rollback */
+      }
+    }
+    throw err instanceof Error ? err : new Error('Duplicate failed')
+  }
 }
 
 function entryScope(tournamentId: string, eventId: string) {
@@ -634,6 +834,77 @@ export async function setupGroupsAndMatches(
   await commitBatchSets(memberAndMatchWrites)
 }
 
+function resolveRecreateLayoutKey(
+  entryCount: number,
+  config: TournamentConfig,
+): string | undefined {
+  const options = getStartLayoutOptions(entryCount, config)
+  if (!options.length) return undefined
+
+  if (config.group_sizes?.length) {
+    const exactKey = `uneven-${config.group_sizes.join('-')}`
+    if (options.some((o) => o.key === exactKey)) return exactKey
+  }
+
+  if (config.group_count != null) {
+    const sameGroupCount = options.filter((o) => o.groupCount === config.group_count)
+    if (sameGroupCount.length === 1) return sameGroupCount[0]!.key
+    if (sameGroupCount.length > 1) {
+      const even = sameGroupCount.find((o) => !o.uneven)
+      return even?.key ?? sameGroupCount[0]!.key
+    }
+  }
+
+  return options[0]!.key
+}
+
+/**
+ * Wipe group stage + knockout and re-assign entries to groups (fresh RR, no knockout).
+ * Keeps the same participants and seeded flags; uses updated org-spread assignment logic.
+ */
+export async function recreateGroupStageFromEntries(
+  tournamentId: string,
+  eventId: string,
+  layoutKey?: string,
+): Promise<{ warnings: string[]; layoutLabel: string }> {
+  const event = await fetchEvent(tournamentId, eventId)
+  if (event.status !== 'ongoing') {
+    throw new Error('Division must be ongoing to recreate group assignment')
+  }
+
+  const entries = await fetchEntries(tournamentId, eventId)
+  const resolvedLayoutKey = layoutKey ?? resolveRecreateLayoutKey(entries.length, event.config)
+  const check = validateTournamentStart(entries.length, event.config, resolvedLayoutKey)
+  if (!check.ok) {
+    throw new Error(check.error ?? 'Invalid layout for entry count')
+  }
+
+  const assignCheck = assignEntriesToGroups(entries, check.groupCount!, check.groupSizes)
+  if (assignCheck.error) {
+    throw new Error(assignCheck.error)
+  }
+
+  const { group_sizes: _prev, ...configBase } = event.config
+  const updatedConfig: TournamentConfig = {
+    ...configBase,
+    entries_per_group: check.entriesPerGroup!,
+    group_count: check.groupCount!,
+    ...(check.groupSizes ? { group_sizes: check.groupSizes } : {}),
+  }
+
+  await setupGroupsAndMatches(tournamentId, { ...event, config: updatedConfig }, entries)
+  await updateEvent(tournamentId, eventId, { config: updatedConfig, status: 'ongoing' })
+
+  const layoutLabel = check.uneven
+    ? `${check.groupCount} groups (${check.groupSizes!.join('+')})`
+    : `${check.groupCount} groups × ${check.entriesPerGroup}`
+
+  return {
+    warnings: assignCheck.warnings.map((w) => w.message),
+    layoutLabel,
+  }
+}
+
 export async function fetchGroupMatches(tournamentId: string, eventId: string) {
   const snap = await getDocs(eventScopeQuery('group_matches', tournamentId, eventId))
   const entries = await fetchEntries(tournamentId, eventId)
@@ -653,21 +924,18 @@ export async function fetchKnockoutMatches(tournamentId: string, eventId: string
   const snap = await getDocs(eventScopeQuery('knockout_matches', tournamentId, eventId))
   const entries = await fetchEntries(tournamentId, eventId)
   const entryMap = new Map(entries.map((e) => [e.id, e]))
-  const roundOrder = { quarter: 0, semi: 1, final: 2 }
-  return snap.docs
-    .map((d) => {
-      const data = d.data()
-      return {
-        id: d.id,
-        ...data,
-        entry_a: data.entry_a_id ? entryMap.get(data.entry_a_id) ?? null : null,
-        entry_b: data.entry_b_id ? entryMap.get(data.entry_b_id) ?? null : null,
-      } as KnockoutMatch
-    })
-    .sort((a, b) => {
-      const rd = roundOrder[a.round] - roundOrder[b.round]
-      return rd !== 0 ? rd : a.slot - b.slot
-    })
+  return sortKnockoutMatches(
+    snap.docs
+      .map((d) => {
+        const data = d.data()
+        return {
+          id: d.id,
+          ...data,
+          entry_a: data.entry_a_id ? entryMap.get(data.entry_a_id) ?? null : null,
+          entry_b: data.entry_b_id ? entryMap.get(data.entry_b_id) ?? null : null,
+        } as KnockoutMatch
+      }),
+  )
 }
 
 export async function generateGroupStage(
