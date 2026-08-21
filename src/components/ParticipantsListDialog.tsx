@@ -23,16 +23,22 @@ export function ParticipantsListDialog({
   onClose,
   entries,
   canEditEntryDetails,
-  canEditEntries,
+  canRemoveEntry,
+  canMoveEntry,
+  entryGroupLabels,
   onEdit,
+  onMove,
   onRemove,
 }: {
   open: boolean
   onClose: () => void
   entries: TournamentEntry[]
   canEditEntryDetails: boolean
-  canEditEntries: boolean
+  canRemoveEntry: boolean
+  canMoveEntry?: boolean
+  entryGroupLabels?: Map<string, string>
   onEdit?: (entry: TournamentEntry) => void
+  onMove?: (entry: TournamentEntry) => void
   onRemove?: (entry: TournamentEntry) => void
 }) {
   const [search, setSearch] = useState('')
@@ -150,8 +156,10 @@ export function ParticipantsListDialog({
               <EntryRow
                 key={entry.id}
                 entry={entry}
+                groupLabel={entryGroupLabels?.get(entry.id) ?? null}
                 onEdit={canEditEntryDetails && onEdit ? () => onEdit(entry) : undefined}
-                onRemove={canEditEntries && onRemove ? () => onRemove(entry) : undefined}
+                onMove={canMoveEntry && onMove ? () => onMove(entry) : undefined}
+                onRemove={canRemoveEntry && onRemove ? () => onRemove(entry) : undefined}
               />
             ))
           )}

@@ -27,6 +27,7 @@ import { EntryEditDialog, type EntryEditFormState } from '../../components/Entry
 import { ConflictWarnings } from '../../components/ConflictWarnings'
 import { SeededSelect } from '../../components/SeededSelect'
 import { LateEntryDialog } from '../../components/LateEntryDialog'
+import { MoveEntryDialog } from '../../components/MoveEntryDialog'
 import { GenerateGroupStageDialog } from '../../components/GenerateGroupStageDialog'
 import { ParticipantsListDialog } from '../../components/ParticipantsListDialog'
 import {
@@ -36,6 +37,7 @@ import {
   updateEvent,
   deleteEvent,
   deleteEntry,
+  moveEntryToGroup,
   addTeamEntry,
   addPlayerEntry,
   addPairEntry,
@@ -144,6 +146,7 @@ export function AdminEventPage() {
   const [pageErrorDismissed, setPageErrorDismissed] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
   const [participantsDialogOpen, setParticipantsDialogOpen] = useState(false)
+  const [movingEntry, setMovingEntry] = useState<TournamentEntry | null>(null)
   const [readyDialogOpen, setReadyDialogOpen] = useState(false)
   const loadSeq = useRef(0)
   const isInitialLoad = useRef(true)
@@ -351,6 +354,9 @@ export function AdminEventPage() {
 
   const knockoutGenerated = knockoutMatches.length > 0
 
+  const canManageOngoingParticipants =
+    event?.status === 'ongoing' && !knockoutGenerated && groups.length > 0
+
   const conflictWarnings = useMemo(() => {
     const list = [...duplicateWarnings, ...assignmentWarnings]
     if (event?.status === 'ongoing' || knockoutGenerated) {
@@ -369,6 +375,21 @@ export function AdminEventPage() {
         .filter(Boolean) as TournamentEntry[],
     }))
   }, [groups, members, entryMap])
+
+  const entryGroupLabelMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const member of members) {
+      const group = groups.find((g) => g.id === member.group_id)
+      if (group) map.set(member.entry_id, group.label)
+    }
+    return map
+  }, [members, groups])
+
+  const moveTargetGroups = useMemo(() => {
+    if (!movingEntry) return []
+    const currentGroupId = members.find((m) => m.entry_id === movingEntry.id)?.group_id
+    return groupSummaries.filter((g) => g.groupId !== currentGroupId)
+  }, [movingEntry, members, groupSummaries])
 
   const lateJoinSuggestion = useMemo(() => {
     if (!pendingLateEntry) return null
@@ -841,15 +862,51 @@ export function AdminEventPage() {
   const handleDeleteEntry = (entry: TournamentEntry) => {
     setDeleteConfirm({
       title: `Remove ${getEntryDisplayName(entry)}?`,
-      description: 'This entry will be permanently removed from the division.',
+      description: canManageOngoingParticipants
+        ? 'This removes the player and deletes all of their group-stage matches.'
+        : 'This entry will be permanently removed from the division.',
       confirmLabel: 'Remove',
       confirmingLabel: 'Removing…',
       onConfirm: async () => {
         await deleteEntry(entry)
         setMessage('Entry removed')
+        setParticipantsDialogOpen(false)
         await fetchEventData()
       },
     })
+  }
+
+  const handleOpenMoveEntry = (entry: TournamentEntry) => {
+    const currentGroupId = members.find((m) => m.entry_id === entry.id)?.group_id
+    const otherGroups = groupSummaries.filter((g) => g.groupId !== currentGroupId)
+    if (!otherGroups.length) {
+      setError('No other groups available to move this player into')
+      return
+    }
+    setParticipantsDialogOpen(false)
+    setMovingEntry(entry)
+  }
+
+  const handleMoveConfirm = async (targetGroupId: string) => {
+    if (!tournamentId || !eventId || !movingEntry) return
+    setLoading(true)
+    setError('')
+    try {
+      const { warnings: moveWarnings } = await moveEntryToGroup(
+        tournamentId,
+        eventId,
+        movingEntry.id,
+        targetGroupId,
+      )
+      if (moveWarnings.length) setWarnings((prev) => [...new Set([...prev, ...moveWarnings])])
+      setMessage('Player moved to new group')
+      setMovingEntry(null)
+      await fetchEventData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to move player')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleDeleteEvent = () => {
@@ -1086,6 +1143,8 @@ export function AdminEventPage() {
   const cfg = event.config
   const canEditDivisionSettings = event.status === 'draft' || event.status === 'upcoming'
   const canEditEntries = canEditDivisionSettings
+  const canRemoveEntry = canEditEntries || canManageOngoingParticipants
+  const canMoveEntry = canManageOngoingParticipants
   const canEditEntryDetails =
     canEditDivisionSettings || (event.status === 'ongoing' && !knockoutGenerated)
   const canLateJoin = event.status === 'ongoing' && !knockoutGenerated && groups.length > 0
@@ -1270,14 +1329,23 @@ export function AdminEventPage() {
             />
             {canEditEntries && renderEntryForm(false)}
             {!canEditEntries && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setParticipantsDialogOpen(true)}
-                fullWidth
-              >
-                Show participants
-              </Button>
+              <>
+                {canManageOngoingParticipants && (
+                  <InfoNoteCard>
+                    Remove players or move them to another group before knockout is generated.
+                    Moving a player deletes their matches in the old group and creates new
+                    round-robin matches in the target group.
+                  </InfoNoteCard>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setParticipantsDialogOpen(true)}
+                  fullWidth
+                >
+                  {canManageOngoingParticipants ? 'Manage participants' : 'Show participants'}
+                </Button>
+              </>
             )}
             {event.status === 'draft' && (
               <Button disabled={loading} onClick={() => changeStatus('upcoming')} fullWidth>
@@ -1542,13 +1610,27 @@ export function AdminEventPage() {
         />
       )}
 
+      {movingEntry && moveTargetGroups.length > 0 && (
+        <MoveEntryDialog
+          entry={movingEntry}
+          currentGroupLabel={entryGroupLabelMap.get(movingEntry.id) ?? null}
+          groups={moveTargetGroups}
+          confirming={loading}
+          onCancel={() => setMovingEntry(null)}
+          onConfirm={handleMoveConfirm}
+        />
+      )}
+
       <ParticipantsListDialog
         open={participantsDialogOpen}
         onClose={() => setParticipantsDialogOpen(false)}
         entries={entries}
         canEditEntryDetails={canEditEntryDetails}
-        canEditEntries={canEditEntries}
+        canRemoveEntry={canRemoveEntry}
+        canMoveEntry={canMoveEntry}
+        entryGroupLabels={entryGroupLabelMap}
         onEdit={handleOpenEditEntry}
+        onMove={handleOpenMoveEntry}
         onRemove={handleDeleteEntry}
       />
 

@@ -872,6 +872,128 @@ export async function addLateJoinEntry(
   return { entryId, warnings }
 }
 
+async function assertGroupStageEntryChangesAllowed(tournamentId: string, eventId: string) {
+  const [event, knockout] = await Promise.all([
+    fetchEvent(tournamentId, eventId),
+    fetchKnockoutMatches(tournamentId, eventId),
+  ])
+  if (event.status !== 'ongoing') {
+    throw new Error('Changes are only available during the group stage')
+  }
+  if (knockout.length > 0) {
+    throw new Error('Cannot change entries after the knockout bracket has been generated')
+  }
+  return event
+}
+
+async function clearGroupManualRanks(groupIds: string[]) {
+  const unique = [...new Set(groupIds)]
+  await Promise.all(
+    unique.map((groupId) =>
+      updateDoc(doc(db, 'groups', groupId), {
+        manual_rank_order: null,
+        manual_rank_note: null,
+      }),
+    ),
+  )
+}
+
+export async function moveEntryToGroup(
+  tournamentId: string,
+  eventId: string,
+  entryId: string,
+  targetGroupId: string,
+): Promise<{ warnings: string[] }> {
+  await assertGroupStageEntryChangesAllowed(tournamentId, eventId)
+
+  const [groups, entries, groupMatches] = await Promise.all([
+    fetchGroups(tournamentId, eventId),
+    fetchEntries(tournamentId, eventId),
+    fetchGroupMatches(tournamentId, eventId),
+  ])
+
+  if (!groups.length) {
+    throw new Error('Group stage has not been generated yet')
+  }
+
+  const members = await fetchGroupMembers(
+    tournamentId,
+    eventId,
+    groups.map((g) => g.id),
+  )
+
+  const entry = entries.find((e) => e.id === entryId)
+  if (!entry) throw new Error('Entry not found')
+
+  const member = members.find((m) => m.entry_id === entryId)
+  if (!member) throw new Error('Entry is not assigned to a group')
+
+  const sourceGroupId = member.group_id
+  if (sourceGroupId === targetGroupId) {
+    throw new Error('Entry is already in this group')
+  }
+
+  const targetGroup = groups.find((g) => g.id === targetGroupId)
+  if (!targetGroup) throw new Error('Target group not found')
+
+  const targetEntryIds = members
+    .filter((m) => m.group_id === targetGroupId)
+    .map((m) => m.entry_id)
+  const targetEntries = targetEntryIds
+    .map((id) => entries.find((e) => e.id === id))
+    .filter(Boolean) as TournamentEntry[]
+
+  const validation = validateLateJoinTarget(targetEntries, entry)
+  if (!validation.ok) {
+    throw new Error(validation.error ?? 'Cannot move to this group')
+  }
+
+  const memberSnap = await getDocs(
+    query(collection(db, 'group_members'), where('entry_id', '==', entryId)),
+  )
+
+  const batch = writeBatch(db)
+
+  for (const match of groupMatches) {
+    if (
+      match.group_id === sourceGroupId &&
+      (match.entry_a_id === entryId || match.entry_b_id === entryId)
+    ) {
+      batch.delete(doc(db, 'group_matches', match.id))
+    }
+  }
+
+  for (const memberDoc of memberSnap.docs) {
+    batch.delete(memberDoc.ref)
+  }
+
+  batch.set(doc(collection(db, 'group_members')), {
+    group_id: targetGroupId,
+    entry_id: entryId,
+  })
+
+  for (const [a, b] of newRoundRobinPairsForEntry(entryId, targetEntryIds)) {
+    batch.set(doc(collection(db, 'group_matches')), {
+      tournament_id: tournamentId,
+      event_id: eventId,
+      group_id: targetGroupId,
+      entry_a_id: a,
+      entry_b_id: b,
+      score_a: null,
+      score_b: null,
+      rubber_results: null,
+      winner_entry_id: null,
+      status: 'scheduled',
+      outcome: 'normal',
+    })
+  }
+
+  await batch.commit()
+  await clearGroupManualRanks([sourceGroupId, targetGroupId])
+
+  return { warnings: validation.warnings }
+}
+
 async function loadEventForMatch(matchData: {
   tournament_id: string
   event_id: string
@@ -1158,9 +1280,24 @@ export async function deleteEntry(entry: TournamentEntry) {
   )
   if (!eventSnap.exists()) throw new Error('Division not found')
   const status = eventSnap.data().status as TournamentEvent['status']
+
   if (status !== 'draft' && status !== 'upcoming') {
-    throw new Error('Cannot remove entries after the division has started')
+    if (status === 'ongoing') {
+      const knockout = await fetchKnockoutMatches(entry.tournament_id, entry.event_id)
+      if (knockout.length > 0) {
+        throw new Error('Cannot remove entries after the knockout bracket has been generated')
+      }
+    } else {
+      throw new Error('Cannot remove entries after the division has ended')
+    }
   }
+
+  const memberSnap = await getDocs(
+    query(collection(db, 'group_members'), where('entry_id', '==', entry.id)),
+  )
+  const affectedGroupIds = [
+    ...new Set(memberSnap.docs.map((d) => d.data().group_id as string)),
+  ]
 
   await deleteEntryReferences(entry.tournament_id, entry.event_id, entry.id)
 
@@ -1173,11 +1310,15 @@ export async function deleteEntry(entry: TournamentEntry) {
     batch.delete(doc(db, 'teams', entry.team_id))
     batch.delete(doc(db, 'tournament_entries', entry.id))
     await batch.commit()
-    return
+  } else {
+    const batch = writeBatch(db)
+    batch.delete(doc(db, 'tournament_entries', entry.id))
+    if (entry.player_id) batch.delete(doc(db, 'players', entry.player_id))
+    if (entry.pair_id) batch.delete(doc(db, 'pairs', entry.pair_id))
+    await batch.commit()
   }
-  const batch = writeBatch(db)
-  batch.delete(doc(db, 'tournament_entries', entry.id))
-  if (entry.player_id) batch.delete(doc(db, 'players', entry.player_id))
-  if (entry.pair_id) batch.delete(doc(db, 'pairs', entry.pair_id))
-  await batch.commit()
+
+  if (affectedGroupIds.length) {
+    await clearGroupManualRanks(affectedGroupIds)
+  }
 }
