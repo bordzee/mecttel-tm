@@ -115,13 +115,16 @@ export function AdminTournamentHubPage() {
   const handleDeleteTournament = async () => {
     if (!tournament || loading) return
     setLoading(true)
+    setError('')
     try {
       await deleteTournament(tournament.id)
-      navigate('/admin')
+      setShowDeleteConfirm(false)
+      navigate('/admin', { state: { message: 'Tournament deleted.' } })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete')
-      setLoading(false)
       setShowDeleteConfirm(false)
+    } finally {
+      setLoading(false)
     }
   }
 

@@ -1084,6 +1084,54 @@ export async function saveGroupMatchResult(
   await updateDoc(matchRef, { ...update, status: 'completed' })
 }
 
+export async function updateGroupMatchResult(
+  matchId: string,
+  update: {
+    score_a: number
+    score_b: number
+    rubber_results?: { home: ('W' | 'L' | null)[] } | null
+    winner_entry_id: string
+    outcome: string
+  },
+): Promise<{ warnings: string[] }> {
+  const warnings: string[] = []
+  const matchRef = doc(db, 'group_matches', matchId)
+  const matchSnap = await getDoc(matchRef)
+  if (!matchSnap.exists()) throw new Error('Match not found')
+
+  const matchData = matchSnap.data()
+  const tournamentId = matchData.tournament_id as string
+  const eventId = matchData.event_id as string
+  const groupId = matchData.group_id as string
+
+  const knockout = await fetchKnockoutMatches(tournamentId, eventId)
+  if (knockout.some((m) => m.status === 'completed')) {
+    throw new Error('Cannot edit group scores — knockout matches are already scored')
+  }
+
+  const event = await loadEventForMatch({ tournament_id: tournamentId, event_id: eventId })
+  validateMatchResultSave(
+    { id: matchId, ...matchData } as GroupMatch,
+    update,
+    { eventType: event.event_type, config: event.config, stage: 'group', allowEdit: true },
+  )
+
+  await updateDoc(matchRef, { ...update, status: 'completed' })
+
+  const groupRef = doc(db, 'groups', groupId)
+  const groupSnap = await getDoc(groupRef)
+  if (groupSnap.exists() && groupSnap.data().manual_rank_order?.length) {
+    await updateDoc(groupRef, { manual_rank_order: null, manual_rank_note: null })
+    warnings.push('Manual group ranks were cleared — review standings and set ranks again if needed.')
+  }
+
+  if (knockout.length > 0) {
+    warnings.push('Knockout bracket exists — regenerate from ranks if standings changed who should advance.')
+  }
+
+  return { warnings }
+}
+
 export async function propagateKnockoutWinners(tournamentId: string, eventId: string) {
   const inflight = knockoutPropagationInflight.get(eventId)
   if (inflight) return inflight

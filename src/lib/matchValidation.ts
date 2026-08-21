@@ -16,9 +16,11 @@ export function validateMatchResultSave(
     eventType: EventType
     config: TournamentConfig
     stage: 'group' | 'quarters' | 'semis' | 'finals'
+    /** Allow correcting an already-scored match (group stage only). */
+    allowEdit?: boolean
   },
 ): void {
-  if (match.status === 'completed') {
+  if (match.status === 'completed' && !options.allowEdit) {
     throw new Error('This match is already completed')
   }
 

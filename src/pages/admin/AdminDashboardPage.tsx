@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AdminLayout } from '../../components/AdminLayout'
 import { FirebaseSetupBanner } from '../../components/FirebaseSetupBanner'
 import {
@@ -28,10 +28,21 @@ function eventPillVariant(status: TournamentEvent['status']): 'live' | 'upcoming
 
 export function AdminDashboardPage() {
   const { signOut } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
   const [tournaments, setTournaments] = useState<(Tournament & { events: TournamentEvent[] })[]>([])
   const [loading, setLoading] = useState(true)
   const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    const navMessage = (location.state as { message?: string } | null)?.message
+    if (navMessage) {
+      setMessage(navMessage)
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.pathname, location.state, navigate])
 
   useEffect(() => {
     setLoading(true)
@@ -62,7 +73,12 @@ export function AdminDashboardPage() {
         <LinkButton to="/admin/tournaments/new">+ New tournament</LinkButton>
         <IconTextLink to="/admin/admins/new">Create admin account</IconTextLink>
 
-        <StatusPopups error={error} onErrorDismiss={() => setError('')} />
+        <StatusPopups
+          success={message}
+          error={error}
+          onSuccessDismiss={() => setMessage('')}
+          onErrorDismiss={() => setError('')}
+        />
 
         <section className="space-y-3">
           <ScreenSectionTitle>All tournaments</ScreenSectionTitle>

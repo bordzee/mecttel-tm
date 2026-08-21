@@ -21,6 +21,8 @@ interface Props {
   config: TournamentConfig
   match: GroupMatch | KnockoutMatch
   stage?: 'group' | 'quarters' | 'semis' | 'finals' | 'knockout_early'
+  /** When true, completed group matches can be corrected. */
+  allowEdit?: boolean
   onSave: (data: {
     score_a: number
     score_b: number
@@ -30,21 +32,53 @@ interface Props {
   }) => Promise<void>
 }
 
-export function MatchScoreEntry({ eventType, config, match, stage = 'group', onSave }: Props) {
+function formStateFromMatch(match: GroupMatch | KnockoutMatch) {
+  return {
+    rubbers: match.rubber_results?.home ?? [],
+    scoreA: match.score_a?.toString() ?? '',
+    scoreB: match.score_b?.toString() ?? '',
+    outcome: (match.outcome ?? 'normal') as MatchOutcome,
+    winnerSide: (match.winner_entry_id === match.entry_b_id ? 'b' : 'a') as 'a' | 'b',
+  }
+}
+
+export function MatchScoreEntry({
+  eventType,
+  config,
+  match,
+  stage = 'group',
+  allowEdit = false,
+  onSave,
+}: Props) {
   const isTeam = eventType === 'team'
   const format = config.team_format ?? 'SSS'
   const homeName = match.entry_a ? getEntryDisplayName(match.entry_a) : 'TBD'
   const awayName = match.entry_b ? getEntryDisplayName(match.entry_b) : 'TBD'
 
+  const [editing, setEditing] = useState(false)
   const [rubbers, setRubbers] = useState<RubberResult[]>(match.rubber_results?.home ?? [])
   const [scoreA, setScoreA] = useState(match.score_a?.toString() ?? '')
   const [scoreB, setScoreB] = useState(match.score_b?.toString() ?? '')
   const [outcome, setOutcome] = useState<MatchOutcome>(match.outcome ?? 'normal')
-  const [winnerSide, setWinnerSide] = useState<'a' | 'b'>('a')
+  const [winnerSide, setWinnerSide] = useState<'a' | 'b'>(
+    match.winner_entry_id === match.entry_b_id ? 'b' : 'a',
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const bestOf = getBestOfForStage(stage, config)
+  const isCompleted = match.status === 'completed'
+
+  const startEditing = () => {
+    const next = formStateFromMatch(match)
+    setRubbers(next.rubbers)
+    setScoreA(next.scoreA)
+    setScoreB(next.scoreB)
+    setOutcome(next.outcome)
+    setWinnerSide(next.winnerSide)
+    setError('')
+    setEditing(true)
+  }
 
   const handleSave = async () => {
     setError('')
@@ -104,6 +138,7 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
         winner_entry_id: winnerId,
         outcome,
       })
+      setEditing(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed')
     } finally {
@@ -111,16 +146,23 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
     }
   }
 
-  if (match.status === 'completed') {
+  if (isCompleted && !editing) {
     return (
-      <MatchCard
-        homeName={homeName}
-        awayName={awayName}
-        scoreA={match.score_a}
-        scoreB={match.score_b}
-        homeWon={match.winner_entry_id === match.entry_a_id}
-        awayWon={match.winner_entry_id === match.entry_b_id}
-      />
+      <div className="space-y-2">
+        <MatchCard
+          homeName={homeName}
+          awayName={awayName}
+          scoreA={match.score_a}
+          scoreB={match.score_b}
+          homeWon={match.winner_entry_id === match.entry_a_id}
+          awayWon={match.winner_entry_id === match.entry_b_id}
+        />
+        {allowEdit && (
+          <Button type="button" variant="secondary" onClick={startEditing} fullWidth>
+            Edit score
+          </Button>
+        )}
+      </div>
     )
   }
 
@@ -128,6 +170,9 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
     <Card className="p-4 space-y-3">
       <p className="text-sm font-semibold text-text-bluewhite">
         {homeName} vs {awayName}
+        {isCompleted && editing ? (
+          <span className="text-text-steel font-normal"> · editing</span>
+        ) : null}
       </p>
 
       <div>
@@ -195,9 +240,25 @@ export function MatchScoreEntry({ eventType, config, match, stage = 'group', onS
         <StatusPopups error={error} onErrorDismiss={() => setError('')} />
       ) : null}
 
-      <Button type="button" onClick={handleSave} disabled={saving} fullWidth>
-        {saving ? 'Saving…' : 'Save result'}
-      </Button>
+      <div className={isCompleted && editing ? 'grid grid-cols-2 gap-2' : undefined}>
+        {isCompleted && editing && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setEditing(false)
+              setError('')
+            }}
+            disabled={saving}
+            fullWidth
+          >
+            Cancel
+          </Button>
+        )}
+        <Button type="button" onClick={handleSave} disabled={saving} fullWidth>
+          {saving ? 'Saving…' : isCompleted ? 'Update score' : 'Save result'}
+        </Button>
+      </div>
     </Card>
   )
 }

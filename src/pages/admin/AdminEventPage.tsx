@@ -55,6 +55,7 @@ import {
   fetchGroupMatches,
   fetchKnockoutMatches,
   saveGroupMatchResult,
+  updateGroupMatchResult,
   saveGroupRankOrder,
   clearGroupRankOrder,
   regenerateKnockoutFromRanks,
@@ -1593,7 +1594,15 @@ export function AdminEventPage() {
                           config={cfg}
                           match={m}
                           stage="group"
-                          onSave={async () => {}}
+                          allowEdit={!knockoutHasScores}
+                          onSave={async (data) => {
+                            const { warnings: editWarnings } = await updateGroupMatchResult(m.id, data)
+                            if (editWarnings.length) {
+                              setWarnings((prev) => [...new Set([...prev, ...editWarnings])])
+                            }
+                            setMessage('Score updated.')
+                            await fetchEventData()
+                          }}
                         />
                       </div>
                     ))}
