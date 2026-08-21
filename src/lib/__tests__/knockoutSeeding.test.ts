@@ -116,6 +116,7 @@ describe('knockoutSeeding', () => {
 
       expect(tree.filter((n) => n.slot.round === 'quarter')).toHaveLength(4)
       expect(tree.filter((n) => n.slot.round === 'semi')).toHaveLength(2)
+      expect(tree.filter((n) => n.slot.round === 'third_place')).toHaveLength(1)
       expect(tree.filter((n) => n.slot.round === 'final')).toHaveLength(1)
 
       const matches = treeToMatches(tree)
@@ -149,6 +150,7 @@ describe('knockoutSeeding', () => {
       expect(matches.filter((m) => m.round === 'quarter')).toHaveLength(4)
       expect(matches.filter((m) => m.round === 'quarter' && m.outcome === 'bye')).toHaveLength(0)
       expect(matches.filter((m) => m.round === 'semi')).toHaveLength(2)
+      expect(matches.filter((m) => m.round === 'third_place')).toHaveLength(1)
       expect(matches.filter((m) => m.round === 'final')).toHaveLength(1)
 
       completeRound(matches, 'quarter')

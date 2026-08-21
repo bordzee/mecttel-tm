@@ -67,6 +67,10 @@ export function TournamentWizardPage() {
 
   const handleCreateHubOnly = async () => {
     setError('')
+    if (!startDate.trim()) {
+      setError('Start date is required')
+      return
+    }
     setSaving(true)
     try {
       const tournament = await createTournament({ name, venue, start_date: startDate })
@@ -81,6 +85,10 @@ export function TournamentWizardPage() {
 
   const handleCreateWithDivisions = async () => {
     setError('')
+    if (!startDate.trim()) {
+      setError('Start date is required')
+      return
+    }
     if (!divisions.length) {
       setError('Add at least one division')
       return
@@ -128,11 +136,12 @@ export function TournamentWizardPage() {
               />
             </div>
             <div>
-              <FormLabel>Start date</FormLabel>
+              <FormLabel>Start date *</FormLabel>
               <TextInput
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
+                required
               />
             </div>
             <TournamentImageUpload
@@ -141,10 +150,10 @@ export function TournamentWizardPage() {
               onFileChange={setImageFile}
               disabled={saving}
             />
-            <Button onClick={handleCreateHubOnly} disabled={!name || saving} fullWidth>
+            <Button onClick={handleCreateHubOnly} disabled={!name.trim() || !startDate.trim() || saving} fullWidth>
               {saving ? 'Creating…' : 'Create tournament'}
             </Button>
-            <Button variant="secondary" onClick={() => setStep(1)} disabled={!name} fullWidth>
+            <Button variant="secondary" onClick={() => setStep(1)} disabled={!name.trim() || !startDate.trim()} fullWidth>
               Add divisions now (optional)
             </Button>
           </div>

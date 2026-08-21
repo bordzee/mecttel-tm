@@ -20,6 +20,7 @@ describe('knockoutRounds', () => {
     expect(knockoutRoundTabLabel('r16')).toBe('R16')
     expect(knockoutRoundTabLabel('quarter')).toBe('QF')
     expect(knockoutRoundTabLabel('semi')).toBe('SF')
+    expect(knockoutRoundTabLabel('third_place')).toBe('3rd Place')
   })
 
   it('infers effective rounds from source tree (legacy mis-labeled semis)', () => {

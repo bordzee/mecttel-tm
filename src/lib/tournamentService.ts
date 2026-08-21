@@ -35,6 +35,7 @@ import { newRoundRobinPairsForEntry, nextGroupLabel, validateLateJoinTarget, typ
 import {
   generateKnockoutPairings,
   computeKnockoutAdvancement,
+  knockoutMatchHasCompletedDependents,
   type KnockoutTreeNode,
 } from './knockoutSeeding'
 import { computeStandings, getTopAdvancers, resolveGroupStandings, needsManualRankResolution } from './standings'
@@ -191,12 +192,16 @@ export async function createTournament(input: {
   venue: string
   start_date: string
 }) {
+  const startDate = input.start_date?.trim()
+  if (!startDate) {
+    throw new Error('Start date is required')
+  }
   const ref = await addDoc(
     collection(db, 'tournaments'),
     stripUndefined({
       name: input.name,
       venue: input.venue || null,
-      start_date: input.start_date || null,
+      start_date: startDate,
       image_url: null,
       public_visible: false,
       created_at: new Date().toISOString(),
@@ -317,7 +322,7 @@ export async function fetchEntries(tournamentId: string, eventId: string): Promi
 
 export async function deleteTournament(id: string) {
   await deleteTournamentData(id)
-  await deleteTournamentImageFiles(id)
+  void deleteTournamentImageFiles(id).catch(() => {})
 }
 
 export async function deleteEvent(tournamentId: string, eventId: string) {
@@ -1243,6 +1248,7 @@ function buildKnockoutTreeWrites(
         source_match_b_id: node.slot.sourceBKey
           ? (keyToId.get(node.slot.sourceBKey) ?? null)
           : null,
+        source_feeder: node.slot.sourceFeeder ?? null,
         pending_odd_round: node.slot.pendingOddRound ?? false,
         is_odd_play_in: node.slot.isOddPlayIn ?? false,
         feeder_source_match_ids: (node.slot.feederSourceKeys ?? [])
@@ -1292,6 +1298,56 @@ export async function saveKnockoutMatchResult(
     console.error('Knockout advancement failed after saving match result', err)
     throw new Error('Score saved but bracket could not advance — refresh and try again')
   }
+}
+
+export async function updateKnockoutMatchResult(
+  matchId: string,
+  update: {
+    score_a: number
+    score_b: number
+    rubber_results?: { home: ('W' | 'L' | null)[] } | null
+    winner_entry_id: string
+    outcome: string
+  },
+  stage: 'quarters' | 'semis' | 'finals' = 'quarters',
+): Promise<{ warnings: string[] }> {
+  const warnings: string[] = []
+  const matchRef = doc(db, 'knockout_matches', matchId)
+  const matchSnap = await getDoc(matchRef)
+  if (!matchSnap.exists()) throw new Error('Match not found')
+
+  const matchData = matchSnap.data()
+  const tournamentId = matchData.tournament_id as string
+  const eventId = matchData.event_id as string
+  const allMatches = await fetchKnockoutMatches(tournamentId, eventId)
+  const match = { id: matchId, ...matchData } as KnockoutMatch
+
+  if (knockoutMatchHasCompletedDependents(matchId, allMatches)) {
+    throw new Error('Cannot edit this score — a later knockout match is already scored')
+  }
+
+  const event = await loadEventForMatch({ tournament_id: tournamentId, event_id: eventId })
+  validateMatchResultSave(match, update, {
+    eventType: event.event_type,
+    config: event.config,
+    stage,
+    allowEdit: true,
+  })
+
+  await updateDoc(matchRef, { ...update, status: 'completed' })
+
+  if (update.winner_entry_id !== match.winner_entry_id) {
+    warnings.push('Winner changed — check that later-round slots updated correctly.')
+  }
+
+  try {
+    await propagateKnockoutWinners(tournamentId, eventId)
+  } catch (err) {
+    console.error('Knockout advancement failed after editing match result', err)
+    throw new Error('Score updated but bracket could not advance — refresh and try again')
+  }
+
+  return { warnings }
 }
 
 export async function generateKnockoutBracket(tournamentId: string, event: TournamentEvent) {

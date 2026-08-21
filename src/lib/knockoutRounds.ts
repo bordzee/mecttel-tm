@@ -7,6 +7,7 @@ const ROUND_ORDER: KnockoutRound[] = [
   'r16',
   'quarter',
   'semi',
+  'third_place',
   'final',
 ]
 
@@ -53,6 +54,8 @@ export function knockoutRoundTabLabel(round: KnockoutRound): string {
       return 'QF'
     case 'semi':
       return 'SF'
+    case 'third_place':
+      return '3rd Place'
     case 'final':
       return 'Final'
   }
@@ -72,6 +75,8 @@ export function knockoutRoundTitle(round: KnockoutRound): string {
       return 'Quarterfinals'
     case 'semi':
       return 'Semifinals'
+    case 'third_place':
+      return '3rd Place Match'
     case 'final':
       return 'Final'
   }
@@ -91,6 +96,8 @@ export function knockoutMatchPrefix(round: KnockoutRound): string {
       return 'QUARTERFINAL'
     case 'semi':
       return 'SEMIFINAL'
+    case 'third_place':
+      return '3RD PLACE'
     case 'final':
       return 'FINAL'
   }
@@ -98,7 +105,7 @@ export function knockoutMatchPrefix(round: KnockoutRound): string {
 
 /** Map knockout round to set-rules stage (quarters / semis / finals). */
 export function setRulesStageForRound(round: KnockoutRound): 'quarters' | 'semis' | 'finals' {
-  if (round === 'final') return 'finals'
+  if (round === 'final' || round === 'third_place') return 'finals'
   if (round === 'semi') return 'semis'
   return 'quarters'
 }
@@ -158,6 +165,12 @@ export function resolveEffectiveKnockoutRounds(
 ): Map<string, KnockoutRound> {
   const result = new Map<string, KnockoutRound>()
   if (!matches.length) return result
+
+  for (const m of matches) {
+    if (m.round === 'third_place' || m.round === 'final') {
+      result.set(m.id, m.round)
+    }
+  }
 
   const hasSources = matches.some((m) => m.source_match_a_id || m.source_match_b_id)
   if (hasSources) {

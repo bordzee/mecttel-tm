@@ -10,6 +10,7 @@ export type KnockoutRound =
   | 'r16'
   | 'quarter'
   | 'semi'
+  | 'third_place'
   | 'final'
 export type EntryType = 'team' | 'player' | 'pair'
 export type RubberResult = 'W' | 'L' | null
@@ -170,6 +171,8 @@ export interface KnockoutMatch {
   winner_entry_id: string | null
   source_match_a_id: string | null
   source_match_b_id: string | null
+  /** When `loser`, entries come from the non-winning side of each source match (3rd-place match). */
+  source_feeder?: 'winner' | 'loser'
   status: 'scheduled' | 'completed' | 'pending'
   outcome: MatchOutcome
   /** Play-in among non-bye winners when an odd feeder count is resolved. */

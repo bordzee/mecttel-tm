@@ -12,6 +12,7 @@ import {
   IconActionButton,
   MetaIconsRow,
   PanelSectionTitle,
+  FormLabel,
   ScreenSectionTitle,
   TextInput,
 } from '../../components/ui/primitives'
@@ -43,6 +44,7 @@ export function AdminTournamentHubPage() {
   const [editImageUrlInput, setEditImageUrlInput] = useState('')
   const [clearImage, setClearImage] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
   const showPageSkeleton = useMinLoading(pageLoading)
   const [loadError, setLoadError] = useState('')
@@ -83,6 +85,10 @@ export function AdminTournamentHubPage() {
 
   const handleSave = async () => {
     if (!tournamentId) return
+    if (!editDate.trim()) {
+      setError('Start date is required')
+      return
+    }
     setLoading(true)
     setError('')
     try {
@@ -113,18 +119,18 @@ export function AdminTournamentHubPage() {
   }
 
   const handleDeleteTournament = async () => {
-    if (!tournament || loading) return
-    setLoading(true)
+    if (!tournament || deleting) return
+    setDeleting(true)
     setError('')
     try {
       await deleteTournament(tournament.id)
       setShowDeleteConfirm(false)
-      navigate('/admin', { state: { message: 'Tournament deleted.' } })
+      navigate('/admin', { replace: true, state: { message: 'Tournament deleted.' } })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete')
       setShowDeleteConfirm(false)
     } finally {
-      setLoading(false)
+      setDeleting(false)
     }
   }
 
@@ -190,7 +196,8 @@ export function AdminTournamentHubPage() {
             <PanelSectionTitle>Edit tournament</PanelSectionTitle>
             <TextInput value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Tournament name" />
             <TextInput value={editVenue} onChange={(e) => setEditVenue(e.target.value)} placeholder="Venue" />
-            <TextInput type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+            <FormLabel>Start date *</FormLabel>
+            <TextInput type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} required />
             <TournamentImageUpload
               imageUrl={clearImage ? null : tournament.image_url}
               urlInput={editImageUrlInput}
@@ -217,7 +224,7 @@ export function AdminTournamentHubPage() {
           description="This permanently removes the tournament and all its divisions."
           onCancel={() => setShowDeleteConfirm(false)}
           onConfirm={handleDeleteTournament}
-          confirming={loading}
+          confirming={deleting}
         />
 
         <section className="space-y-3">

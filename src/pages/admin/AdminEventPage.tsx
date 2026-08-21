@@ -56,6 +56,7 @@ import {
   fetchKnockoutMatches,
   saveGroupMatchResult,
   updateGroupMatchResult,
+  updateKnockoutMatchResult,
   saveGroupRankOrder,
   clearGroupRankOrder,
   regenerateKnockoutFromRanks,
@@ -71,6 +72,7 @@ import {
 import { suggestBalanceGroup, type GroupSummary } from '../../lib/lateJoinAssignment'
 import { buildKnockoutStageTabs, filterKnockoutMatchesForStage, isKnockoutStage, knockoutRoundFromStageId, matchEffectiveRound } from '../../lib/knockoutTabs'
 import { hasPendingEarlierKnockoutRound, setRulesStageForRound } from '../../lib/knockoutRounds'
+import { knockoutMatchHasCompletedDependents } from '../../lib/knockoutSeeding'
 import { computeStandings, resolveGroupStandings, needsManualRankResolution } from '../../lib/standings'
 import { validateTournamentStart } from '../../lib/matchOutcomes'
 import { getEntryDisplayName, getEventDisplayName, isPlayerEventType } from '../../lib/displayNames'
@@ -1616,6 +1618,9 @@ export function AdminEventPage() {
             const scorable = activeKnockoutMatches.filter(
               (m) => m.status !== 'completed' && m.entry_a_id && m.entry_b_id && m.outcome !== 'bye',
             )
+            const completedKnockout = activeKnockoutMatches.filter(
+              (m) => m.status === 'completed' && m.outcome !== 'bye',
+            )
             const finalMatch = knockoutMatches.find(
               (m) => matchEffectiveRound(m, knockoutMatches) === 'final',
             )
@@ -1650,6 +1655,46 @@ export function AdminEventPage() {
                       />
                     ))}
                   </div>
+                )}
+                {completedKnockout.length > 0 && (
+                  <details className="group">
+                    <summary className="flex items-center justify-between bg-card rounded-xl border border-border px-3.5 py-3 cursor-pointer list-none">
+                      <span className="text-sm font-bold text-text-bluewhite">
+                        Completed ({completedKnockout.length})
+                      </span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-steel group-open:rotate-180 transition-transform" aria-hidden>
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {completedKnockout.map((m) => (
+                        <div key={m.id} className="rounded-[10px] border border-border bg-[#0C284780] px-3.5 py-2.5">
+                          <MatchScoreEntry
+                            eventType={event.event_type}
+                            config={cfg}
+                            match={m}
+                            stage={setRulesStageForRound(matchEffectiveRound(m, knockoutMatches))}
+                            allowEdit={!knockoutMatchHasCompletedDependents(m.id, knockoutMatches)}
+                            onSave={async (data) => {
+                              const stage = setRulesStageForRound(
+                                matchEffectiveRound(m, knockoutMatches),
+                              )
+                              const { warnings: editWarnings } = await updateKnockoutMatchResult(
+                                m.id,
+                                data,
+                                stage,
+                              )
+                              if (editWarnings.length) {
+                                setWarnings((prev) => [...new Set([...prev, ...editWarnings])])
+                              }
+                              setMessage('Score updated.')
+                              await fetchEventData()
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 )}
                 {scorable.length === 0 &&
                   activeKnockoutRound === 'semi' &&

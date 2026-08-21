@@ -21,6 +21,8 @@ export interface KnockoutSlot {
   /** Set when writing to Firestore (internal tree wiring). */
   sourceAKey?: string | null
   sourceBKey?: string | null
+  /** Use loser(s) from source match(es) instead of winner(s). */
+  sourceFeeder?: 'winner' | 'loser'
   /** Filled when an odd feeder count needs strength-based bye + play-in. */
   pendingOddRound?: boolean
   feederSourceKeys?: string[]
@@ -747,6 +749,22 @@ export function buildCompleteKnockoutTree(firstRound: KnockoutSlot[]): KnockoutT
         },
       })
       nextKeys.push(key)
+
+      if (isFinal && pairingKeys.length === 2) {
+        nodes.push({
+          key: 'third-0',
+          slot: {
+            round: 'third_place',
+            slot: 0,
+            bracketSide: 'left',
+            entryAId: null,
+            entryBId: null,
+            sourceAKey: pairingKeys[i],
+            sourceBKey: pairingKeys[i + 1],
+            sourceFeeder: 'loser',
+          },
+        })
+      }
     }
 
     if (loneFeederKey) {
@@ -955,6 +973,7 @@ export interface KnockoutMatchLike {
   winner_entry_id: string | null
   source_match_a_id: string | null
   source_match_b_id: string | null
+  source_feeder?: 'winner' | 'loser'
   status: string
   outcome?: string
   pending_odd_round?: boolean
@@ -969,6 +988,45 @@ function scheduledStatus(entryA: string | null, entryB: string | null): 'schedul
 function winnerOf(m: KnockoutMatchLike | undefined): string | null {
   if (!m || m.status !== 'completed' || !m.winner_entry_id) return null
   return m.winner_entry_id
+}
+
+function loserOf(m: KnockoutMatchLike | undefined): string | null {
+  if (!m || m.status !== 'completed' || !m.winner_entry_id) return null
+  if (!m.entry_a_id || !m.entry_b_id) return null
+  return m.winner_entry_id === m.entry_a_id ? m.entry_b_id : m.entry_a_id
+}
+
+function entryFromSource(
+  source: KnockoutMatchLike | undefined,
+  feeder: 'winner' | 'loser',
+): string | null {
+  return feeder === 'loser' ? loserOf(source) : winnerOf(source)
+}
+
+/** True when any downstream match (fed by this one) is already scored. */
+export function knockoutMatchHasCompletedDependents(
+  matchId: string,
+  matches: KnockoutMatchLike[],
+): boolean {
+  const visited = new Set<string>()
+  const queue = [matchId]
+
+  while (queue.length) {
+    const id = queue.shift()!
+    for (const m of matches) {
+      if (visited.has(m.id)) continue
+      const isDependent =
+        m.source_match_a_id === id ||
+        m.source_match_b_id === id ||
+        (m.feeder_source_match_ids ?? []).includes(id)
+      if (!isDependent) continue
+      if (m.status === 'completed' && m.outcome !== 'bye') return true
+      visited.add(m.id)
+      queue.push(m.id)
+    }
+  }
+
+  return false
 }
 
 /** Fill later-round matches from source_match links after earlier rounds are scored. */
@@ -1086,8 +1144,9 @@ export function computeKnockoutAdvancement(
 
       if (!m.source_match_a_id || !m.source_match_b_id) continue
 
-      const entryA = winnerOf(sourceA) ?? m.entry_a_id
-      const entryB = winnerOf(sourceB) ?? m.entry_b_id
+      const feeder = m.source_feeder ?? 'winner'
+      const entryA = entryFromSource(sourceA, feeder) ?? m.entry_a_id
+      const entryB = entryFromSource(sourceB, feeder) ?? m.entry_b_id
 
       if (entryA !== m.entry_a_id || entryB !== m.entry_b_id) {
         updates.set(m.id, {
