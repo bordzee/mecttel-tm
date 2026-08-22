@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatKnockoutByePreview,
   knockoutRoundFromBracketSize,
   knockoutRoundTabLabel,
+  previewKnockoutByes,
   resolveEffectiveKnockoutRounds,
 } from '../knockoutRounds'
 
@@ -21,6 +23,23 @@ describe('knockoutRounds', () => {
     expect(knockoutRoundTabLabel('quarter')).toBe('QF')
     expect(knockoutRoundTabLabel('semi')).toBe('SF')
     expect(knockoutRoundTabLabel('third_place')).toBe('3rd Place')
+  })
+
+  it('previews knockout byes from group count and advance per group', () => {
+    expect(previewKnockoutByes(4, 2)).toMatchObject({
+      advancers: 8,
+      bracketSize: 8,
+      byeCount: 0,
+      skipRoundLabel: null,
+    })
+    expect(previewKnockoutByes(5, 2)).toMatchObject({
+      advancers: 10,
+      bracketSize: 16,
+      byeCount: 6,
+    })
+    expect(formatKnockoutByePreview(4, 2)).toBe('8 advancers · no byes')
+    expect(formatKnockoutByePreview(5, 2)).toContain('10 advancers · 6 byes')
+    expect(formatKnockoutByePreview(5, 2)).toContain('round of 16')
   })
 
   it('infers effective rounds from source tree (legacy mis-labeled semis)', () => {

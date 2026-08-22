@@ -1806,6 +1806,7 @@ export function AdminEventPage() {
         selectableLayoutOptions={selectableLayoutOptions}
         startLayoutKey={startLayoutKey}
         onSelectLayout={setStartLayoutKey}
+        advanceCount={cfg.advance_count}
         isLayoutSelectable={isLayoutSelectable}
         startPreview={startPreview}
         startDisabled={startDisabled}

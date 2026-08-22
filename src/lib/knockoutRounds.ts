@@ -230,6 +230,41 @@ export function firstKnockoutRoundLabel(advancerCount: number): string {
   return knockoutRoundTitle(knockoutRoundFromBracketSize(bracketSize)).toLowerCase()
 }
 
+export interface KnockoutByePreview {
+  advancers: number
+  bracketSize: number
+  byeCount: number
+  skipRoundLabel: string | null
+}
+
+/** Estimate knockout byes from planned group count and advance-per-group setting. */
+export function previewKnockoutByes(
+  groupCount: number,
+  advanceCount: number,
+): KnockoutByePreview | null {
+  const advancers = groupCount * advanceCount
+  if (advancers < 2) return null
+
+  const bracketSize = nextPowerOf2(advancers)
+  const byeCount = bracketSize - advancers
+
+  return {
+    advancers,
+    bracketSize,
+    byeCount,
+    skipRoundLabel: byeCount > 0 ? firstKnockoutRoundLabel(advancers) : null,
+  }
+}
+
+export function formatKnockoutByePreview(groupCount: number, advanceCount: number): string | null {
+  const preview = previewKnockoutByes(groupCount, advanceCount)
+  if (!preview) return null
+  if (preview.byeCount === 0) {
+    return `${preview.advancers} advancers · no byes`
+  }
+  return `${preview.advancers} advancers · ${preview.byeCount} bye${preview.byeCount === 1 ? '' : 's'} (top seeds skip ${preview.skipRoundLabel})`
+}
+
 function nextPowerOf2(n: number): number {
   let p = 1
   while (p < n) p *= 2

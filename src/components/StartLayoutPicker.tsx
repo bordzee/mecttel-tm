@@ -1,17 +1,21 @@
 import type { StartLayoutOption } from '../lib/groupLayout'
 import { layoutIncludesGroupOfTwo } from '../lib/groupLayout'
+import { formatKnockoutByePreview } from '../lib/knockoutRounds'
 import { FormLabel } from './ui/primitives'
 
 export function StartLayoutPicker({
   options,
   selectedKey,
   onSelect,
+  advanceCount,
   isOptionDisabled,
   disabledHint = 'Block bracket requires an even number of groups',
 }: {
   options: StartLayoutOption[]
   selectedKey?: string
   onSelect: (key: string) => void
+  /** Advance per group — used to preview knockout byes for each layout. */
+  advanceCount: number
   /** When set, options matching this are shown but not selectable (e.g. Block + odd group count). */
   isOptionDisabled?: (option: StartLayoutOption) => boolean
   disabledHint?: string
@@ -25,6 +29,7 @@ export function StartLayoutPicker({
         {options.map((opt) => {
           const active = selectedKey === opt.key
           const disabled = isOptionDisabled?.(opt) ?? false
+          const byePreview = formatKnockoutByePreview(opt.groupCount, advanceCount)
           return (
             <button
               key={opt.key}
@@ -54,6 +59,9 @@ export function StartLayoutPicker({
                 <span className={`block text-sm font-semibold ${disabled ? 'text-text-steel' : 'text-text-bluewhite'}`}>
                   {opt.label}
                 </span>
+                {byePreview && !disabled && (
+                  <span className="block text-xs text-text-steel mt-0.5">{byePreview}</span>
+                )}
                 {disabled && (
                   <span className="block text-xs text-text-steel mt-0.5">{disabledHint}</span>
                 )}

@@ -20,6 +20,7 @@ export function GenerateGroupStageDialog({
   selectableLayoutOptions,
   startLayoutKey,
   onSelectLayout,
+  advanceCount,
   isLayoutSelectable,
   startPreview,
   startDisabled,
@@ -38,6 +39,7 @@ export function GenerateGroupStageDialog({
   selectableLayoutOptions: StartLayoutOption[]
   startLayoutKey?: string
   onSelectLayout: (key: string) => void
+  advanceCount: number
   isLayoutSelectable: (option: StartLayoutOption) => boolean
   startPreview: ReturnType<
     typeof import('../lib/matchOutcomes').validateTournamentStart
@@ -92,6 +94,7 @@ export function GenerateGroupStageDialog({
               options={allLayoutOptions}
               selectedKey={startLayoutKey}
               onSelect={onSelectLayout}
+              advanceCount={advanceCount}
               isOptionDisabled={(opt) => !isLayoutSelectable(opt)}
             />
           ) : (
