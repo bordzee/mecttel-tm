@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatKnockoutByePreview,
+  formatKnockoutByePreviewFromGroupSizes,
   knockoutRoundFromBracketSize,
   knockoutRoundTabLabel,
   previewKnockoutByes,
+  previewKnockoutByesFromGroupSizes,
   resolveEffectiveKnockoutRounds,
 } from '../knockoutRounds'
 
@@ -37,9 +39,24 @@ describe('knockoutRounds', () => {
       bracketSize: 16,
       byeCount: 6,
     })
-    expect(formatKnockoutByePreview(4, 2)).toBe('8 advancers · no byes')
+    expect(formatKnockoutByePreview(4, 2)).toBe('4 groups · 8 advancers · no byes')
     expect(formatKnockoutByePreview(5, 2)).toContain('10 advancers · 6 byes')
     expect(formatKnockoutByePreview(5, 2)).toContain('round of 16')
+  })
+
+  it('previews byes from actual group sizes after late check-in', () => {
+    expect(previewKnockoutByesFromGroupSizes([4, 4, 4, 4, 4, 4, 4, 4], 2)).toMatchObject({
+      advancers: 16,
+      byeCount: 0,
+    })
+    expect(previewKnockoutByesFromGroupSizes([4, 4, 4, 4, 4, 4, 4, 4, 2], 2)).toMatchObject({
+      advancers: 18,
+      byeCount: 14,
+      bracketSize: 32,
+    })
+    expect(formatKnockoutByePreviewFromGroupSizes([4, 4, 4, 4, 4, 4, 4, 4, 2], 2)).toContain(
+      '9 groups · 18 advancers',
+    )
   })
 
   it('infers effective rounds from source tree (legacy mis-labeled semis)', () => {

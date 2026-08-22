@@ -153,14 +153,19 @@ describe('groupLayout', () => {
     expect(isLayoutCompatibleWithBlock(fiveFour!)).toBe(true)
   })
 
-  it('offers 3+3+3+2 for 11 entries when a group of 2 is required', () => {
+  it('does not offer groups of 2 at registration (minimum 3 per group)', () => {
     const options = getStartLayoutOptions(11, {})
     const labels = options.map((o) => o.label)
-    expect(labels).toContain('4 groups (3+3+3+2)')
+    expect(labels).not.toContain('4 groups (3+3+3+2)')
     expect(labels).toContain('3 groups (4+4+3)')
 
-    const fourGroups = options.find((o) => o.key === 'uneven-3-3-3-2')
-    expect(fourGroups?.groupSizes).toEqual([3, 3, 3, 2])
+    for (const opt of options) {
+      if (opt.groupSizes) {
+        expect(opt.groupSizes.every((s) => s >= 3)).toBe(true)
+      } else {
+        expect(opt.entriesPerGroup).toBeGreaterThanOrEqual(3)
+      }
+    }
   })
 })
 

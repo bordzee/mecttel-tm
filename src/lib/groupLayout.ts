@@ -1,10 +1,13 @@
 import type { GroupLayoutOption, TournamentEntry } from '../types'
 
-/** Preferred minimum when the entry count allows it. */
+/** Minimum per group at registration / group-stage start (late-check-in may add groups of 2). */
 export const MIN_PER_GROUP = 3
-/** Absolute minimum for one group in an uneven layout (e.g. 11 → 3+3+3+2). */
-export const ABSOLUTE_MIN_PER_GROUP = 2
+/** Smallest group allowed only via late check-in (new group with 2 players). */
+export const LATE_CHECKIN_MIN_PER_GROUP = 2
 export const MAX_PER_GROUP = 8
+
+/** @deprecated Use LATE_CHECKIN_MIN_PER_GROUP — kept for tests detecting size-2 groups. */
+export const ABSOLUTE_MIN_PER_GROUP = LATE_CHECKIN_MIN_PER_GROUP
 
 export interface StartLayoutOption {
   key: string
@@ -41,15 +44,13 @@ export function getGroupLayoutOptions(totalEntries: number): GroupLayoutOption[]
   return options
 }
 
-/** Split `count` entries across `groupCount` groups (each 2–8; prefer 3+). */
+/** Split `count` entries across `groupCount` groups (each 3–8 at registration). */
 export function distributeGroupSizes(count: number, groupCount: number): number[] | null {
   if (groupCount < 2) return null
-  if (count < groupCount * ABSOLUTE_MIN_PER_GROUP || count > groupCount * MAX_PER_GROUP) return null
+  if (count < groupCount * MIN_PER_GROUP || count > groupCount * MAX_PER_GROUP) return null
 
-  const baseMin =
-    count >= groupCount * MIN_PER_GROUP ? MIN_PER_GROUP : ABSOLUTE_MIN_PER_GROUP
-  const sizes = new Array(groupCount).fill(baseMin)
-  let remaining = count - groupCount * baseMin
+  const sizes = new Array(groupCount).fill(MIN_PER_GROUP)
+  let remaining = count - groupCount * MIN_PER_GROUP
   let i = 0
   while (remaining > 0) {
     const idx = i % groupCount
@@ -62,12 +63,17 @@ export function distributeGroupSizes(count: number, groupCount: number): number[
 }
 
 export function layoutIncludesGroupOfTwo(groupSizes?: number[]): boolean {
-  return groupSizes != null && groupSizes.some((size) => size === ABSOLUTE_MIN_PER_GROUP)
+  return groupSizes != null && groupSizes.some((size) => size === LATE_CHECKIN_MIN_PER_GROUP)
+}
+
+/** True when a live group has only late-check-in-sized membership (2 players). */
+export function isLateCheckInSizedGroup(memberCount: number): boolean {
+  return memberCount === LATE_CHECKIN_MIN_PER_GROUP
 }
 
 export function getUnevenGroupLayouts(entryCount: number): { groupCount: number; sizes: number[] }[] {
   const layouts: { groupCount: number; sizes: number[] }[] = []
-  const maxGroups = Math.floor(entryCount / ABSOLUTE_MIN_PER_GROUP)
+  const maxGroups = Math.floor(entryCount / MIN_PER_GROUP)
   for (let g = 2; g <= maxGroups; g++) {
     const sizes = distributeGroupSizes(entryCount, g)
     if (sizes) layouts.push({ groupCount: g, sizes })
@@ -174,7 +180,7 @@ export function resolveGroupLayoutForStart(
   if (!options.length) {
     return {
       ok: false,
-      error: `${entryCount} entries cannot be grouped (need 2–8 per group, at least 2 groups).`,
+      error: `${entryCount} entries cannot be grouped (need 3–8 per group, at least 2 groups).`,
       suggestions: [],
     }
   }

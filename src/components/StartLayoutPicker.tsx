@@ -1,5 +1,4 @@
 import type { StartLayoutOption } from '../lib/groupLayout'
-import { layoutIncludesGroupOfTwo } from '../lib/groupLayout'
 import { formatKnockoutByePreview } from '../lib/knockoutRounds'
 import { FormLabel } from './ui/primitives'
 
@@ -24,8 +23,6 @@ export function StartLayoutPicker({
         {options.map((opt) => {
           const active = selectedKey === opt.key
           const byePreview = formatKnockoutByePreview(opt.groupCount, advanceCount)
-          const showUneven = opt.uneven
-          const showGroupOfTwo = layoutIncludesGroupOfTwo(opt.groupSizes)
 
           return (
             <button
@@ -52,14 +49,9 @@ export function StartLayoutPicker({
                   {byePreview && (
                     <span className="block text-xs text-text-steel mt-0.5 break-words">{byePreview}</span>
                   )}
-                  {(showUneven || showGroupOfTwo) && (
-                    <span className="flex flex-wrap gap-1.5 mt-1.5">
-                      {showUneven && (
-                        <span className="text-[11px] font-semibold text-text-steel">uneven</span>
-                      )}
-                      {showGroupOfTwo && (
-                        <span className="text-[11px] font-semibold text-amber">group of 2</span>
-                      )}
+                  {opt.uneven && (
+                    <span className="inline-block text-[11px] font-semibold text-text-steel mt-1.5">
+                      uneven
                     </span>
                   )}
                 </span>

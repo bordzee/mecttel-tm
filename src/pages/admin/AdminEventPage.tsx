@@ -71,7 +71,7 @@ import {
 } from '../../lib/groupLayout'
 import { suggestBalanceGroup, type GroupSummary } from '../../lib/lateJoinAssignment'
 import { buildKnockoutStageTabs, filterKnockoutMatchesForStage, isKnockoutStage, knockoutRoundFromStageId, matchEffectiveRound } from '../../lib/knockoutTabs'
-import { hasPendingEarlierKnockoutRound, setRulesStageForRound } from '../../lib/knockoutRounds'
+import { hasPendingEarlierKnockoutRound, setRulesStageForRound, formatKnockoutByePreviewFromGroupSizes } from '../../lib/knockoutRounds'
 import { knockoutMatchHasCompletedDependents } from '../../lib/knockoutSeeding'
 import { computeStandings, resolveGroupStandings, needsManualRankResolution } from '../../lib/standings'
 import { validateTournamentStart } from '../../lib/matchOutcomes'
@@ -399,6 +399,14 @@ export function AdminEventPage() {
         .filter(Boolean) as TournamentEntry[],
     }))
   }, [groups, members, entryMap])
+
+  const liveKnockoutByePreview = useMemo(() => {
+    if (!event || event.status !== 'ongoing' || knockoutGenerated || !groups.length) return null
+    const sizes = groupSummaries.map((g) => g.entries.length)
+    return formatKnockoutByePreviewFromGroupSizes(sizes, event.config.advance_count, {
+      blockBracket: (event.config.knockout_bracket ?? 'cross') === 'block',
+    })
+  }, [event, knockoutGenerated, groups.length, groupSummaries])
 
   const entryGroupLabelMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -1455,8 +1463,14 @@ export function AdminEventPage() {
             <SectionHeaderRow title="Late check-in" />
             <InfoNoteCard>
               Knockout bracket is not generated yet. New entries are assigned to a group with only
-              missing round-robin matches added.
+              missing round-robin matches added. A new late group may have as few as 2 players (minimum
+              3 applies at initial registration only).
             </InfoNoteCard>
+            {liveKnockoutByePreview && (
+              <InfoNoteCard>
+                Current knockout estimate: {liveKnockoutByePreview}
+              </InfoNoteCard>
+            )}
             {renderEntryForm(true)}
           </section>
         )}
@@ -1474,6 +1488,11 @@ export function AdminEventPage() {
           <div className="space-y-3">
             <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
               <PanelSectionTitle>Knockout stage</PanelSectionTitle>
+              {liveKnockoutByePreview && !knockoutMatches.length && (
+                <InfoNoteCard>
+                  Current knockout estimate: {liveKnockoutByePreview}
+                </InfoNoteCard>
+              )}
               {!allGroupPlayComplete ? (
                 <>
                   <CaptionText>

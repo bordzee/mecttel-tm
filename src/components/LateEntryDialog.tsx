@@ -115,7 +115,7 @@ export function LateEntryDialog({
         {mode === 'new_group' && (
           <InfoNoteCard>
             Creates a separate group with round-robin only among its members. Existing groups stay
-            unchanged.
+            unchanged. Late groups may have 2 players (minimum 3 applies at initial registration).
           </InfoNoteCard>
         )}
 

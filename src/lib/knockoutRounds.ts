@@ -235,14 +235,10 @@ export interface KnockoutByePreview {
   bracketSize: number
   byeCount: number
   skipRoundLabel: string | null
+  groupCount?: number
 }
 
-/** Estimate knockout byes from planned group count and advance-per-group setting. */
-export function previewKnockoutByes(
-  groupCount: number,
-  advanceCount: number,
-): KnockoutByePreview | null {
-  const advancers = groupCount * advanceCount
+function buildKnockoutByePreview(advancers: number, groupCount?: number): KnockoutByePreview | null {
   if (advancers < 2) return null
 
   const bracketSize = nextPowerOf2(advancers)
@@ -253,16 +249,60 @@ export function previewKnockoutByes(
     bracketSize,
     byeCount,
     skipRoundLabel: byeCount > 0 ? firstKnockoutRoundLabel(advancers) : null,
+    groupCount,
   }
+}
+
+function formatKnockoutByePreviewText(
+  preview: KnockoutByePreview,
+  options?: { groupCount?: number; blockBracket?: boolean },
+): string {
+  const groups = options?.groupCount ?? preview.groupCount
+  const prefix = groups != null ? `${groups} groups · ` : ''
+  if (preview.byeCount === 0) {
+    return `${prefix}${preview.advancers} advancers · no byes`
+  }
+  let text = `${prefix}${preview.advancers} advancers · ${preview.byeCount} bye${preview.byeCount === 1 ? '' : 's'} (top seeds skip ${preview.skipRoundLabel})`
+  if (options?.blockBracket && groups != null && groups % 2 !== 0) {
+    text += ' · Block needs an even group count — use Cross or adjust groups'
+  }
+  return text
+}
+
+/** Estimate knockout byes from planned group count and advance-per-group setting. */
+export function previewKnockoutByes(
+  groupCount: number,
+  advanceCount: number,
+): KnockoutByePreview | null {
+  return buildKnockoutByePreview(groupCount * advanceCount, groupCount)
+}
+
+/** Estimate byes from actual group sizes (e.g. after late check-in). */
+export function previewKnockoutByesFromGroupSizes(
+  groupSizes: number[],
+  advanceCount: number,
+): KnockoutByePreview | null {
+  const advancers = groupSizes.reduce((sum, size) => sum + Math.min(advanceCount, size), 0)
+  return buildKnockoutByePreview(advancers, groupSizes.length)
 }
 
 export function formatKnockoutByePreview(groupCount: number, advanceCount: number): string | null {
   const preview = previewKnockoutByes(groupCount, advanceCount)
   if (!preview) return null
-  if (preview.byeCount === 0) {
-    return `${preview.advancers} advancers · no byes`
-  }
-  return `${preview.advancers} advancers · ${preview.byeCount} bye${preview.byeCount === 1 ? '' : 's'} (top seeds skip ${preview.skipRoundLabel})`
+  return formatKnockoutByePreviewText(preview, { groupCount })
+}
+
+export function formatKnockoutByePreviewFromGroupSizes(
+  groupSizes: number[],
+  advanceCount: number,
+  options?: { blockBracket?: boolean },
+): string | null {
+  const preview = previewKnockoutByesFromGroupSizes(groupSizes, advanceCount)
+  if (!preview) return null
+  return formatKnockoutByePreviewText(preview, {
+    groupCount: groupSizes.length,
+    blockBracket: options?.blockBracket,
+  })
 }
 
 function nextPowerOf2(n: number): number {
