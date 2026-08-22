@@ -8,17 +8,12 @@ export function StartLayoutPicker({
   selectedKey,
   onSelect,
   advanceCount,
-  isOptionDisabled,
-  disabledHint = 'Block bracket requires an even number of groups',
 }: {
   options: StartLayoutOption[]
   selectedKey?: string
   onSelect: (key: string) => void
   /** Advance per group — used to preview knockout byes for each layout. */
   advanceCount: number
-  /** When set, options matching this are shown but not selectable (e.g. Block + odd group count). */
-  isOptionDisabled?: (option: StartLayoutOption) => boolean
-  disabledHint?: string
 }) {
   if (!options.length) return null
 
@@ -28,50 +23,47 @@ export function StartLayoutPicker({
       <div className="space-y-2">
         {options.map((opt) => {
           const active = selectedKey === opt.key
-          const disabled = isOptionDisabled?.(opt) ?? false
           const byePreview = formatKnockoutByePreview(opt.groupCount, advanceCount)
+          const showUneven = opt.uneven
+          const showGroupOfTwo = layoutIncludesGroupOfTwo(opt.groupSizes)
+
           return (
             <button
               key={opt.key}
               type="button"
-              disabled={disabled}
               onClick={() => onSelect(opt.key)}
-              title={disabled ? disabledHint : undefined}
-              className={`w-full flex items-center gap-2.5 px-3 py-3 rounded-[10px] border transition-colors text-left ${
-                disabled
-                  ? 'border border-border bg-navy/50 opacity-60 cursor-not-allowed'
-                  : active
-                    ? 'border-[1.5px] border-brand-500 bg-brand-100'
-                    : 'border border-border bg-navy hover:border-border-strong'
+              className={`w-full px-3 py-3 rounded-[10px] border transition-colors text-left ${
+                active
+                  ? 'border-[1.5px] border-brand-500 bg-brand-100'
+                  : 'border border-border bg-navy hover:border-border-strong'
               }`}
             >
-              <span
-                className={`w-[18px] h-[18px] rounded-full shrink-0 border-[1.5px] ${
-                  disabled
-                    ? 'border-border bg-transparent'
-                    : active
-                      ? 'border-brand-500 bg-brand-500'
-                      : 'border-border-strong bg-transparent'
-                }`}
-                aria-hidden
-              />
-              <span className="flex-1 min-w-0">
-                <span className={`block text-sm font-semibold ${disabled ? 'text-text-steel' : 'text-text-bluewhite'}`}>
-                  {opt.label}
+              <div className="flex items-start gap-2.5">
+                <span
+                  className={`w-[18px] h-[18px] mt-0.5 rounded-full shrink-0 border-[1.5px] ${
+                    active ? 'border-brand-500 bg-brand-500' : 'border-border-strong bg-transparent'
+                  }`}
+                  aria-hidden
+                />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm font-semibold text-text-bluewhite break-words">
+                    {opt.label}
+                  </span>
+                  {byePreview && (
+                    <span className="block text-xs text-text-steel mt-0.5 break-words">{byePreview}</span>
+                  )}
+                  {(showUneven || showGroupOfTwo) && (
+                    <span className="flex flex-wrap gap-1.5 mt-1.5">
+                      {showUneven && (
+                        <span className="text-[11px] font-semibold text-text-steel">uneven</span>
+                      )}
+                      {showGroupOfTwo && (
+                        <span className="text-[11px] font-semibold text-amber">group of 2</span>
+                      )}
+                    </span>
+                  )}
                 </span>
-                {byePreview && !disabled && (
-                  <span className="block text-xs text-text-steel mt-0.5">{byePreview}</span>
-                )}
-                {disabled && (
-                  <span className="block text-xs text-text-steel mt-0.5">{disabledHint}</span>
-                )}
-              </span>
-              {opt.uneven && !disabled && (
-                <span className="text-xs font-semibold text-text-steel shrink-0">uneven</span>
-              )}
-              {layoutIncludesGroupOfTwo(opt.groupSizes) && !disabled && (
-                <span className="text-xs font-semibold text-amber shrink-0">group of 2</span>
-              )}
+              </div>
             </button>
           )
         })}

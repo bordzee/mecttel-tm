@@ -1801,13 +1801,10 @@ export function AdminEventPage() {
         onClose={() => setReadyDialogOpen(false)}
         entryCountLabel={entryCountLabel}
         entryCount={entries.length}
-        isBlockBracket={isBlockBracket}
         allLayoutOptions={allLayoutOptions}
-        selectableLayoutOptions={selectableLayoutOptions}
         startLayoutKey={startLayoutKey}
         onSelectLayout={setStartLayoutKey}
         advanceCount={cfg.advance_count}
-        isLayoutSelectable={isLayoutSelectable}
         startPreview={startPreview}
         startDisabled={startDisabled}
         loading={loading}
