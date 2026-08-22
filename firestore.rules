@@ -41,7 +41,18 @@ service cloud.firestore {
     }
 
     function knockoutRound(v) {
-      return v in ['quarter', 'semi', 'final'];
+      return v in [
+        'r128', 'r64', 'r32', 'r16',
+        'quarter', 'semi', 'third_place', 'final',
+      ];
+    }
+
+    function optionalKnockoutSourceId(v) {
+      return v == null || isString(v);
+    }
+
+    function optionalSourceFeeder(v) {
+      return v == null || v in ['winner', 'loser'];
     }
 
     function matchOutcome(v) {
@@ -185,7 +196,12 @@ service cloud.firestore {
         && (request.resource.data.entry_b_id == null || isString(request.resource.data.entry_b_id))
         && (request.resource.data.score_a == null || isInt(request.resource.data.score_a))
         && (request.resource.data.score_b == null || isInt(request.resource.data.score_b))
-        && (request.resource.data.winner_entry_id == null || isString(request.resource.data.winner_entry_id));
+        && (request.resource.data.winner_entry_id == null || isString(request.resource.data.winner_entry_id))
+        && optionalKnockoutSourceId(request.resource.data.get('source_match_a_id', null))
+        && optionalKnockoutSourceId(request.resource.data.get('source_match_b_id', null))
+        && optionalSourceFeeder(request.resource.data.get('source_feeder', null))
+        && (request.resource.data.get('pending_odd_round', false) is bool)
+        && (request.resource.data.get('is_odd_play_in', false) is bool);
       allow delete: if isAdmin();
     }
   }
