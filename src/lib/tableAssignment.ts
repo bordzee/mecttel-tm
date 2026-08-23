@@ -165,15 +165,9 @@ export function filterQueueByName(
   const matchesSearch = (m: QueueMatchView) =>
     m.homeName.toLowerCase().includes(q) || m.awayName.toLowerCase().includes(q)
 
-  const tables = state.tables.map((slot) => ({
-    ...slot,
-    match: slot.match && matchesSearch(slot.match) ? slot.match : null,
-    nextMatch: slot.nextMatch && matchesSearch(slot.nextMatch) ? slot.nextMatch : null,
-  }))
-
   return {
     ...state,
-    tables,
+    tables: state.tables,
     upNext: state.upNext.filter(matchesSearch),
     onDeck: state.onDeck.filter(matchesSearch),
     waiting: state.waiting.filter((e) => e.name.toLowerCase().includes(q)),

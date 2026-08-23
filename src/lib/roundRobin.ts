@@ -53,6 +53,21 @@ export function generateRoundRobinPairsOrdered<T>(
   return result
 }
 
+/** Round-robin queue position for a pair within a fixed member list. */
+export function queueOrderForPair<T>(
+  memberIds: T[],
+  entryA: T,
+  entryB: T,
+): number {
+  const ordered = generateRoundRobinPairsOrdered(memberIds)
+  const found = ordered.find(
+    (pair) =>
+      (pair.entryA === entryA && pair.entryB === entryB) ||
+      (pair.entryA === entryB && pair.entryB === entryA),
+  )
+  return found?.queueOrder ?? ordered.length
+}
+
 export function groupLabels(count: number): string[] {
   return Array.from({ length: count }, (_, i) => {
     if (i < 26) return String.fromCharCode(65 + i)

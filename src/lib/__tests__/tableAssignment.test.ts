@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildEventQueueState,
+  filterQueueByName,
   getTableAnnouncement,
   UP_NEXT_DISPLAY_LIMIT,
 } from '../tableAssignment'
@@ -120,5 +121,18 @@ describe('tableAssignment', () => {
     })
 
     expect(ann.nextMatch?.matchId).toBe('3')
+  })
+
+  it('keeps table assignments visible when filtering by player name', () => {
+    const ordered = [
+      match('1', 'Alice', 'Bob'),
+      match('2', 'Carol', 'Dave'),
+    ]
+    const state = buildEventQueueState(ordered, [], 2)
+    const filtered = filterQueueByName(state, 'carol')
+
+    expect(filtered.tables[0]?.match?.matchId).toBe('1')
+    expect(filtered.tables[1]?.match?.matchId).toBe('2')
+    expect(filtered.upNext).toHaveLength(0)
   })
 })

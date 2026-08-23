@@ -30,7 +30,7 @@ import type {
 } from '../types'
 import { assignEntriesToGroups } from './groupAssignment'
 import { sortKnockoutMatches } from './knockoutRounds'
-import { generateRoundRobinPairsOrdered } from './roundRobin'
+import { generateRoundRobinPairsOrdered, queueOrderForPair } from './roundRobin'
 import { newRoundRobinPairsForEntry, nextGroupLabel, validateLateJoinTarget, type LateJoinMode } from './lateJoinAssignment'
 import {
   generateKnockoutPairings,
@@ -926,6 +926,7 @@ export async function addLateJoinEntry(
       winner_entry_id: null,
       status: 'scheduled',
       outcome: 'normal',
+      queue_order: queueOrderForPair([entryId, ...groupEntryIds], a, b),
     })
   }
 
@@ -1046,6 +1047,7 @@ export async function moveEntryToGroup(
       winner_entry_id: null,
       status: 'scheduled',
       outcome: 'normal',
+      queue_order: queueOrderForPair([entryId, ...targetEntryIds], a, b),
     })
   }
 

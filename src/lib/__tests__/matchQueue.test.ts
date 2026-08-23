@@ -111,4 +111,48 @@ describe('matchQueue', () => {
     expect(ordered.map((m) => m.matchId)).toEqual(['m1', 'm2', 'm3'])
     expect(ordered.map((m) => m.groupLabel)).toEqual(['F', 'G', 'A'])
   })
+
+  it('breaks queue_order ties across groups by group label', () => {
+    const entryMap = new Map<string, TournamentEntry>()
+    const groups = [
+      { id: 'g-f', label: 'F' },
+      { id: 'g-a', label: 'A' },
+      { id: 'g-b', label: 'B' },
+    ]
+    const groupMatches: GroupMatch[] = [
+      {
+        id: 'm-f',
+        group_id: 'g-f',
+        entry_a_id: 'e1',
+        entry_b_id: 'e2',
+        status: 'scheduled',
+        queue_order: 0,
+      } as GroupMatch,
+      {
+        id: 'm-a',
+        group_id: 'g-a',
+        entry_a_id: 'e3',
+        entry_b_id: 'e4',
+        status: 'scheduled',
+        queue_order: 0,
+      } as GroupMatch,
+      {
+        id: 'm-b',
+        group_id: 'g-b',
+        entry_a_id: 'e5',
+        entry_b_id: 'e6',
+        status: 'scheduled',
+        queue_order: 0,
+      } as GroupMatch,
+    ]
+
+    const { ordered } = buildEventMatchQueue({
+      groups,
+      groupMatches,
+      knockoutMatches: [],
+      entryMap,
+    })
+
+    expect(ordered.map((m) => m.groupLabel)).toEqual(['A', 'B', 'F'])
+  })
 })

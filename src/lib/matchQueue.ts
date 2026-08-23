@@ -1,5 +1,6 @@
 import { getEntryDisplayName } from './displayNames'
 import { hasPendingEarlierKnockoutRound } from './knockoutRounds'
+import { matchEffectiveRound } from './knockoutTabs'
 import type { GroupMatch, KnockoutMatch, KnockoutRound, TournamentEntry } from '../types'
 
 /** Max consecutive matches before a rest is required (blocks a 3rd in a row). */
@@ -90,19 +91,36 @@ function restReasonForMatch(
   return `${tired.join(' & ')} need rest (played ${MAX_CONSECUTIVE_MATCHES} in a row)`
 }
 
-function sortPending<T extends { queue_order?: number; id: string }>(pending: T[]): T[] {
-  return [...pending].sort(
-    (a, b) => (a.queue_order ?? Number.MAX_SAFE_INTEGER) - (b.queue_order ?? Number.MAX_SAFE_INTEGER) ||
-      a.id.localeCompare(b.id),
-  )
+function sortPending<T extends { queue_order?: number; id: string; group_id?: string }>(
+  pending: T[],
+  groupLabelById?: Map<string, string>,
+): T[] {
+  return [...pending].sort((a, b) => {
+    const orderDiff =
+      (a.queue_order ?? Number.MAX_SAFE_INTEGER) - (b.queue_order ?? Number.MAX_SAFE_INTEGER)
+    if (orderDiff !== 0) return orderDiff
+    if (groupLabelById && a.group_id && b.group_id) {
+      const labelDiff = (groupLabelById.get(a.group_id) ?? '').localeCompare(
+        groupLabelById.get(b.group_id) ?? '',
+      )
+      if (labelDiff !== 0) return labelDiff
+    }
+    return a.id.localeCompare(b.id)
+  })
 }
 
-export function buildOrderedGroupQueue<T extends PlayedMatch & { entry_a_id: string; entry_b_id: string }>(
+export function buildOrderedGroupQueue<
+  T extends PlayedMatch & { entry_a_id: string; entry_b_id: string; group_id?: string },
+>(
   pending: T[],
   completed: T[],
+  groupLabelById?: Map<string, string>,
 ): T[] {
   const completedSim = sortCompleted(completed)
-  const remaining = sortPending(pending.filter((m) => m.status !== 'completed'))
+  const remaining = sortPending(
+    pending.filter((m) => m.status !== 'completed'),
+    groupLabelById,
+  )
   const ordered: T[] = []
 
   while (remaining.length > 0) {
@@ -185,7 +203,7 @@ export function buildKnockoutMatchQueue(
       !!m.entry_b_id &&
       m.outcome !== 'bye' &&
       (!activeRound || m.round === activeRound) &&
-      !hasPendingEarlierKnockoutRound(matches, m.round),
+      !hasPendingEarlierKnockoutRound(matches, matchEffectiveRound(m, matches)),
   )
 
   const orderedMatches = buildOrderedGroupQueue(scorable, completed)
@@ -279,7 +297,7 @@ export function buildEventMatchQueue(params: {
   const groupPending = groupMatches.filter((m) => m.status !== 'completed')
   if (groupPending.length > 0) {
     const completed = sortCompleted(groupMatches)
-    const orderedMatches = buildOrderedGroupQueue(groupPending, completed)
+    const orderedMatches = buildOrderedGroupQueue(groupPending, completed, groupLabelById)
     const ordered: QueueMatchView[] = orderedMatches.map((m, index) =>
       toQueueMatchView(m, index, completed, entryMap, {
         stage: 'group',
@@ -296,7 +314,7 @@ export function buildEventMatchQueue(params: {
       !!m.entry_a_id &&
       !!m.entry_b_id &&
       m.outcome !== 'bye' &&
-      !hasPendingEarlierKnockoutRound(knockoutMatches, m.round),
+      !hasPendingEarlierKnockoutRound(knockoutMatches, matchEffectiveRound(m, knockoutMatches)),
   )
 
   if (knockoutPending.length > 0) {

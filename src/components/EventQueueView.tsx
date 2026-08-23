@@ -157,10 +157,13 @@ export function EventQueueView({
 
   const tableCount = normalizeTableCount(event?.config.table_count)
 
+  const baseQueueState = useMemo(() => {
+    return buildEventQueueState(queueBundle.ordered, queueBundle.entryWait, tableCount)
+  }, [queueBundle, tableCount])
+
   const queueState = useMemo(() => {
-    const base = buildEventQueueState(queueBundle.ordered, queueBundle.entryWait, tableCount)
-    return filterQueueByName(base, search)
-  }, [queueBundle, tableCount, search])
+    return filterQueueByName(baseQueueState, search)
+  }, [baseQueueState, search])
 
   useEffect(() => {
     if (!admin || loading) return
@@ -168,7 +171,7 @@ export function EventQueueView({
     let cancelled = false
     const persistTableAssignments = async () => {
       let changed = false
-      for (const slot of queueState.tables) {
+      for (const slot of baseQueueState.tables) {
         const m = slot.match
         if (!m || m.assignedTable === slot.tableNumber) continue
         const key = `${m.matchId}@${slot.tableNumber}`
@@ -190,17 +193,12 @@ export function EventQueueView({
     return () => {
       cancelled = true
     }
-  }, [admin, loading, queueState.tables, loadQueueData])
+  }, [admin, loading, baseQueueState.tables, loadQueueData])
 
-  const pendingCount =
-    groupMatches.filter((m) => m.status !== 'completed').length +
-    knockoutMatches.filter(
-      (m) =>
-        m.status !== 'completed' &&
-        !!m.entry_a_id &&
-        !!m.entry_b_id &&
-        m.outcome !== 'bye',
-    ).length
+  const pendingCount = useMemo(() => {
+    const onTables = baseQueueState.tables.filter((slot) => slot.match).length
+    return baseQueueState.upNext.length + baseQueueState.onDeck.length + onTables
+  }, [baseQueueState])
 
   const resolveFullMatch = useCallback(
     (queueMatch: QueueMatchView): GroupMatch | KnockoutMatch | null => {
@@ -269,9 +267,10 @@ export function EventQueueView({
       if (queueMatch.stage === 'group') {
         await saveGroupMatchResult(queueMatch.matchId, data)
       } else {
-        const km = knockoutMatches.find((m) => m.id === queueMatch.matchId)
+        const allKm = await fetchKnockoutMatches(tournamentId, eventId)
+        const km = allKm.find((m) => m.id === queueMatch.matchId)
         if (!km) throw new Error('Match not found')
-        const stage = setRulesStageForRound(matchEffectiveRound(km, knockoutMatches))
+        const stage = setRulesStageForRound(matchEffectiveRound(km, allKm))
         await saveKnockoutMatchResult(queueMatch.matchId, data, stage)
       }
       setScoreTarget(null)
