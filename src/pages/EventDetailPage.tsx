@@ -21,7 +21,7 @@ import { loadTeamRostersByTeamId } from '../lib/entryDisplay'
 import { fetchTournament, fetchEvent, fetchEntries, fetchGroups } from '../lib/tournamentService'
 import { entrySortKey, getStartLayoutOptions } from '../lib/groupLayout'
 import { isFirebaseConfigured } from '../lib/firebase'
-import { EVENT_TYPE_LABELS, STATUS_LABELS } from '../lib/constants'
+import { EVENT_TYPE_LABELS, STATUS_LABELS, KNOCKOUT_BRACKET_LABELS } from '../lib/constants'
 import { getCategoryDisplay, getEventDisplayName } from '../lib/displayNames'
 import { useMinLoading } from '../hooks/useMinLoading'
 import { EventDetailSkeleton } from '../components/ui/Skeleton'
@@ -168,7 +168,7 @@ export function EventDetailPage() {
     { label: 'Advance per group', value: String(cfg.advance_count) },
     {
       label: 'Knockout',
-      value: cfg.knockout_bracket === 'block' ? 'Block' : 'Cross',
+      value: KNOCKOUT_BRACKET_LABELS[cfg.knockout_bracket ?? 'cross'],
     },
     { label: 'Group stage', value: setRulesSummary.group },
     { label: 'Knockout stage', value: setRulesSummary.knockout },

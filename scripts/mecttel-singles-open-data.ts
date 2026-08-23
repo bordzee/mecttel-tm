@@ -12,7 +12,7 @@ export const MECTTEL_SINGLES_OPEN = {
     status: 'ongoing' as const,
     config: {
       advance_count: 2,
-      knockout_bracket: 'block' as const,
+      knockout_bracket: 'mirror' as const,
       group_count: 8,
       entries_per_group: 5,
       group_sizes: [4, 5, 5, 4, 4, 4, 5, 5],
@@ -106,13 +106,14 @@ export const MECTTEL_SINGLES_OPEN = {
   ],
 } as const
 
-export const EXPECTED_BLOCK_R16 = [
-  'Luke Moriles vs Enicka',
-  'Boyaks vs Ronnie Bajarias',
-  'Kanot vs Nathan Bucotot',
-  'Franco vs Martin',
-  'Cabaron vs Takeru fujimura',
-  'Bordz vs Ricafort',
-  'Hayato Fujimura vs Marlon',
-  'JM Aquino vs Hans Ignacio',
+/** Manual paper R16 from the Aug 2026 live event (mirror cross). */
+export const EXPECTED_MIRROR_R16 = [
+  'Luke Moriles vs Marlon',
+  'Boyaks vs Hans Ignacio',
+  'Kanot vs Takeru fujimura',
+  'Franco vs Ricafort',
+  'Cabaron vs Nathan Bucotot',
+  'Bordz vs Martin',
+  'Hayato Fujimura vs Enicka',
+  'JM Aquino vs Ronnie Bajarias',
 ] as const

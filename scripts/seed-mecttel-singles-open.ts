@@ -1,11 +1,11 @@
 /**
- * Recreates the MECTTEL Singles – Open division (36 players, 8 groups, block knockout).
+ * Recreates the MECTTEL Singles – Open division (36 players, 8 groups, mirror knockout).
  *
  * Run: npm run seed:mecttel-open
  *
  * Uses Firebase CLI login on this machine (npx firebase login).
  */
-import { EXPECTED_BLOCK_R16, MECTTEL_SINGLES_OPEN } from './mecttel-singles-open-data.ts'
+import { EXPECTED_MIRROR_R16, MECTTEL_SINGLES_OPEN } from './mecttel-singles-open-data.ts'
 import { getAdminFirestore } from './firestoreAdmin.ts'
 import { generateRoundRobinPairs } from '../src/lib/roundRobin.ts'
 import { generateKnockoutPairings, computeKnockoutAdvancement } from '../src/lib/knockoutSeeding.ts'
@@ -294,15 +294,15 @@ async function main() {
   console.log('Admin:', `/admin/tournaments/${tournamentId}/events/${eventId}`)
   console.log('Public:', `/tournaments/${tournamentId}/events/${eventId}`)
 
-  console.log('\nBlock R16 pairings:')
+  console.log('\nMirror R16 pairings:')
   for (const p of r16Pairings) console.log(' -', p)
 
-  const missing = EXPECTED_BLOCK_R16.filter((expected) => !r16Pairings.includes(expected))
+  const missing = EXPECTED_MIRROR_R16.filter((expected) => !r16Pairings.includes(expected))
   if (missing.length) {
     console.warn('\nUnexpected R16 pairings (check group standings):', missing)
     process.exitCode = 1
   } else {
-    console.log('\nR16 matches expected block pairings from yesterday.')
+    console.log('\nR16 matches expected mirror pairings from yesterday.')
   }
 }
 

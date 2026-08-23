@@ -79,10 +79,10 @@ export function validateTournamentStart(
   }
 
   const bracketType = config.knockout_bracket ?? 'cross'
-  if (bracketType === 'block' && layout.groupCount % 2 !== 0) {
+  if ((bracketType === 'block' || bracketType === 'mirror') && layout.groupCount % 2 !== 0) {
     return {
       ok: false,
-      error: `Block bracket requires an even number of groups (${layout.groupCount} planned)`,
+      error: `${bracketType === 'block' ? 'Block' : 'Mirror'} bracket requires an even number of groups (${layout.groupCount} planned)`,
     }
   }
 

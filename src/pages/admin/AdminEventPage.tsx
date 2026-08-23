@@ -91,7 +91,7 @@ import {
   eventToDivisionDraft,
   type DivisionDraft,
 } from '../../components/DivisionConfigForm'
-import { STATUS_LABELS } from '../../lib/constants'
+import { STATUS_LABELS, KNOCKOUT_BRACKET_LABELS } from '../../lib/constants'
 import { useRealtimeEvent } from '../../hooks/useRealtimeEvent'
 import { useMinLoading } from '../../hooks/useMinLoading'
 import { AdminEventPageSkeleton } from '../../components/ui/Skeleton'
@@ -319,7 +319,9 @@ export function AdminEventPage() {
     ? filterKnockoutMatchesForStage(knockoutMatches, activeStage)
     : []
 
-  const isBlockBracket = (event?.config.knockout_bracket ?? 'cross') === 'block'
+  const needsEvenGroupsForKnockout =
+    (event?.config.knockout_bracket ?? 'cross') === 'block' ||
+    (event?.config.knockout_bracket ?? 'cross') === 'mirror'
 
   const allLayoutOptions = useMemo(() => {
     if (!event) return []
@@ -328,8 +330,8 @@ export function AdminEventPage() {
 
   const isLayoutSelectable = useCallback(
     (option: (typeof allLayoutOptions)[number]) =>
-      !isBlockBracket || isLayoutCompatibleWithBlock(option),
-    [isBlockBracket],
+      !needsEvenGroupsForKnockout || isLayoutCompatibleWithBlock(option),
+    [needsEvenGroupsForKnockout],
   )
 
   const selectableLayoutOptions = useMemo(
@@ -420,7 +422,9 @@ export function AdminEventPage() {
     if (!event || event.status !== 'ongoing' || knockoutGenerated || !groups.length) return null
     const sizes = groupSummaries.map((g) => g.entries.length)
     return formatKnockoutByePreviewFromGroupSizes(sizes, event.config.advance_count, {
-      blockBracket: (event.config.knockout_bracket ?? 'cross') === 'block',
+      blockBracket:
+        (event.config.knockout_bracket ?? 'cross') === 'block' ||
+        (event.config.knockout_bracket ?? 'cross') === 'mirror',
     })
   }, [event, knockoutGenerated, groups.length, groupSummaries])
 
@@ -1376,7 +1380,7 @@ export function AdminEventPage() {
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9" /><path d="M18 6v12" /><path d="M6 9a9 9 0 0 0 9 9" />
               </svg>
-              Knockout type — {cfg.knockout_bracket === 'cross' ? 'Cross' : 'Block'}
+              Knockout type — {KNOCKOUT_BRACKET_LABELS[cfg.knockout_bracket ?? 'cross']}
             </p>
             <p className="text-xs text-text-steel font-medium">
               Group {setRulesSummary.group.replace('Best of ', 'Bo')}

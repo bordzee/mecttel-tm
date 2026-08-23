@@ -169,17 +169,11 @@ function buildFirstRoundGroupRankPairings(
   )
 
   let effectiveType = bracketType
-  if (bracketType === 'block' && groupOrder.length % 2 !== 0) {
-    warnings.push({
-      message: `Block bracket needs an even number of groups (${groupOrder.length} groups) — using cross bracket instead`,
-    })
-    effectiveType = 'cross'
-  }
+  const resolved = resolveEffectiveBracketType(bracketType, groupOrder.length)
+  effectiveType = resolved.effectiveType
+  warnings.push(...resolved.warnings)
 
-  const pairings =
-    effectiveType === 'block'
-      ? pairBlockAdvanceTwo(playingMap, groupOrder)
-      : pairCrossAdvanceTwo(playingMap, groupOrder)
+  const pairings = pairAdvanceTwo(playingMap, groupOrder, effectiveType)
 
   const entryGroup = buildEntryGroupMap(playingMap, groupOrder)
   warnings.push(...assertNoSameGroupPairings(pairings, entryGroup))
@@ -326,15 +320,33 @@ function buildPlayInGroupRankPairings(
   const entryGroup = buildEntryGroupMap(advancersByGroup, groupOrder)
 
   let effectiveType = bracketType
-  if (bracketType === 'block' && groupOrder.length % 2 !== 0) {
-    effectiveType = 'cross'
-  }
+  const resolved = resolveEffectiveBracketType(bracketType, groupOrder.length)
+  effectiveType = resolved.effectiveType
+  warnings.push(...resolved.warnings)
 
   if (effectiveType === 'cross') {
     const g = groupOrder.length
     for (let i = 0; i < g && pairings.length < matchCount; i++) {
       const rowsA = advancersByGroup.get(groupOrder[i]) ?? []
       const rowsB = advancersByGroup.get(groupOrder[(i + 1) % g]) ?? []
+      const a = pickPlayInPlayer(rowsA, playInIds, used, 0)
+      const b = pickPlayInPlayer(rowsB, playInIds, used, 1)
+      if (!a || !b) continue
+      pairings.push({
+        a,
+        b,
+        side: pairings.length % 2 === 0 ? 'left' : 'right',
+        rankA: rowsA.indexOf(a),
+        rankB: rowsB.indexOf(b),
+      })
+      used.add(a.entryId)
+      used.add(b.entryId)
+    }
+  } else if (effectiveType === 'mirror') {
+    const g = groupOrder.length
+    for (let i = 0; i < g && pairings.length < matchCount; i++) {
+      const rowsA = advancersByGroup.get(groupOrder[i]) ?? []
+      const rowsB = advancersByGroup.get(groupOrder[g - 1 - i]) ?? []
       const a = pickPlayInPlayer(rowsA, playInIds, used, 0)
       const b = pickPlayInPlayer(rowsB, playInIds, used, 1)
       if (!a || !b) continue
@@ -536,6 +548,63 @@ function pairCrossAdvanceTwo(
   }
 
   return pairings
+}
+
+/** Mirror cross: group i #1 vs group (n-1-i) #2 (opposite ends; needs even group count). */
+function pairMirrorAdvanceTwo(
+  advancersByGroup: Map<string, StandingRow[]>,
+  groupOrder: string[],
+): Pairing[] {
+  const pairings: Pairing[] = []
+  const g = groupOrder.length
+
+  for (let i = 0; i < g; i++) {
+    const rowsA = advancersByGroup.get(groupOrder[i]) ?? []
+    const rowsB = advancersByGroup.get(groupOrder[g - 1 - i]) ?? []
+    const first = rowsA[0]
+    const second = rowsB[1]
+    if (!first || !second) continue
+
+    pairings.push({
+      a: first,
+      b: second,
+      side: i % 2 === 0 ? 'left' : 'right',
+      rankA: 0,
+      rankB: 1,
+    })
+  }
+
+  return pairings
+}
+
+function pairAdvanceTwo(
+  advancersByGroup: Map<string, StandingRow[]>,
+  groupOrder: string[],
+  bracketType: KnockoutBracketType,
+): Pairing[] {
+  if (bracketType === 'block') return pairBlockAdvanceTwo(advancersByGroup, groupOrder)
+  if (bracketType === 'mirror') return pairMirrorAdvanceTwo(advancersByGroup, groupOrder)
+  return pairCrossAdvanceTwo(advancersByGroup, groupOrder)
+}
+
+function resolveEffectiveBracketType(
+  bracketType: KnockoutBracketType,
+  groupCount: number,
+): { effectiveType: KnockoutBracketType; warnings: SeedingWarning[] } {
+  const warnings: SeedingWarning[] = []
+  if ((bracketType === 'block' || bracketType === 'mirror') && groupCount % 2 !== 0) {
+    warnings.push({
+      message: `${bracketType === 'block' ? 'Block' : 'Mirror'} bracket needs an even number of groups (${groupCount} groups) — using cross bracket instead`,
+    })
+    return { effectiveType: 'cross', warnings }
+  }
+  return { effectiveType: bracketType, warnings }
+}
+
+function knockoutBracketTypeLabel(bracketType: KnockoutBracketType): string {
+  if (bracketType === 'block') return 'block'
+  if (bracketType === 'mirror') return 'mirror'
+  return 'cross'
 }
 
 function pairBlockAdvanceTwo(
@@ -843,19 +912,16 @@ export function generateKnockoutPairings(
   }
 
   let effectiveType = bracketType
-  if (bracketType === 'block' && groupOrder.length % 2 !== 0) {
-    warnings.push({
-      message: `Block bracket needs an even number of groups (${groupOrder.length} groups) — using cross bracket instead`,
-    })
-    effectiveType = 'cross'
-  }
+  const resolved = resolveEffectiveBracketType(bracketType, groupOrder.length)
+  effectiveType = resolved.effectiveType
+  warnings.push(...resolved.warnings)
 
   const useGroupRankPairing = supportsGroupRankPairing(advancersByGroup, groupOrder, advanceCount)
   const useByeBracket = !isPowerOf2(allAdvancers.length)
   let firstRound: KnockoutSlot[]
 
   if (useByeBracket) {
-    const bracketLabel = bracketType === 'block' ? 'block' : 'cross'
+    const bracketLabel = knockoutBracketTypeLabel(bracketType)
     if (useGroupRankPairing) {
       warnings.push({
         message: `${allAdvancers.length} advancers — ${bracketLabel} knockout uses seeded byes with group-rank play-in`,
@@ -924,6 +990,8 @@ export function generateKnockoutPairings(
       } else {
         pairings = pairBlockAdvanceMany(advancersByGroup, groupOrder, advanceCount)
       }
+    } else if (effectiveType === 'mirror' && advanceCount === 2) {
+      pairings = pairMirrorAdvanceTwo(advancersByGroup, groupOrder)
     } else if (advanceCount === 2) {
       pairings = pairCrossAdvanceTwo(advancersByGroup, groupOrder)
     } else if (advanceCount === 1) {

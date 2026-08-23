@@ -264,7 +264,7 @@ function formatKnockoutByePreviewText(
   }
   let text = `${prefix}${preview.advancers} advancers · ${preview.byeCount} bye${preview.byeCount === 1 ? '' : 's'} (top seeds skip ${preview.skipRoundLabel})`
   if (options?.blockBracket && groups != null && groups % 2 !== 0) {
-    text += ' · Block needs an even group count — use Cross or adjust groups'
+    text += ' · Block and mirror need an even group count — use Cross or adjust groups'
   }
   return text
 }

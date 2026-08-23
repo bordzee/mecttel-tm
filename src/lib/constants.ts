@@ -1,4 +1,4 @@
-import type { Category, EventType, TeamFormat } from '../types'
+import type { Category, EventType, KnockoutBracketType, TeamFormat } from '../types'
 
 export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   team: 'Team',
@@ -32,6 +32,12 @@ export const DEFAULT_SET_RULES = {
   quarters: 5 as const,
   semis: 5 as const,
   finals: 5 as const,
+}
+
+export const KNOCKOUT_BRACKET_LABELS: Record<KnockoutBracketType, string> = {
+  cross: 'Cross',
+  block: 'Block',
+  mirror: 'Mirror',
 }
 
 export const STATUS_LABELS = {

@@ -52,7 +52,7 @@ export function GenerateGroupStageDialog({
   }, [open, knockoutBracket])
 
   const layoutOptions = useMemo(() => {
-    if (activeBracket === 'block') {
+    if (activeBracket === 'block' || activeBracket === 'mirror') {
       return allLayoutOptions.filter(isLayoutCompatibleWithBlock)
     }
     return allLayoutOptions
@@ -98,10 +98,10 @@ export function GenerateGroupStageDialog({
             <span className="font-semibold text-text-steel">Entries</span>
             <span className="font-bold text-text-bluewhite tabular-nums">{entryCountLabel}</span>
           </div>
-          {activeBracket === 'block' && layoutOptions.length === 0 && (
+          {(activeBracket === 'block' || activeBracket === 'mirror') && layoutOptions.length === 0 && (
             <WarningBanner>
-              Block bracket requires an even number of groups. For {entryCount} entries there is no
-              valid even layout — switch to Cross bracket above, or change the entry count.
+              Block and mirror brackets require an even number of groups. For {entryCount} entries
+              there is no valid even layout — switch to Cross above, or change the entry count.
             </WarningBanner>
           )}
           {layoutOptions.length > 0 ? (

@@ -88,7 +88,52 @@ describe('knockoutSeeding', () => {
     expect(updates.size).toBeGreaterThan(0)
   })
 
-  it.each(['cross', 'block'] as const)(
+  it('falls back to cross for mirror when group count is odd', () => {
+    const { advancersByGroup, groupOrder } = mockAdvancers(7, 2)
+    const { warnings } = generateKnockoutPairings(
+      advancersByGroup,
+      groupOrder,
+      entries,
+      2,
+      'mirror',
+    )
+
+    expect(warnings.some((w) => w.message.includes('Mirror bracket needs an even number of groups'))).toBe(
+      true,
+    )
+  })
+
+  it('builds mirror bracket for 8 groups × 2 advancers', () => {
+    const { advancersByGroup, groupOrder } = mockAdvancers(8, 2)
+    const { tree, warnings } = generateKnockoutPairings(
+      advancersByGroup,
+      groupOrder,
+      entries,
+      2,
+      'mirror',
+    )
+
+    expect(warnings.some((w) => w.message.includes('even number of groups'))).toBe(false)
+
+    const played = tree.filter((n) => n.slot.entryAId && n.slot.entryBId)
+    expect(played).toHaveLength(8)
+
+    const pairKey = (a: string, b: string) => `${a} vs ${b}`
+    const pairings = new Set(
+      played.map((n) => pairKey(n.slot.entryAId!, n.slot.entryBId!)),
+    )
+
+    expect(pairings.has(pairKey('g0-0', 'g7-1'))).toBe(true)
+    expect(pairings.has(pairKey('g1-0', 'g6-1'))).toBe(true)
+    expect(pairings.has(pairKey('g2-0', 'g5-1'))).toBe(true)
+    expect(pairings.has(pairKey('g3-0', 'g4-1'))).toBe(true)
+    expect(pairings.has(pairKey('g4-0', 'g3-1'))).toBe(true)
+    expect(pairings.has(pairKey('g5-0', 'g2-1'))).toBe(true)
+    expect(pairings.has(pairKey('g6-0', 'g1-1'))).toBe(true)
+    expect(pairings.has(pairKey('g7-0', 'g0-1'))).toBe(true)
+  })
+
+  it.each(['cross', 'block', 'mirror'] as const)(
     'uses seeded bye bracket with group-rank play-in for 12 advancers (6 groups × 2, %s)',
     (bracketType) => {
       const { advancersByGroup, groupOrder } = mockAdvancers(6, 2)
@@ -132,7 +177,7 @@ describe('knockoutSeeding', () => {
     },
   )
 
-  it.each(['cross', 'block'] as const)(
+  it.each(['cross', 'block', 'mirror'] as const)(
     'keeps group-rank pairing for 8 advancers (4 groups × 2, %s)',
     (bracketType) => {
       const { advancersByGroup, groupOrder } = mockAdvancers(4, 2)

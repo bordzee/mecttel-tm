@@ -33,6 +33,17 @@ function previewFirstRoundPairings(
     })
 }
 
+function defaultBracketForGroupCount(
+  knockoutBracket: KnockoutBracketType,
+  groupCount: number,
+): KnockoutBracketType {
+  const evenGroupsRequired = groupCount % 2 !== 0
+  if (evenGroupsRequired && (knockoutBracket === 'block' || knockoutBracket === 'mirror')) {
+    return 'cross'
+  }
+  return knockoutBracket
+}
+
 export function GenerateKnockoutDialog({
   open,
   onClose,
@@ -61,16 +72,12 @@ export function GenerateKnockoutDialog({
   const [activeBracket, setActiveBracket] = useState(knockoutBracket)
 
   useEffect(() => {
-    if (open) {
-      const blockBlocked = groupCount % 2 !== 0
-      setActiveBracket(
-        knockoutBracket === 'block' && blockBlocked ? 'cross' : knockoutBracket,
-      )
-    }
+    if (open) setActiveBracket(defaultBracketForGroupCount(knockoutBracket, groupCount))
   }, [open, knockoutBracket, groupCount])
 
-  const blockBlocked = groupCount % 2 !== 0
-  const blockInvalid = activeBracket === 'block' && blockBlocked
+  const evenGroupsRequired = groupCount % 2 !== 0
+  const selectionInvalid =
+    evenGroupsRequired && (activeBracket === 'block' || activeBracket === 'mirror')
   const firstRoundPreview = useMemo(
     () =>
       previewFirstRoundPairings(
@@ -99,20 +106,20 @@ export function GenerateKnockoutDialog({
       >
         <PanelSectionTitle>{title}</PanelSectionTitle>
         <p id="generate-knockout-title" className="text-sm text-text-steel leading-snug">
-          Choose cross or block seeding for the first knockout round. This is saved on the division
-          and used when generating from group ranks.
+          Choose cross, block, or mirror seeding for the first knockout round. This is saved on the
+          division and used when generating from group ranks.
         </p>
 
         <KnockoutBracketPicker
           value={activeBracket}
           onChange={setActiveBracket}
-          blockDisabled={blockBlocked}
+          evenGroupsRequired={evenGroupsRequired}
         />
 
-        {blockBlocked && (
+        {evenGroupsRequired && (
           <WarningBanner>
-            Block requires an even number of groups ({groupCount} groups now). Use Cross, or adjust
-            the group layout before generating knockout.
+            Block and mirror require an even number of groups ({groupCount} groups now). Use Cross,
+            or adjust the group layout before generating knockout.
           </WarningBanner>
         )}
 
@@ -134,7 +141,7 @@ export function GenerateKnockoutDialog({
             Cancel
           </Button>
           <Button
-            disabled={loading || blockInvalid}
+            disabled={loading || selectionInvalid}
             onClick={() => onConfirm(activeBracket)}
             fullWidth
           >

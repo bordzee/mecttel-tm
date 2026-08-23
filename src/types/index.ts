@@ -23,7 +23,7 @@ export interface SetRules {
   finals: 5 | 7
 }
 
-export type KnockoutBracketType = 'cross' | 'block'
+export type KnockoutBracketType = 'cross' | 'block' | 'mirror'
 
 export interface TournamentConfig {
   /** Legacy divisions only; omit for unlimited registration. */
