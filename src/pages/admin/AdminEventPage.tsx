@@ -31,7 +31,7 @@ import { MoveEntryDialog } from '../../components/MoveEntryDialog'
 import { GenerateGroupStageDialog } from '../../components/GenerateGroupStageDialog'
 import { GenerateKnockoutDialog } from '../../components/GenerateKnockoutDialog'
 import { EntryInfoDialog } from '../../components/EntryInfoDialog'
-import { MatchQueuePanel } from '../../components/MatchQueuePanel'
+import { EventQueueView } from '../../components/EventQueueView'
 import { ParticipantsListDialog } from '../../components/ParticipantsListDialog'
 import { SetRulesEditorDialog } from '../../components/SetRulesEditorDialog'
 import { formatSetRulesSummary, normalizeSetRules } from '../../lib/setRules'
@@ -67,7 +67,7 @@ import {
   fetchTeamRosters,
 } from '../../lib/tournamentService'
 import { assignEntriesToGroups, assignmentWarningsForMembers, canAddEntryToGroup } from '../../lib/groupAssignment'
-import { buildGroupMatchQueue, buildKnockoutMatchQueue, buildOrderedGroupQueue } from '../../lib/matchQueue'
+import { buildOrderedGroupQueue } from '../../lib/matchQueue'
 import {
   getStartLayoutOptions,
   isLayoutCompatibleWithBlock,
@@ -102,7 +102,7 @@ import { StatusPopups } from '../../components/ui/StatusPopups'
 import { DeleteConfirmDialog } from '../../components/ui/DeleteConfirmDialog'
 import type { Tournament, TournamentEvent, TournamentEntry, Group, KnockoutBracketType } from '../../types'
 
-type AdminDivisionTab = 'participants' | 'late-check-in' | 'brackets'
+type AdminDivisionTab = 'participants' | 'late-check-in' | 'queue' | 'brackets'
 
 type PendingLateEntry = {
   label: string
@@ -331,31 +331,6 @@ export function AdminEventPage() {
   const activeKnockoutMatches = isKnockoutStage(activeStage)
     ? filterKnockoutMatchesForStage(knockoutMatches, activeStage)
     : []
-
-  const activeGroupPendingCount = activeGroupStage
-    ? activeGroupStage.pending.length
-    : 0
-  const activeKnockoutPendingCount = activeKnockoutMatches.filter(
-    (m) =>
-      m.status !== 'completed' &&
-      !!m.entry_a_id &&
-      !!m.entry_b_id &&
-      m.outcome !== 'bye',
-  ).length
-
-  const activeGroupQueue = useMemo(() => {
-    if (!activeGroupStage) return null
-    return buildGroupMatchQueue(
-      [...activeGroupStage.completed, ...activeGroupStage.pending],
-      entryMap,
-      activeGroupStage.group.label,
-    )
-  }, [activeGroupStage, entryMap])
-
-  const activeKnockoutQueue = useMemo(() => {
-    if (!activeKnockoutRound) return null
-    return buildKnockoutMatchQueue(knockoutMatches, entryMap, activeKnockoutRound)
-  }, [activeKnockoutRound, knockoutMatches, entryMap])
 
   const handleShowEntryInfo = async (entry: TournamentEntry) => {
     setInfoEntry(entry)
@@ -1328,6 +1303,7 @@ export function AdminEventPage() {
   ]
   if (canLateJoin) adminTabs.push({ id: 'late-check-in', label: 'Late check-in' })
   if (event.status === 'ongoing' && groups.length > 0) {
+    adminTabs.push({ id: 'queue', label: 'Queue' })
     adminTabs.push({ id: 'brackets', label: 'Brackets' })
   }
 
@@ -1569,24 +1545,18 @@ export function AdminEventPage() {
           </WarningBanner>
         )}
 
+        {activeAdminTab === 'queue' && event.status === 'ongoing' && groups.length > 0 && tournamentId && eventId && (
+          <EventQueueView
+            tournamentId={tournamentId}
+            eventId={eventId}
+            admin
+            onRefresh={fetchEventData}
+          />
+        )}
+
         {activeAdminTab === 'brackets' && event.status === 'ongoing' && groups.length > 0 && (
         <>
           <GroupStageNavigator tabs={stageTabs} activeId={activeStage} onChange={setActiveStage} />
-
-          {activeGroupStage && activeGroupPendingCount > 0 && activeGroupQueue && (
-            <MatchQueuePanel
-              ordered={activeGroupQueue.ordered}
-              entryWait={activeGroupQueue.entryWait}
-            />
-          )}
-
-          {activeKnockoutRound && activeKnockoutPendingCount > 0 && activeKnockoutQueue && (
-            <MatchQueuePanel
-              title="Knockout queue"
-              ordered={activeKnockoutQueue.ordered}
-              entryWait={activeKnockoutQueue.entryWait}
-            />
-          )}
 
           <div className="space-y-3">
             <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">

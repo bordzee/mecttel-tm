@@ -106,6 +106,40 @@ export const MECTTEL_SINGLES_OPEN = {
   ],
 } as const
 
+/** All players across groups (name + organization). */
+export function mecttelSinglesOpenPlayers(): { name: string; organization: string }[] {
+  return MECTTEL_SINGLES_OPEN.groups.flatMap((g) =>
+    g.players.map((p) => ({ name: p.name, organization: p.organization })),
+  )
+}
+
+/** Registration-only division config (no groups generated). */
+export const MECTTEL_SINGLES_OPEN_REGISTRATION = {
+  tournament: {
+    name: 'MECTTEL Singles Tournament',
+    venue: 'MECTTEL Sports Hall',
+    start_date: '2026-08-23',
+  },
+  event: {
+    name: 'Singles – Open',
+    event_type: 'single' as const,
+    category: 'open' as const,
+    status: 'upcoming' as const,
+    config: {
+      advance_count: 2,
+      knockout_bracket: 'mirror' as const,
+      table_count: 1,
+      set_rules: {
+        group: 5 as const,
+        knockout_early: 5 as const,
+        quarters: 5 as const,
+        semis: 5 as const,
+        finals: 5 as const,
+      },
+    },
+  },
+} as const
+
 /** Manual paper R16 from the Aug 2026 live event (mirror cross). */
 export const EXPECTED_MIRROR_R16 = [
   'Luke Moriles vs Marlon',

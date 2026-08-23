@@ -38,6 +38,8 @@ export interface TournamentConfig {
   roster_size?: 3 | 4
   set_rules: SetRules
   category_label?: string
+  /** Number of table tennis tables available for parallel play (default 1). */
+  table_count?: number
 }
 
 /** Meet-level container (e.g. "bizdak"). */
@@ -154,6 +156,10 @@ export interface GroupMatch {
   queue_order?: number
   /** ISO timestamp when the match was scored. */
   completed_at?: string | null
+  /** Locked table assignment (1-based). Set when admin calls a match. */
+  assigned_table?: number | null
+  /** ISO timestamp when players were called to their table. */
+  called_at?: string | null
   entry_a?: TournamentEntry
   entry_b?: TournamentEntry
 }
@@ -181,6 +187,10 @@ export interface KnockoutMatch {
   outcome: MatchOutcome
   /** ISO timestamp when the match was scored. */
   completed_at?: string | null
+  /** Locked table assignment (1-based). Set when admin calls a match. */
+  assigned_table?: number | null
+  /** ISO timestamp when players were called to their table. */
+  called_at?: string | null
   /** Play-in among non-bye winners when an odd feeder count is resolved. */
   is_odd_play_in?: boolean
   pending_odd_round?: boolean

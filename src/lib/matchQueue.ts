@@ -18,6 +18,10 @@ export interface QueueMatchView {
   queuePosition: number
   playable: boolean
   restReason?: string
+  assignedTable?: number | null
+  estimatedTable?: number | null
+  tableLocked: boolean
+  calledAt?: string | null
 }
 
 export interface EntryWaitView {
@@ -33,6 +37,8 @@ type PlayedMatch = {
   status: string
   completed_at?: string | null
   queue_order?: number
+  assigned_table?: number | null
+  called_at?: string | null
   id: string
 }
 
@@ -113,6 +119,33 @@ export function buildOrderedGroupQueue<T extends PlayedMatch & { entry_a_id: str
   return ordered
 }
 
+function toQueueMatchView(
+  m: PlayedMatch & { entry_a_id: string; entry_b_id: string },
+  index: number,
+  completed: PlayedMatch[],
+  entryMap: Map<string, TournamentEntry>,
+  extra: Pick<QueueMatchView, 'stage'> & Partial<QueueMatchView>,
+): QueueMatchView {
+  const playable =
+    !wouldPlayTooSoon(m.entry_a_id, completed) &&
+    !wouldPlayTooSoon(m.entry_b_id, completed)
+  const locked = m.assigned_table != null && m.status !== 'completed'
+  return {
+    matchId: m.id,
+    entryAId: m.entry_a_id,
+    entryBId: m.entry_b_id,
+    homeName: entryName(entryMap, m.entry_a_id),
+    awayName: entryName(entryMap, m.entry_b_id),
+    queuePosition: index + 1,
+    playable,
+    restReason: playable ? undefined : restReasonForMatch(m, completed, entryMap),
+    assignedTable: m.assigned_table ?? null,
+    tableLocked: locked,
+    calledAt: m.called_at ?? null,
+    ...extra,
+  }
+}
+
 export function buildGroupMatchQueue(
   matches: GroupMatch[],
   entryMap: Map<string, TournamentEntry>,
@@ -122,24 +155,13 @@ export function buildGroupMatchQueue(
   const pending = matches.filter((m) => m.status !== 'completed')
   const orderedMatches = buildOrderedGroupQueue(pending, completed)
 
-  const ordered: QueueMatchView[] = orderedMatches.map((m, index) => {
-    const playable =
-      !wouldPlayTooSoon(m.entry_a_id, completed) &&
-      !wouldPlayTooSoon(m.entry_b_id, completed)
-    return {
-      matchId: m.id,
+  const ordered: QueueMatchView[] = orderedMatches.map((m, index) =>
+    toQueueMatchView(m, index, completed, entryMap, {
       stage: 'group',
-      groupId: m.group_id,
+      groupId: (m as GroupMatch).group_id,
       groupLabel,
-      entryAId: m.entry_a_id,
-      entryBId: m.entry_b_id,
-      homeName: entryName(entryMap, m.entry_a_id),
-      awayName: entryName(entryMap, m.entry_b_id),
-      queuePosition: index + 1,
-      playable,
-      restReason: playable ? undefined : restReasonForMatch(m, completed, entryMap),
-    }
-  })
+    }),
+  )
 
   const entryWait = buildEntryWaitList(ordered, entryMap)
   return { ordered, entryWait }
@@ -168,23 +190,12 @@ export function buildKnockoutMatchQueue(
 
   const orderedMatches = buildOrderedGroupQueue(scorable, completed)
 
-  const ordered: QueueMatchView[] = orderedMatches.map((m, index) => {
-    const playable =
-      !wouldPlayTooSoon(m.entry_a_id, completed) &&
-      !wouldPlayTooSoon(m.entry_b_id, completed)
-    return {
-      matchId: m.id,
+  const ordered: QueueMatchView[] = orderedMatches.map((m, index) =>
+    toQueueMatchView(m, index, completed, entryMap, {
       stage: 'knockout',
       round: (m as KnockoutMatch).round,
-      entryAId: m.entry_a_id,
-      entryBId: m.entry_b_id,
-      homeName: entryName(entryMap, m.entry_a_id),
-      awayName: entryName(entryMap, m.entry_b_id),
-      queuePosition: index + 1,
-      playable,
-      restReason: playable ? undefined : restReasonForMatch(m, completed, entryMap),
-    }
-  })
+    }),
+  )
 
   return { ordered, entryWait: buildEntryWaitList(ordered, entryMap) }
 }
@@ -230,4 +241,65 @@ export function sortGroupMatchesForQueue(matches: GroupMatch[]): GroupMatch[] {
   const completed = matches.filter((m) => m.status === 'completed')
   const pending = matches.filter((m) => m.status !== 'completed')
   return [...completed, ...buildOrderedGroupQueue(pending, completed)]
+}
+
+/** Round-robin merge of per-group queues for fair cross-group scheduling. */
+export function mergeGroupQueues(
+  groupQueues: { groupLabel: string; ordered: QueueMatchView[] }[],
+): QueueMatchView[] {
+  const pointers = groupQueues.map(() => 0)
+  const merged: QueueMatchView[] = []
+  let progress = true
+
+  while (progress) {
+    progress = false
+    for (let gi = 0; gi < groupQueues.length; gi++) {
+      const queue = groupQueues[gi]!.ordered
+      const ptr = pointers[gi]!
+      if (ptr < queue.length) {
+        merged.push({ ...queue[ptr]!, queuePosition: merged.length + 1 })
+        pointers[gi] = ptr + 1
+        progress = true
+      }
+    }
+  }
+
+  return merged
+}
+
+export function buildEventMatchQueue(params: {
+  groups: { id: string; label: string }[]
+  groupMatches: GroupMatch[]
+  knockoutMatches: KnockoutMatch[]
+  entryMap: Map<string, TournamentEntry>
+}): { ordered: QueueMatchView[]; entryWait: EntryWaitView[]; phase: 'group' | 'knockout' | 'idle' } {
+  const { groups, groupMatches, knockoutMatches, entryMap } = params
+  const sortedGroups = [...groups].sort((a, b) => a.label.localeCompare(b.label))
+
+  const groupPending = groupMatches.filter((m) => m.status !== 'completed')
+  if (groupPending.length > 0) {
+    const perGroup = sortedGroups.map((group) => {
+      const matches = groupMatches.filter((m) => m.group_id === group.id)
+      const { ordered } = buildGroupMatchQueue(matches, entryMap, group.label)
+      return { groupLabel: group.label, ordered }
+    })
+    const ordered = mergeGroupQueues(perGroup)
+    return { ordered, entryWait: buildEntryWaitList(ordered, entryMap), phase: 'group' }
+  }
+
+  const knockoutPending = knockoutMatches.filter(
+    (m) =>
+      m.status !== 'completed' &&
+      !!m.entry_a_id &&
+      !!m.entry_b_id &&
+      m.outcome !== 'bye' &&
+      !hasPendingEarlierKnockoutRound(knockoutMatches, m.round),
+  )
+
+  if (knockoutPending.length > 0) {
+    const { ordered, entryWait } = buildKnockoutMatchQueue(knockoutMatches, entryMap)
+    return { ordered, entryWait, phase: 'knockout' }
+  }
+
+  return { ordered: [], entryWait: [], phase: 'idle' }
 }

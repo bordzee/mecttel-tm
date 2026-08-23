@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GroupStandingsTable } from './GroupStandingsTable'
 import { GroupStageNavigator } from './GroupStageNavigator'
 import { KnockoutBracket } from './KnockoutBracket'
-import { MatchQueuePanel } from './MatchQueuePanel'
 import { EntryInfoDialog } from './EntryInfoDialog'
 import { EmptyMessage } from './ui/primitives'
 import { BracketsTabSkeleton } from './ui/Skeleton'
@@ -18,7 +17,6 @@ import {
   fetchTeamRosters,
 } from '../lib/tournamentService'
 import { resolveGroupStandings } from '../lib/standings'
-import { buildGroupMatchQueue, buildKnockoutMatchQueue } from '../lib/matchQueue'
 import { buildKnockoutStageTabs, filterKnockoutMatchesForStage, isKnockoutStage, knockoutRoundFromStageId } from '../lib/knockoutTabs'
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent'
 import type { Group, GroupMatch, KnockoutMatch, TournamentEntry, TournamentEvent } from '../types'
@@ -119,27 +117,6 @@ export function PublicBracketsView({
     ? filterKnockoutMatchesForStage(knockoutMatches, activeStage)
     : []
 
-  const activeGroupPendingCount = activeGroupStage
-    ? activeGroupStage.matches.filter((m) => m.status !== 'completed').length
-    : 0
-  const activeKnockoutPendingCount = activeKnockoutMatches.filter(
-    (m) =>
-      m.status !== 'completed' &&
-      !!m.entry_a_id &&
-      !!m.entry_b_id &&
-      m.outcome !== 'bye',
-  ).length
-
-  const activeGroupQueue = useMemo(() => {
-    if (!activeGroupStage) return null
-    return buildGroupMatchQueue(activeGroupStage.matches, entryMap, activeGroupStage.group.label)
-  }, [activeGroupStage, entryMap])
-
-  const activeKnockoutQueue = useMemo(() => {
-    if (!activeKnockoutRound) return null
-    return buildKnockoutMatchQueue(knockoutMatches, entryMap, activeKnockoutRound)
-  }, [activeKnockoutRound, knockoutMatches, entryMap])
-
   const handleShowEntryInfo = async (entry: TournamentEntry) => {
     setInfoEntry(entry)
     if (entry.entry_type === 'team' && entry.team_id) {
@@ -172,21 +149,6 @@ export function PublicBracketsView({
   return (
     <div className="space-y-4">
       <GroupStageNavigator tabs={stageTabs} activeId={activeStage} onChange={setActiveStage} />
-
-      {activeGroupStage && activeGroupPendingCount > 0 && activeGroupQueue && (
-        <MatchQueuePanel
-          ordered={activeGroupQueue.ordered}
-          entryWait={activeGroupQueue.entryWait}
-        />
-      )}
-
-      {activeKnockoutRound && activeKnockoutPendingCount > 0 && activeKnockoutQueue && (
-        <MatchQueuePanel
-          title="Knockout queue"
-          ordered={activeKnockoutQueue.ordered}
-          entryWait={activeKnockoutQueue.entryWait}
-        />
-      )}
 
       {activeGroupStage && (
         <GroupStandingsTable

@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "seed:mecttel-open": "tsx scripts/seed-mecttel-singles-open.ts",
+    "seed:mecttel-registration": "tsx scripts/seed-mecttel-singles-open-registration.ts",
     "preview": "vite preview"
   },
   "dependencies": {

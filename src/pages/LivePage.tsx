@@ -1,6 +1,6 @@
 import { Navigate, useParams } from 'react-router-dom'
 
-/** Legacy live URL — redirects to the public division page Brackets tab. */
+/** Legacy live URL — redirects to the public division Queue tab. */
 export function LivePage() {
   const { tournamentId, eventId } = useParams<{ tournamentId: string; eventId: string }>()
   if (!tournamentId || !eventId) {
@@ -8,7 +8,7 @@ export function LivePage() {
   }
   return (
     <Navigate
-      to={`/tournaments/${tournamentId}/events/${eventId}?tab=brackets`}
+      to={`/tournaments/${tournamentId}/events/${eventId}?tab=queue`}
       replace
     />
   )

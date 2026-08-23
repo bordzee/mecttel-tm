@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { AppLayout } from '../components/AppLayout'
 import { PublicParticipantsList } from '../components/PublicParticipantsList'
 import { PublicBracketsView } from '../components/PublicBracketsView'
+import { EventQueueView } from '../components/EventQueueView'
 import { TournamentCoverImage } from '../components/TournamentCoverImage'
 import {
   BackLink,
@@ -28,7 +29,7 @@ import { EventDetailSkeleton } from '../components/ui/Skeleton'
 import { StatusPopups } from '../components/ui/StatusPopups'
 import type { Tournament, TournamentEvent, TournamentEntry } from '../types'
 
-type PublicDivisionTab = 'details' | 'participants' | 'brackets'
+type PublicDivisionTab = 'details' | 'participants' | 'queue' | 'brackets'
 
 function mapFetchError(err: unknown): string {
   const msg = err instanceof Error ? err.message : 'Failed to load division'
@@ -174,6 +175,7 @@ export function EventDetailPage() {
     { label: 'Knockout stage', value: setRulesSummary.knockout },
     { label: 'Finals', value: setRulesSummary.finals },
     ...(cfg.team_format ? [{ label: 'Team format', value: cfg.team_format }] : []),
+    { label: 'Tables', value: String(cfg.table_count ?? 1) },
   ]
 
   const publicTabs: { value: PublicDivisionTab; label: string }[] = [
@@ -181,6 +183,7 @@ export function EventDetailPage() {
     { value: 'participants', label: 'Participants' },
   ]
   if (event.status === 'ongoing' && groupCount > 0) {
+    publicTabs.push({ value: 'queue', label: 'Queue' })
     publicTabs.push({ value: 'brackets', label: 'Brackets' })
   }
 
@@ -198,8 +201,8 @@ export function EventDetailPage() {
   }
 
   return (
-    <AppLayout bleed={activePublicTab === 'brackets'}>
-      <div className={activePublicTab === 'brackets' ? 'px-4 pt-2 pb-6 space-y-4' : 'space-y-4'}>
+    <AppLayout bleed={activePublicTab === 'brackets' || activePublicTab === 'queue'}>
+      <div className={activePublicTab === 'brackets' || activePublicTab === 'queue' ? 'px-4 pt-2 pb-6 space-y-4' : 'space-y-4'}>
         <BackLink to={`/tournaments/${tournamentId}`}>{tournament.name}</BackLink>
 
         <div className="space-y-3">
@@ -253,6 +256,10 @@ export function EventDetailPage() {
             rostersByTeamId={rostersByTeamId}
             maxSlots={cfg.total_slots}
           />
+        )}
+
+        {activePublicTab === 'queue' && tournamentId && eventId && (
+          <EventQueueView tournamentId={tournamentId} eventId={eventId} />
         )}
 
         {activePublicTab === 'brackets' && tournamentId && eventId && (

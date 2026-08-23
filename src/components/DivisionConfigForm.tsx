@@ -22,6 +22,7 @@ export interface DivisionDraft {
   team_format: TeamFormat
   roster_size: 3 | 4
   set_rules: TournamentConfig['set_rules']
+  table_count: number
 }
 
 export function createDivisionDraft(partial?: Partial<DivisionDraft>): DivisionDraft {
@@ -35,6 +36,7 @@ export function createDivisionDraft(partial?: Partial<DivisionDraft>): DivisionD
     knockout_bracket: 'cross',
     team_format: 'SSS',
     roster_size: 3,
+    table_count: 1,
     set_rules: normalizeSetRules({ ...DEFAULT_SET_RULES, ...partialRules }),
     ...rest,
   }
@@ -71,6 +73,7 @@ export function divisionDraftToConfig(draft: DivisionDraft): TournamentConfig {
     advance_count: draft.advance_count,
     knockout_bracket: draft.knockout_bracket,
     set_rules: draft.set_rules,
+    table_count: draft.table_count,
     ...(draft.event_type === 'team' && {
       team_format: draft.team_format,
       roster_size: draft.roster_size,
@@ -106,6 +109,7 @@ export function eventToDivisionDraft(event: TournamentEvent): DivisionDraft {
     knockout_bracket: event.config.knockout_bracket ?? 'cross',
     team_format: event.config.team_format ?? 'SSS',
     roster_size: event.config.roster_size ?? 3,
+    table_count: event.config.table_count ?? 1,
     set_rules: normalizeSetRules(event.config.set_rules),
   })
 }
@@ -122,6 +126,7 @@ export function divisionDraftToSettingsUpdate(draft: DivisionDraft, event: Tourn
       ...event.config,
       advance_count: draft.advance_count,
       set_rules: draft.set_rules,
+      table_count: draft.table_count,
       ...(event.event_type === 'team' && {
         team_format: draft.team_format,
         roster_size: draft.roster_size,
@@ -242,6 +247,19 @@ export function DivisionConfigForm({
           max={MAX_PER_GROUP}
           onChange={(advance_count) => patch({ advance_count })}
         />
+      </div>
+
+      <div className="space-y-2">
+        <FormLabel>Tables available</FormLabel>
+        <NumberStepper
+          value={draft.table_count}
+          min={1}
+          max={12}
+          onChange={(table_count) => patch({ table_count })}
+        />
+        <p className="text-xs text-text-steel leading-snug">
+          How many table tennis tables run matches at the same time (e.g. Table #1, Table #2).
+        </p>
       </div>
 
       <SetRulesPicker

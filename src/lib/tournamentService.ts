@@ -1142,6 +1142,37 @@ export async function updateGroupMatchResult(
   return { warnings }
 }
 
+export async function callMatchToTable(
+  stage: 'group' | 'knockout',
+  matchId: string,
+  tableNumber: number,
+) {
+  const collection = stage === 'group' ? 'group_matches' : 'knockout_matches'
+  await updateDoc(doc(db, collection, matchId), {
+    assigned_table: tableNumber,
+    called_at: new Date().toISOString(),
+  })
+}
+
+export async function assignMatchTable(
+  stage: 'group' | 'knockout',
+  matchId: string,
+  tableNumber: number,
+) {
+  const collection = stage === 'group' ? 'group_matches' : 'knockout_matches'
+  await updateDoc(doc(db, collection, matchId), {
+    assigned_table: tableNumber,
+  })
+}
+
+export async function clearMatchTableCall(stage: 'group' | 'knockout', matchId: string) {
+  const collection = stage === 'group' ? 'group_matches' : 'knockout_matches'
+  await updateDoc(doc(db, collection, matchId), {
+    assigned_table: null,
+    called_at: null,
+  })
+}
+
 export async function propagateKnockoutWinners(tournamentId: string, eventId: string) {
   const inflight = knockoutPropagationInflight.get(eventId)
   if (inflight) return inflight
