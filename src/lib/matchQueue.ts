@@ -274,16 +274,19 @@ export function buildEventMatchQueue(params: {
   entryMap: Map<string, TournamentEntry>
 }): { ordered: QueueMatchView[]; entryWait: EntryWaitView[]; phase: 'group' | 'knockout' | 'idle' } {
   const { groups, groupMatches, knockoutMatches, entryMap } = params
-  const sortedGroups = [...groups].sort((a, b) => a.label.localeCompare(b.label))
+  const groupLabelById = new Map(groups.map((g) => [g.id, g.label]))
 
   const groupPending = groupMatches.filter((m) => m.status !== 'completed')
   if (groupPending.length > 0) {
-    const perGroup = sortedGroups.map((group) => {
-      const matches = groupMatches.filter((m) => m.group_id === group.id)
-      const { ordered } = buildGroupMatchQueue(matches, entryMap, group.label)
-      return { groupLabel: group.label, ordered }
-    })
-    const ordered = mergeGroupQueues(perGroup)
+    const completed = sortCompleted(groupMatches)
+    const orderedMatches = buildOrderedGroupQueue(groupPending, completed)
+    const ordered: QueueMatchView[] = orderedMatches.map((m, index) =>
+      toQueueMatchView(m, index, completed, entryMap, {
+        stage: 'group',
+        groupId: (m as GroupMatch).group_id,
+        groupLabel: groupLabelById.get((m as GroupMatch).group_id),
+      }),
+    )
     return { ordered, entryWait: buildEntryWaitList(ordered, entryMap), phase: 'group' }
   }
 

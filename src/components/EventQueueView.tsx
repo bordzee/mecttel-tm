@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
   CaptionText,
@@ -103,6 +103,7 @@ export function EventQueueView({
   const [announcement, setAnnouncement] = useState<TableAnnouncement | null>(null)
   const [announcementOpen, setAnnouncementOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const persistedTableAssignRef = useRef(new Set<string>())
 
   const loadQueueData = useCallback(async () => {
     try {
@@ -149,6 +150,36 @@ export function EventQueueView({
     const base = buildEventQueueState(queueBundle.ordered, queueBundle.entryWait, tableCount)
     return filterQueueByName(base, search)
   }, [queueBundle, tableCount, search])
+
+  useEffect(() => {
+    if (!admin || loading) return
+
+    let cancelled = false
+    const persistTableAssignments = async () => {
+      let changed = false
+      for (const slot of queueState.tables) {
+        const m = slot.match
+        if (!m || m.assignedTable === slot.tableNumber) continue
+        const key = `${m.matchId}@${slot.tableNumber}`
+        if (persistedTableAssignRef.current.has(key)) continue
+        try {
+          await assignMatchTable(m.stage, m.matchId, slot.tableNumber)
+          persistedTableAssignRef.current.add(key)
+          changed = true
+        } catch {
+          // Queue still works with estimated tables if persistence fails.
+        }
+      }
+      if (changed && !cancelled) {
+        await loadQueueData()
+      }
+    }
+
+    void persistTableAssignments()
+    return () => {
+      cancelled = true
+    }
+  }, [admin, loading, queueState.tables, loadQueueData])
 
   const pendingCount =
     groupMatches.filter((m) => m.status !== 'completed').length +

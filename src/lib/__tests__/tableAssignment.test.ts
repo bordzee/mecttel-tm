@@ -73,4 +73,38 @@ describe('tableAssignment', () => {
     expect(ann.noMoreMatches).toBe(false)
     expect(ann.waitingForRest).toBe(false)
   })
+
+  it('fills vacant tables from the front of up next without reshuffling locked tables', () => {
+    const ordered: QueueMatchView[] = [
+      {
+        ...match('1', 'A', 'B'),
+        assignedTable: 2,
+        tableLocked: true,
+      },
+      match('2', 'C', 'D'),
+      match('3', 'E', 'F'),
+    ]
+    const state = buildEventQueueState(ordered, [], 2)
+
+    expect(state.tables[0]?.match?.matchId).toBe('2')
+    expect(state.tables[1]?.match?.matchId).toBe('1')
+    expect(state.upNext.map((m) => m.matchId)).toEqual(['3'])
+  })
+
+  it('uses first up next match for announcement when table is idle', () => {
+    const ordered = [
+      match('1', 'A', 'B'),
+      match('2', 'C', 'D'),
+      match('3', 'E', 'F'),
+    ]
+    const state = buildEventQueueState(ordered, [], 2)
+    const ann = getTableAnnouncement(1, {
+      ...state,
+      tables: state.tables.map((slot) =>
+        slot.tableNumber === 1 ? { ...slot, match: null, status: 'idle' as const } : slot,
+      ),
+    })
+
+    expect(ann.nextMatch?.matchId).toBe('3')
+  })
 })

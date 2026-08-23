@@ -39,7 +39,7 @@ export function getTableAnnouncement(
     return { tableNumber, label, nextMatch: null, waitingForRest: false, noMoreMatches: true }
   }
 
-  const next = slot.match ?? slot.nextMatch
+  const next = slot.match ?? slot.nextMatch ?? state.upNext[0] ?? null
   if (!next) {
     return { tableNumber, label, nextMatch: null, waitingForRest: false, noMoreMatches: true }
   }
@@ -83,7 +83,7 @@ export function buildEventQueueState(
   tableCountInput: number | undefined,
 ): EventQueueState {
   const tableCount = normalizeTableCount(tableCountInput)
-  const assignedIds = new Set<string>()
+  const placedIds = new Set<string>()
 
   const tables: TableSlotView[] = Array.from({ length: tableCount }, (_, i) => {
     const tableNumber = i + 1
@@ -96,58 +96,49 @@ export function buildEventQueueState(
     }
   })
 
+  // Keep persisted table assignments (admin entered score / assigned table).
   for (const slot of tables) {
-    const locked = ordered.find(
+    const onTable = ordered.find(
       (m) =>
-        m.tableLocked &&
+        m.playable &&
         m.assignedTable === slot.tableNumber &&
-        m.playable,
+        !placedIds.has(m.matchId),
     )
-    if (!locked) continue
+    if (!onTable) continue
 
-    assignedIds.add(locked.matchId)
-    slot.match = locked
-    slot.status = locked.calledAt ? 'called' : 'now'
+    placedIds.add(onTable.matchId)
+    slot.match = onTable
+    slot.status = onTable.calledAt ? 'called' : 'now'
   }
 
-  const unassignedPlayable = ordered.filter(
-    (m) => m.playable && !assignedIds.has(m.matchId),
-  )
-
+  // Fill vacant tables from the global FIFO queue (first waiting match first).
+  const fifo = ordered.filter((m) => m.playable && !placedIds.has(m.matchId))
   for (const slot of tables) {
     if (slot.match) continue
-    const next = unassignedPlayable.shift()
+    const next = fifo.shift()
     if (!next) continue
 
-    assignedIds.add(next.matchId)
-    slot.match = cloneWithTable(next, slot.tableNumber, false)
+    placedIds.add(next.matchId)
+    slot.match = cloneWithTable(next, slot.tableNumber, next.tableLocked)
     slot.status = 'now'
-  }
-
-  for (const slot of tables) {
-    if (slot.match || unassignedPlayable.length === 0) continue
-    slot.nextMatch = cloneWithTable(unassignedPlayable[0]!, slot.tableNumber, false)
   }
 
   const onTableIds = new Set(
     tables.flatMap((t) => (t.match ? [t.match.matchId] : [])),
   )
 
-  const enrichedOrdered = ordered.map((m) => {
-    const tableSlot = tables.find((t) => t.match?.matchId === m.matchId)
-    if (tableSlot?.match) return tableSlot.match
-    const waitingSlot = tables.find((t) => t.nextMatch?.matchId === m.matchId)
-    if (waitingSlot?.nextMatch?.matchId === m.matchId) {
-      return waitingSlot.nextMatch
-    }
-    return m
-  })
-
-  const upNext = enrichedOrdered.filter(
+  const waitingFifo = ordered.filter(
     (m) => m.playable && !onTableIds.has(m.matchId),
-  ).slice(0, 6)
+  )
 
-  const onDeck = enrichedOrdered.filter((m) => !m.playable)
+  for (const slot of tables) {
+    if (slot.match || waitingFifo.length === 0) continue
+    slot.nextMatch = cloneWithTable(waitingFifo[0]!, slot.tableNumber, false)
+  }
+
+  const upNext = waitingFifo
+
+  const onDeck = ordered.filter((m) => !m.playable)
   const waiting = entryWait.filter(
     (e) => e.matchesUntilTurn > 0 || e.reason.includes('rest'),
   )
@@ -157,7 +148,7 @@ export function buildEventQueueState(
     upNext,
     onDeck,
     waiting,
-    ordered: enrichedOrdered,
+    ordered,
   }
 }
 
