@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "seed:mecttel-open": "tsx scripts/seed-mecttel-singles-open.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -22,8 +23,10 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "firebase-admin": "^14.3.0",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vitest": "^3.2.4"

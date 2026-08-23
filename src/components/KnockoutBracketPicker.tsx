@@ -9,9 +9,11 @@ export const KNOCKOUT_BRACKET_OPTIONS: { value: KnockoutBracketType; label: stri
 export function KnockoutBracketPicker({
   value,
   onChange,
+  blockDisabled = false,
 }: {
   value: KnockoutBracketType
   onChange: (value: KnockoutBracketType) => void
+  blockDisabled?: boolean
 }) {
   return (
     <div className="space-y-2">
@@ -20,6 +22,7 @@ export function KnockoutBracketPicker({
         value={value}
         onChange={(knockout_bracket) => onChange(knockout_bracket as KnockoutBracketType)}
         options={KNOCKOUT_BRACKET_OPTIONS}
+        disabledValues={blockDisabled ? ['block'] : []}
       />
       <p className="text-xs text-text-steel leading-snug">
         Block requires an even number of groups. Cross works with any group count.

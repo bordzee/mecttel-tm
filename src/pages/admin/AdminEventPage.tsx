@@ -29,6 +29,7 @@ import { SeededSelect } from '../../components/SeededSelect'
 import { LateEntryDialog } from '../../components/LateEntryDialog'
 import { MoveEntryDialog } from '../../components/MoveEntryDialog'
 import { GenerateGroupStageDialog } from '../../components/GenerateGroupStageDialog'
+import { GenerateKnockoutDialog } from '../../components/GenerateKnockoutDialog'
 import { ParticipantsListDialog } from '../../components/ParticipantsListDialog'
 import { SetRulesEditorDialog } from '../../components/SetRulesEditorDialog'
 import { formatSetRulesSummary, normalizeSetRules } from '../../lib/setRules'
@@ -156,6 +157,8 @@ export function AdminEventPage() {
   const [movingEntry, setMovingEntry] = useState<TournamentEntry | null>(null)
   const [setRulesDialogOpen, setSetRulesDialogOpen] = useState(false)
   const [readyDialogOpen, setReadyDialogOpen] = useState(false)
+  const [knockoutDialogOpen, setKnockoutDialogOpen] = useState(false)
+  const [knockoutDialogMode, setKnockoutDialogMode] = useState<'generate' | 'regenerate'>('generate')
   const loadSeq = useRef(0)
   const isInitialLoad = useRef(true)
 
@@ -280,6 +283,19 @@ export function AdminEventPage() {
   const groupsAwaitingScores = groupStageData.filter((g) => !g.groupPlayComplete)
 
   const knockoutHasScores = knockoutMatches.some((m) => m.status === 'completed')
+
+  const knockoutDialogGroupOrder = useMemo(
+    () => [...groups].sort((a, b) => a.label.localeCompare(b.label)).map((g) => g.id),
+    [groups],
+  )
+
+  const knockoutDialogStandings = useMemo(() => {
+    const standingsByGroup = new Map<string, ReturnType<typeof resolveGroupStandings>>()
+    for (const g of groupStageData) {
+      standingsByGroup.set(g.group.id, g.rows)
+    }
+    return standingsByGroup
+  }, [groupStageData])
 
   const stageTabs = useMemo(() => {
     const tabs = groupStageData.map(({ group, pending }) => ({
@@ -1080,7 +1096,7 @@ export function AdminEventPage() {
     }
   }
 
-  const handleGenerateKnockout = async () => {
+  const openGenerateKnockoutDialog = (mode: 'generate' | 'regenerate') => {
     if (!tournamentId || !eventId) return
     const unresolved = groupStageData.filter(
       (g) =>
@@ -1094,11 +1110,29 @@ export function AdminEventPage() {
       )
       return
     }
+    setError('')
+    setKnockoutDialogMode(mode)
+    setKnockoutDialogOpen(true)
+  }
+
+  const handleConfirmGenerateKnockout = async (knockoutBracket: KnockoutBracketType) => {
+    if (!tournamentId || !eventId || !event) return
     setLoading(true)
     setError('')
     try {
+      const current = event.config.knockout_bracket ?? 'cross'
+      if (knockoutBracket !== current) {
+        await updateEvent(tournamentId, event.id, {
+          config: { ...event.config, knockout_bracket: knockoutBracket },
+        })
+      }
       await refreshKnockoutFromRanks()
-      setMessage('Knockout bracket generated')
+      setMessage(
+        knockoutDialogMode === 'generate'
+          ? 'Knockout bracket generated'
+          : 'Knockout bracket regenerated',
+      )
+      setKnockoutDialogOpen(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate knockout')
     } finally {
@@ -1519,7 +1553,12 @@ export function AdminEventPage() {
                     Save any manual group ranks first, then generate the bracket from the final
                     positions.
                   </CaptionText>
-                  <Button type="button" onClick={handleGenerateKnockout} disabled={loading} fullWidth>
+                  <Button
+                    type="button"
+                    onClick={() => openGenerateKnockoutDialog('generate')}
+                    disabled={loading}
+                    fullWidth
+                  >
                     Generate knockout bracket
                   </Button>
                 </>
@@ -1532,7 +1571,7 @@ export function AdminEventPage() {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={handleGenerateKnockout}
+                    onClick={() => openGenerateKnockoutDialog('regenerate')}
                     disabled={loading}
                     fullWidth
                   >
@@ -1831,6 +1870,20 @@ export function AdminEventPage() {
         knockoutBracket={cfg.knockout_bracket ?? 'cross'}
         onKnockoutBracketChange={handleKnockoutBracketChange}
         onGenerate={() => changeStatus('ongoing')}
+      />
+
+      <GenerateKnockoutDialog
+        open={knockoutDialogOpen}
+        onClose={() => setKnockoutDialogOpen(false)}
+        loading={loading}
+        mode={knockoutDialogMode}
+        knockoutBracket={cfg.knockout_bracket ?? 'cross'}
+        groupCount={groups.length}
+        groupOrder={knockoutDialogGroupOrder}
+        standingsByGroup={knockoutDialogStandings}
+        advanceCount={cfg.advance_count}
+        entryMap={entryMap}
+        onConfirm={handleConfirmGenerateKnockout}
       />
 
       <DeleteConfirmDialog
