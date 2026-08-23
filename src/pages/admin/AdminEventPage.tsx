@@ -289,6 +289,11 @@ export function AdminEventPage() {
     [groups],
   )
 
+  const knockoutDialogGroupLabels = useMemo(
+    () => new Map(groups.map((g) => [g.id, g.label])),
+    [groups],
+  )
+
   const knockoutDialogStandings = useMemo(() => {
     const standingsByGroup = new Map<string, ReturnType<typeof resolveGroupStandings>>()
     for (const g of groupStageData) {
@@ -1884,6 +1889,7 @@ export function AdminEventPage() {
         knockoutBracket={cfg.knockout_bracket ?? 'cross'}
         groupCount={groups.length}
         groupOrder={knockoutDialogGroupOrder}
+        groupLabels={knockoutDialogGroupLabels}
         standingsByGroup={knockoutDialogStandings}
         advanceCount={cfg.advance_count}
         entryMap={entryMap}

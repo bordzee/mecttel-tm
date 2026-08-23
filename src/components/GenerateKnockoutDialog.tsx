@@ -7,14 +7,39 @@ import { generateKnockoutPairings } from '../lib/knockoutSeeding'
 import { getTopAdvancers } from '../lib/standings'
 import type { KnockoutBracketType, StandingRow, TournamentEntry } from '../types'
 
+function buildEntryGroupRankLookup(
+  standingsByGroup: Map<string, StandingRow[]>,
+  groupLabels: Map<string, string>,
+): Map<string, { label: string; rank: number }> {
+  const lookup = new Map<string, { label: string; rank: number }>()
+  for (const [groupId, rows] of standingsByGroup) {
+    const label = groupLabels.get(groupId) ?? '?'
+    for (const row of rows) {
+      lookup.set(row.entryId, { label, rank: row.rank })
+    }
+  }
+  return lookup
+}
+
+function formatPlayerWithGroupRank(
+  entry: TournamentEntry,
+  groupRankByEntry: Map<string, { label: string; rank: number }>,
+): string {
+  const name = getEntryDisplayName(entry)
+  const tag = groupRankByEntry.get(entry.id)
+  return tag ? `${name} (${tag.label}#${tag.rank})` : name
+}
+
 function previewFirstRoundPairings(
   standingsByGroup: Map<string, StandingRow[]>,
   groupOrder: string[],
+  groupLabels: Map<string, string>,
   entryMap: Map<string, TournamentEntry>,
   advanceCount: number,
   bracketType: KnockoutBracketType,
-): string[] {
+): { key: string; label: string }[] {
   const advancers = getTopAdvancers(standingsByGroup, advanceCount)
+  const groupRankByEntry = buildEntryGroupRankLookup(standingsByGroup, groupLabels)
   const { tree } = generateKnockoutPairings(
     advancers,
     groupOrder,
@@ -27,9 +52,14 @@ function previewFirstRoundPairings(
     .filter((node) => node.slot.entryAId && node.slot.entryBId)
     .sort((a, b) => a.slot.slot - b.slot.slot || a.key.localeCompare(b.key))
     .map((node) => {
-      const a = entryMap.get(node.slot.entryAId!)!
-      const b = entryMap.get(node.slot.entryBId!)!
-      return `${getEntryDisplayName(a)} vs ${getEntryDisplayName(b)}`
+      const entryAId = node.slot.entryAId!
+      const entryBId = node.slot.entryBId!
+      const a = entryMap.get(entryAId)!
+      const b = entryMap.get(entryBId)!
+      return {
+        key: `${entryAId}:${entryBId}`,
+        label: `${formatPlayerWithGroupRank(a, groupRankByEntry)} vs ${formatPlayerWithGroupRank(b, groupRankByEntry)}`,
+      }
     })
 }
 
@@ -52,6 +82,7 @@ export function GenerateKnockoutDialog({
   knockoutBracket,
   groupCount,
   groupOrder,
+  groupLabels,
   standingsByGroup,
   advanceCount,
   entryMap,
@@ -64,6 +95,7 @@ export function GenerateKnockoutDialog({
   knockoutBracket: KnockoutBracketType
   groupCount: number
   groupOrder: string[]
+  groupLabels: Map<string, string>
   standingsByGroup: Map<string, StandingRow[]>
   advanceCount: number
   entryMap: Map<string, TournamentEntry>
@@ -83,11 +115,12 @@ export function GenerateKnockoutDialog({
       previewFirstRoundPairings(
         standingsByGroup,
         groupOrder,
+        groupLabels,
         entryMap,
         advanceCount,
         activeBracket,
       ),
-    [standingsByGroup, groupOrder, entryMap, advanceCount, activeBracket],
+    [standingsByGroup, groupOrder, groupLabels, entryMap, advanceCount, activeBracket],
   )
   const title = mode === 'generate' ? 'Generate knockout bracket' : 'Regenerate knockout bracket'
   const confirmLabel = mode === 'generate' ? 'Generate knockout' : 'Regenerate knockout'
@@ -130,7 +163,7 @@ export function GenerateKnockoutDialog({
             </p>
             <ul className="space-y-1.5 text-sm text-text-bluewhite">
               {firstRoundPreview.map((pairing) => (
-                <li key={pairing}>{pairing}</li>
+                <li key={pairing.key}>{pairing.label}</li>
               ))}
             </ul>
           </div>
