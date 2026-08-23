@@ -1,6 +1,9 @@
 import { formatTableLabel, normalizeTableCount } from './tableLabels'
 import type { EntryWaitView, QueueMatchView } from './matchQueue'
 
+/** Max matches shown in the Up next panel (full queue still drives table assignment). */
+export const UP_NEXT_DISPLAY_LIMIT = 10
+
 export type TableSlotStatus = 'idle' | 'now' | 'called'
 
 export interface TableSlotView {

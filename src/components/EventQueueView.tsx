@@ -28,6 +28,7 @@ import {
   buildEventQueueState,
   filterQueueByName,
   getTableAnnouncement,
+  UP_NEXT_DISPLAY_LIMIT,
   type TableAnnouncement,
 } from '../lib/tableAssignment'
 import { normalizeTableCount } from '../lib/tableLabels'
@@ -302,6 +303,9 @@ export function EventQueueView({
         ? 'Knockout stage'
         : ''
 
+  const upNextVisible = queueState.upNext.slice(0, UP_NEXT_DISPLAY_LIMIT)
+  const upNextHiddenCount = queueState.upNext.length - upNextVisible.length
+
   return (
     <div className="space-y-4">
       <StatusPopups error={error} onErrorDismiss={() => setError('')} />
@@ -374,11 +378,18 @@ export function EventQueueView({
         </div>
       </section>
 
-      {queueState.upNext.length > 0 && (
+      {upNextVisible.length > 0 && (
         <section className="rounded-2xl border border-border-strong bg-card p-4 space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-brand-300">Up next</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-brand-300">Up next</p>
+            {upNextHiddenCount > 0 && (
+              <span className="text-xs text-text-steel">
+                +{upNextHiddenCount} more in queue
+              </span>
+            )}
+          </div>
           <ul className="space-y-2">
-            {queueState.upNext.map((m) => (
+            {upNextVisible.map((m) => (
               <li key={m.matchId}>
                 <MatchRow match={m} />
               </li>

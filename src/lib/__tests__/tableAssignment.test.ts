@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildEventQueueState, getTableAnnouncement } from '../tableAssignment'
+import {
+  buildEventQueueState,
+  getTableAnnouncement,
+  UP_NEXT_DISPLAY_LIMIT,
+} from '../tableAssignment'
 import { formatTableLabel, normalizeTableCount } from '../tableLabels'
 import type { QueueMatchView } from '../matchQueue'
 
@@ -28,6 +32,16 @@ describe('tableAssignment', () => {
     expect(normalizeTableCount(undefined)).toBe(1)
     expect(normalizeTableCount(0)).toBe(1)
     expect(normalizeTableCount(4)).toBe(4)
+  })
+
+  it('keeps full up next queue for table logic while UI caps display at 10', () => {
+    expect(UP_NEXT_DISPLAY_LIMIT).toBe(10)
+    const ordered = Array.from({ length: 15 }, (_, i) =>
+      match(String(i + 1), `H${i}`, `A${i}`),
+    )
+    const state = buildEventQueueState(ordered, [], 1)
+    expect(state.upNext).toHaveLength(14)
+    expect(state.upNext.slice(0, UP_NEXT_DISPLAY_LIMIT)).toHaveLength(10)
   })
 
   it('assigns playable matches to table slots', () => {
