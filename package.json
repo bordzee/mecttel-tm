@@ -10,6 +10,7 @@
     "test": "vitest run",
     "seed:mecttel-open": "tsx scripts/seed-mecttel-singles-open.ts",
     "seed:mecttel-registration": "tsx scripts/seed-mecttel-singles-open-registration.ts",
+    "firebase:login": "firebase login",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "firebase-admin": "^14.3.0",
+    "firebase-tools": "^14.9.0",
     "oxlint": "^1.71.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.12",
