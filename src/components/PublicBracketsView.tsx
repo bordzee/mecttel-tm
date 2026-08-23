@@ -119,6 +119,17 @@ export function PublicBracketsView({
     ? filterKnockoutMatchesForStage(knockoutMatches, activeStage)
     : []
 
+  const activeGroupPendingCount = activeGroupStage
+    ? activeGroupStage.matches.filter((m) => m.status !== 'completed').length
+    : 0
+  const activeKnockoutPendingCount = activeKnockoutMatches.filter(
+    (m) =>
+      m.status !== 'completed' &&
+      !!m.entry_a_id &&
+      !!m.entry_b_id &&
+      m.outcome !== 'bye',
+  ).length
+
   const activeGroupQueue = useMemo(() => {
     if (!activeGroupStage) return null
     return buildGroupMatchQueue(activeGroupStage.matches, entryMap, activeGroupStage.group.label)
@@ -162,14 +173,14 @@ export function PublicBracketsView({
     <div className="space-y-4">
       <GroupStageNavigator tabs={stageTabs} activeId={activeStage} onChange={setActiveStage} />
 
-      {activeGroupStage && activeGroupQueue && activeGroupQueue.ordered.length > 0 && (
+      {activeGroupStage && activeGroupPendingCount > 0 && activeGroupQueue && (
         <MatchQueuePanel
           ordered={activeGroupQueue.ordered}
           entryWait={activeGroupQueue.entryWait}
         />
       )}
 
-      {activeKnockoutRound && activeKnockoutQueue && activeKnockoutQueue.ordered.length > 0 && (
+      {activeKnockoutRound && activeKnockoutPendingCount > 0 && activeKnockoutQueue && (
         <MatchQueuePanel
           title="Knockout queue"
           ordered={activeKnockoutQueue.ordered}

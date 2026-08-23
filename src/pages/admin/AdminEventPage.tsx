@@ -332,6 +332,17 @@ export function AdminEventPage() {
     ? filterKnockoutMatchesForStage(knockoutMatches, activeStage)
     : []
 
+  const activeGroupPendingCount = activeGroupStage
+    ? activeGroupStage.pending.length
+    : 0
+  const activeKnockoutPendingCount = activeKnockoutMatches.filter(
+    (m) =>
+      m.status !== 'completed' &&
+      !!m.entry_a_id &&
+      !!m.entry_b_id &&
+      m.outcome !== 'bye',
+  ).length
+
   const activeGroupQueue = useMemo(() => {
     if (!activeGroupStage) return null
     return buildGroupMatchQueue(
@@ -1562,6 +1573,21 @@ export function AdminEventPage() {
         <>
           <GroupStageNavigator tabs={stageTabs} activeId={activeStage} onChange={setActiveStage} />
 
+          {activeGroupStage && activeGroupPendingCount > 0 && activeGroupQueue && (
+            <MatchQueuePanel
+              ordered={activeGroupQueue.ordered}
+              entryWait={activeGroupQueue.entryWait}
+            />
+          )}
+
+          {activeKnockoutRound && activeKnockoutPendingCount > 0 && activeKnockoutQueue && (
+            <MatchQueuePanel
+              title="Knockout queue"
+              ordered={activeKnockoutQueue.ordered}
+              entryWait={activeKnockoutQueue.entryWait}
+            />
+          )}
+
           <div className="space-y-3">
             <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
               <PanelSectionTitle>Knockout stage</PanelSectionTitle>
@@ -1633,13 +1659,6 @@ export function AdminEventPage() {
           {activeGroupStage && (
             <section className="space-y-4">
               <PanelSectionTitle>Group {activeGroupStage.group.label} standings</PanelSectionTitle>
-
-              {activeGroupQueue && activeGroupQueue.ordered.length > 0 && (
-                <MatchQueuePanel
-                  ordered={activeGroupQueue.ordered}
-                  entryWait={activeGroupQueue.entryWait}
-                />
-              )}
 
               <GroupStandingsTable
                 label={activeGroupStage.group.label}
@@ -1742,13 +1761,6 @@ export function AdminEventPage() {
 
             return (
               <section className="space-y-4">
-                {activeKnockoutQueue && activeKnockoutQueue.ordered.length > 0 && (
-                  <MatchQueuePanel
-                    title="Knockout queue"
-                    ordered={activeKnockoutQueue.ordered}
-                    entryWait={activeKnockoutQueue.entryWait}
-                  />
-                )}
                 <KnockoutBracket
                   matches={activeKnockoutMatches}
                   round={activeKnockoutRound ?? undefined}

@@ -130,7 +130,7 @@ export function GroupStandingsTable({
       )}
 
       {canShowInfo && (
-        <p className="text-xs text-text-steel">Press and hold a name for player details.</p>
+        <p className="text-xs text-text-steel">Tap a name for player details.</p>
       )}
     </div>
   )

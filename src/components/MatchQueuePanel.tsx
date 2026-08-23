@@ -1,4 +1,4 @@
-import { PanelSectionTitle, TagPill } from './ui/primitives'
+import { CaptionText, PanelSectionTitle, TagPill } from './ui/primitives'
 import type { EntryWaitView, QueueMatchView } from '../lib/matchQueue'
 
 export function MatchQueuePanel({
@@ -12,14 +12,21 @@ export function MatchQueuePanel({
   entryWait: EntryWaitView[]
   showWaiting?: boolean
 }) {
-  if (ordered.length === 0) return null
-
   const upNext = ordered.filter((m) => m.playable).slice(0, 3)
   const onDeck = ordered.filter((m) => !m.playable)
   const waitingEntries = entryWait.filter((e) => e.matchesUntilTurn > 0 || e.reason.includes('rest'))
 
+  if (ordered.length === 0) {
+    return (
+      <section className="rounded-2xl border border-border-strong bg-card p-4 space-y-2">
+        <PanelSectionTitle>{title}</PanelSectionTitle>
+        <CaptionText>No pending matches in this stage.</CaptionText>
+      </section>
+    )
+  }
+
   return (
-    <section className="space-y-3">
+    <section className="rounded-2xl border border-border-strong bg-card p-4 space-y-3">
       <PanelSectionTitle>{title}</PanelSectionTitle>
 
       {upNext.length > 0 && (
@@ -70,6 +77,10 @@ export function MatchQueuePanel({
             ))}
           </ul>
         </div>
+      )}
+
+      {upNext.length === 0 && onDeck.length === 0 && waitingEntries.length === 0 && (
+        <CaptionText>Queue order is being calculated…</CaptionText>
       )}
     </section>
   )

@@ -87,7 +87,7 @@ export function ParticipantFilterToolbar({
           aria-haspopup="true"
           disabled={disabled}
           onClick={() => setFilterOpen((open) => !open)}
-          className={`w-10 h-10 shrink-0 rounded-[10px] border flex items-center justify-center transition-colors ${
+          className={`h-12 w-12 shrink-0 rounded-xl border flex items-center justify-center transition-colors ${
             filterActive
               ? 'border-brand-500 bg-brand-500/15 text-brand-300'
               : 'border-border bg-card-raised text-text-bluewhite hover:border-border-strong'

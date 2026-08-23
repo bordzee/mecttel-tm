@@ -36,6 +36,11 @@ type PlayedMatch = {
   id: string
 }
 
+function entryName(entryMap: Map<string, TournamentEntry>, entryId: string): string {
+  const entry = entryMap.get(entryId)
+  return entry ? getEntryDisplayName(entry) : 'Unknown player'
+}
+
 function sortCompleted<T extends PlayedMatch>(matches: T[]): T[] {
   return matches
     .filter((m) => m.status === 'completed')
@@ -70,10 +75,10 @@ function restReasonForMatch(
 ): string | undefined {
   const tired: string[] = []
   if (wouldPlayTooSoon(m.entry_a_id, completed)) {
-    tired.push(getEntryDisplayName(entryMap.get(m.entry_a_id)!))
+    tired.push(entryName(entryMap, m.entry_a_id))
   }
   if (wouldPlayTooSoon(m.entry_b_id, completed)) {
-    tired.push(getEntryDisplayName(entryMap.get(m.entry_b_id)!))
+    tired.push(entryName(entryMap, m.entry_b_id))
   }
   if (!tired.length) return undefined
   return `${tired.join(' & ')} need rest (played ${MAX_CONSECUTIVE_MATCHES} in a row)`
@@ -128,8 +133,8 @@ export function buildGroupMatchQueue(
       groupLabel,
       entryAId: m.entry_a_id,
       entryBId: m.entry_b_id,
-      homeName: getEntryDisplayName(entryMap.get(m.entry_a_id)!),
-      awayName: getEntryDisplayName(entryMap.get(m.entry_b_id)!),
+      homeName: entryName(entryMap, m.entry_a_id),
+      awayName: entryName(entryMap, m.entry_b_id),
       queuePosition: index + 1,
       playable,
       restReason: playable ? undefined : restReasonForMatch(m, completed, entryMap),
@@ -173,8 +178,8 @@ export function buildKnockoutMatchQueue(
       round: (m as KnockoutMatch).round,
       entryAId: m.entry_a_id,
       entryBId: m.entry_b_id,
-      homeName: getEntryDisplayName(entryMap.get(m.entry_a_id)!),
-      awayName: getEntryDisplayName(entryMap.get(m.entry_b_id)!),
+      homeName: entryName(entryMap, m.entry_a_id),
+      awayName: entryName(entryMap, m.entry_b_id),
       queuePosition: index + 1,
       playable,
       restReason: playable ? undefined : restReasonForMatch(m, completed, entryMap),
@@ -203,7 +208,7 @@ function buildEntryWaitList(
     }
     waitByEntry.set(entryId, {
       entryId,
-      name: getEntryDisplayName(entryMap.get(entryId)!),
+      name: entryName(entryMap, entryId),
       matchesUntilTurn,
       reason,
     })
