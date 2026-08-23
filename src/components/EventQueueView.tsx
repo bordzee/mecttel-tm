@@ -9,6 +9,7 @@ import {
 } from './ui/primitives'
 import { BracketsTabSkeleton } from './ui/Skeleton'
 import { StatusPopups } from './ui/StatusPopups'
+import { GroupStageNavigator } from './GroupStageNavigator'
 import { MatchScoreDialog } from './MatchScoreDialog'
 import { QueueAnnouncementDialog } from './QueueAnnouncementDialog'
 import { useMinLoading } from '../hooks/useMinLoading'
@@ -74,6 +75,14 @@ type ScoreTarget = {
   tableNumber: number
 }
 
+type QueuePanelTab = 'playing' | 'up-next' | 'waiting'
+
+const QUEUE_PANEL_TABS: { id: QueuePanelTab; label: string }[] = [
+  { id: 'playing', label: 'Playing' },
+  { id: 'up-next', label: 'Up next' },
+  { id: 'waiting', label: 'Waiting' },
+]
+
 function tableGridClass(tableCount: number): string {
   if (tableCount >= 3) return 'grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
   if (tableCount === 2) return 'grid gap-3 grid-cols-1 sm:grid-cols-2'
@@ -104,6 +113,7 @@ export function EventQueueView({
   const [announcement, setAnnouncement] = useState<TableAnnouncement | null>(null)
   const [announcementOpen, setAnnouncementOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [queuePanelTab, setQueuePanelTab] = useState<QueuePanelTab>('playing')
   const persistedTableAssignRef = useRef(new Set<string>())
 
   const loadQueueData = useCallback(async () => {
@@ -305,6 +315,21 @@ export function EventQueueView({
 
   const upNextVisible = queueState.upNext.slice(0, UP_NEXT_DISPLAY_LIMIT)
   const upNextHiddenCount = queueState.upNext.length - upNextVisible.length
+  const onDeckVisible = queueState.onDeck.slice(0, UP_NEXT_DISPLAY_LIMIT)
+  const onDeckHiddenCount = queueState.onDeck.length - onDeckVisible.length
+  const waitingVisible = queueState.waiting.slice(0, UP_NEXT_DISPLAY_LIMIT)
+  const waitingHiddenCount = queueState.waiting.length - waitingVisible.length
+  const playingCount = queueState.tables.filter((slot) => slot.match).length
+
+  const queuePanelTabs = QUEUE_PANEL_TABS.map((tab) => ({
+    ...tab,
+    pendingCount:
+      tab.id === 'playing'
+        ? playingCount
+        : tab.id === 'up-next'
+          ? queueState.upNext.length + queueState.onDeck.length
+          : queueState.waiting.length,
+  }))
 
   return (
     <div className="space-y-4">
@@ -329,100 +354,133 @@ export function EventQueueView({
         aria-label="Search queue by player name"
       />
 
-      <section className="space-y-3">
-        <p className="text-xs font-bold uppercase tracking-wide text-text-steel">Now on tables</p>
-        <div className={tableGridClass(tableCount)}>
-          {queueState.tables.map((slot) => (
-            <div
-              key={slot.tableNumber}
-              className={`rounded-xl border p-3.5 space-y-3 min-h-[120px] flex flex-col ${
-                slot.match
-                  ? 'border-brand-500/40 bg-brand-500/10'
-                  : 'border-border bg-card-raised'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-bold text-text-primary">{slot.label}</span>
+      <GroupStageNavigator
+        tabs={queuePanelTabs}
+        activeId={queuePanelTab}
+        onChange={(id) => setQueuePanelTab(id as QueuePanelTab)}
+      />
+
+      {queuePanelTab === 'playing' && (
+        <section className="space-y-3">
+          <div className={tableGridClass(tableCount)}>
+            {queueState.tables.map((slot) => (
+              <div
+                key={slot.tableNumber}
+                className={`rounded-xl border p-3.5 space-y-3 min-h-[120px] flex flex-col ${
+                  slot.match
+                    ? 'border-brand-500/40 bg-brand-500/10'
+                    : 'border-border bg-card-raised'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-bold text-text-primary">{slot.label}</span>
+                  {slot.match ? (
+                    <TagPill>Now</TagPill>
+                  ) : (
+                    <span className="text-xs text-text-steel">Idle</span>
+                  )}
+                </div>
+
                 {slot.match ? (
-                  <TagPill>Now</TagPill>
+                  <>
+                    <MatchRow match={slot.match} highlight hideTableBadge />
+                    {admin && (
+                      <Button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => openScoreDialog(slot.match!, slot.tableNumber)}
+                        fullWidth
+                        className="mt-auto"
+                      >
+                        Enter score
+                      </Button>
+                    )}
+                  </>
+                ) : slot.nextMatch ? (
+                  <div className="space-y-1 mt-auto">
+                    <p className="text-xs text-text-steel">Next up</p>
+                    <MatchRow match={slot.nextMatch} hideTableBadge />
+                  </div>
                 ) : (
-                  <span className="text-xs text-text-steel">Idle</span>
+                  <p className="text-sm text-text-steel mt-auto">No match queued for this table.</p>
                 )}
               </div>
-
-              {slot.match ? (
-                <>
-                  <MatchRow match={slot.match} highlight hideTableBadge />
-                  {admin && (
-                    <Button
-                      type="button"
-                      disabled={saving}
-                      onClick={() => openScoreDialog(slot.match!, slot.tableNumber)}
-                      fullWidth
-                      className="mt-auto"
-                    >
-                      Enter score
-                    </Button>
-                  )}
-                </>
-              ) : slot.nextMatch ? (
-                <div className="space-y-1 mt-auto">
-                  <p className="text-xs text-text-steel">Next up</p>
-                  <MatchRow match={slot.nextMatch} hideTableBadge />
-                </div>
-              ) : (
-                <p className="text-sm text-text-steel mt-auto">No match queued for this table.</p>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {upNextVisible.length > 0 && (
-        <section className="rounded-2xl border border-border-strong bg-card p-4 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-bold uppercase tracking-wide text-brand-300">Up next</p>
-            {upNextHiddenCount > 0 && (
-              <span className="text-xs text-text-steel">
-                +{upNextHiddenCount} more in queue
-              </span>
-            )}
+            ))}
           </div>
-          <ul className="space-y-2">
-            {upNextVisible.map((m) => (
-              <li key={m.matchId}>
-                <MatchRow match={m} />
-              </li>
-            ))}
-          </ul>
         </section>
       )}
 
-      {queueState.onDeck.length > 0 && (
-        <section className="rounded-2xl border border-border bg-card-raised p-4 space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-text-steel">On deck (rest)</p>
-          <ul className="space-y-2">
-            {queueState.onDeck.slice(0, 6).map((m) => (
-              <li key={m.matchId}>
-                <MatchRow match={m} />
-              </li>
-            ))}
-          </ul>
-        </section>
+      {queuePanelTab === 'up-next' && (
+        <div className="space-y-4">
+          {upNextVisible.length > 0 ? (
+            <section className="rounded-2xl border border-border-strong bg-card p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-brand-300">Up next</p>
+                {upNextHiddenCount > 0 && (
+                  <span className="text-xs text-text-steel">
+                    +{upNextHiddenCount} more in queue
+                  </span>
+                )}
+              </div>
+              <ul className="space-y-2">
+                {upNextVisible.map((m) => (
+                  <li key={m.matchId}>
+                    <MatchRow match={m} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : queueState.onDeck.length === 0 ? (
+            <EmptyMessage>No matches waiting for a table.</EmptyMessage>
+          ) : null}
+
+          {onDeckVisible.length > 0 && (
+            <section className="rounded-2xl border border-border bg-card-raised p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-text-steel">On deck (rest)</p>
+                {onDeckHiddenCount > 0 && (
+                  <span className="text-xs text-text-steel">
+                    +{onDeckHiddenCount} more on deck
+                  </span>
+                )}
+              </div>
+              <ul className="space-y-2">
+                {onDeckVisible.map((m) => (
+                  <li key={m.matchId}>
+                    <MatchRow match={m} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
       )}
 
-      {queueState.waiting.length > 0 && (
-        <section className="rounded-2xl border border-border bg-navy/40 p-4 space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-text-steel">Waiting</p>
-          <ul className="space-y-1.5">
-            {queueState.waiting.slice(0, 10).map((e) => (
-              <li key={e.entryId} className="flex items-start justify-between gap-2 text-sm">
-                <span className="font-semibold text-text-bluewhite truncate">{e.name}</span>
-                <TagPill>{e.reason}</TagPill>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {queuePanelTab === 'waiting' && (
+        <>
+          {waitingVisible.length > 0 ? (
+            <section className="rounded-2xl border border-border bg-navy/40 p-4 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-wide text-text-steel">Waiting</p>
+                {waitingHiddenCount > 0 && (
+                  <span className="text-xs text-text-steel">
+                    +{waitingHiddenCount} more waiting
+                  </span>
+                )}
+              </div>
+              <ul className="space-y-1.5">
+                {waitingVisible.map((e) => (
+                  <li key={e.entryId} className="flex items-start justify-between gap-2 text-sm">
+                    <span className="font-semibold text-text-bluewhite truncate">{e.name}</span>
+                    <TagPill>{e.reason}</TagPill>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : (
+            <EmptyMessage>No players waiting.</EmptyMessage>
+          )}
+        </>
       )}
 
       {admin && event && (
