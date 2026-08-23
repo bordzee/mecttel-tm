@@ -6,19 +6,17 @@ export function QueueAnnouncementDialog({
   open,
   announcement,
   onClose,
-  onEnterScore,
 }: {
   open: boolean
   announcement: TableAnnouncement | null
   onClose: () => void
-  onEnterScore?: () => void
 }) {
   if (!open || !announcement) return null
 
   const { label, nextMatch, waitingForRest, restReason, noMoreMatches } = announcement
 
   return createPortal(
-    <div className="fixed inset-0 z-[270] flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 z-[270] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" aria-hidden onClick={onClose} />
 
       <div
@@ -29,6 +27,9 @@ export function QueueAnnouncementDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <PanelSectionTitle>Score saved</PanelSectionTitle>
+        <p id="queue-announcement-title" className="sr-only">
+          Score saved — next match announcement
+        </p>
 
         {noMoreMatches ? (
           <CaptionText>
@@ -57,16 +58,9 @@ export function QueueAnnouncementDialog({
           </div>
         ) : null}
 
-        <div className="grid gap-2">
-          {nextMatch && onEnterScore && !waitingForRest && (
-            <Button type="button" onClick={onEnterScore} fullWidth>
-              Enter score
-            </Button>
-          )}
-          <Button type="button" variant="secondary" onClick={onClose} fullWidth>
-            OK
-          </Button>
-        </div>
+        <Button type="button" onClick={onClose} fullWidth>
+          OK
+        </Button>
       </div>
     </div>,
     document.body,

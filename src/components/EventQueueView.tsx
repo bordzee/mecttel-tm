@@ -242,17 +242,6 @@ export function EventQueueView({
     }
   }
 
-  const handleAnnouncementEnterScore = () => {
-    if (!announcement?.nextMatch || announcement.waitingForRest) {
-      setAnnouncementOpen(false)
-      return
-    }
-    const tableNumber = announcement.tableNumber
-    const nextMatch = announcement.nextMatch
-    setAnnouncementOpen(false)
-    void openScoreDialog(nextMatch, tableNumber)
-  }
-
   if (showSkeleton) {
     return <BracketsTabSkeleton />
   }
@@ -411,7 +400,6 @@ export function EventQueueView({
           open={announcementOpen}
           announcement={announcement}
           onClose={() => setAnnouncementOpen(false)}
-          onEnterScore={handleAnnouncementEnterScore}
         />
       )}
     </div>
