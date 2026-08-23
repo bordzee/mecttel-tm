@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildEventQueueState } from '../tableAssignment'
+import { buildEventQueueState, getTableAnnouncement } from '../tableAssignment'
 import { formatTableLabel, normalizeTableCount } from '../tableLabels'
 import type { QueueMatchView } from '../matchQueue'
 
@@ -60,5 +60,17 @@ describe('tableAssignment', () => {
     expect(state.tables[1]?.match?.matchId).toBe('1')
     expect(state.tables[1]?.status).toBe('called')
     expect(state.tables[0]?.match?.matchId).toBe('2')
+  })
+
+  it('builds announcement for next match on a table', () => {
+    const ordered = [
+      match('1', 'A', 'B'),
+      match('2', 'C', 'D'),
+    ]
+    const state = buildEventQueueState(ordered, [], 1)
+    const ann = getTableAnnouncement(1, state)
+    expect(ann.nextMatch?.matchId).toBe('1')
+    expect(ann.noMoreMatches).toBe(false)
+    expect(ann.waitingForRest).toBe(false)
   })
 })

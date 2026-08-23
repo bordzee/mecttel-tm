@@ -20,6 +20,50 @@ export interface EventQueueState {
   ordered: QueueMatchView[]
 }
 
+export interface TableAnnouncement {
+  tableNumber: number
+  label: string
+  nextMatch: QueueMatchView | null
+  waitingForRest: boolean
+  restReason?: string
+  noMoreMatches: boolean
+}
+
+export function getTableAnnouncement(
+  tableNumber: number,
+  state: EventQueueState,
+): TableAnnouncement {
+  const label = formatTableLabel(tableNumber)
+  const slot = state.tables.find((t) => t.tableNumber === tableNumber)
+  if (!slot) {
+    return { tableNumber, label, nextMatch: null, waitingForRest: false, noMoreMatches: true }
+  }
+
+  const next = slot.match ?? slot.nextMatch
+  if (!next) {
+    return { tableNumber, label, nextMatch: null, waitingForRest: false, noMoreMatches: true }
+  }
+
+  if (!next.playable && next.restReason) {
+    return {
+      tableNumber,
+      label,
+      nextMatch: next,
+      waitingForRest: true,
+      restReason: next.restReason,
+      noMoreMatches: false,
+    }
+  }
+
+  return {
+    tableNumber,
+    label,
+    nextMatch: next,
+    waitingForRest: false,
+    noMoreMatches: false,
+  }
+}
+
 function cloneWithTable(
   match: QueueMatchView,
   tableNumber: number,
