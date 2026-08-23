@@ -150,6 +150,10 @@ export interface GroupMatch {
   winner_entry_id: string | null
   status: 'scheduled' | 'completed'
   outcome: MatchOutcome
+  /** Suggested play order within the group (lower = sooner). */
+  queue_order?: number
+  /** ISO timestamp when the match was scored. */
+  completed_at?: string | null
   entry_a?: TournamentEntry
   entry_b?: TournamentEntry
 }
@@ -175,6 +179,8 @@ export interface KnockoutMatch {
   source_feeder?: 'winner' | 'loser'
   status: 'scheduled' | 'completed' | 'pending'
   outcome: MatchOutcome
+  /** ISO timestamp when the match was scored. */
+  completed_at?: string | null
   /** Play-in among non-bye winners when an odd feeder count is resolved. */
   is_odd_play_in?: boolean
   pending_odd_round?: boolean

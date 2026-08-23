@@ -30,6 +30,8 @@ import { LateEntryDialog } from '../../components/LateEntryDialog'
 import { MoveEntryDialog } from '../../components/MoveEntryDialog'
 import { GenerateGroupStageDialog } from '../../components/GenerateGroupStageDialog'
 import { GenerateKnockoutDialog } from '../../components/GenerateKnockoutDialog'
+import { EntryInfoDialog } from '../../components/EntryInfoDialog'
+import { MatchQueuePanel } from '../../components/MatchQueuePanel'
 import { ParticipantsListDialog } from '../../components/ParticipantsListDialog'
 import { SetRulesEditorDialog } from '../../components/SetRulesEditorDialog'
 import { formatSetRulesSummary, normalizeSetRules } from '../../lib/setRules'
@@ -65,6 +67,7 @@ import {
   fetchTeamRosters,
 } from '../../lib/tournamentService'
 import { assignEntriesToGroups, assignmentWarningsForMembers, canAddEntryToGroup } from '../../lib/groupAssignment'
+import { buildGroupMatchQueue, buildKnockoutMatchQueue, buildOrderedGroupQueue } from '../../lib/matchQueue'
 import {
   getStartLayoutOptions,
   isLayoutCompatibleWithBlock,
@@ -159,6 +162,8 @@ export function AdminEventPage() {
   const [readyDialogOpen, setReadyDialogOpen] = useState(false)
   const [knockoutDialogOpen, setKnockoutDialogOpen] = useState(false)
   const [knockoutDialogMode, setKnockoutDialogMode] = useState<'generate' | 'regenerate'>('generate')
+  const [infoEntry, setInfoEntry] = useState<TournamentEntry | null>(null)
+  const [infoEntryRoster, setInfoEntryRoster] = useState<string[] | undefined>()
   const loadSeq = useRef(0)
   const isInitialLoad = useRef(true)
 
@@ -259,8 +264,11 @@ export function AdminEventPage() {
     return groups.map((group) => {
       const entryIds = members.filter((m) => m.group_id === group.id).map((m) => m.entry_id)
       const matches = groupMatches.filter((m) => m.group_id === group.id)
-      const pending = matches.filter((m) => m.status !== 'completed')
       const completed = matches.filter((m) => m.status === 'completed')
+      const pending = buildOrderedGroupQueue(
+        matches.filter((m) => m.status !== 'completed'),
+        completed,
+      )
       const computedRows = computeStandings(entryIds, matches, entryMap)
       return {
         group,
@@ -323,6 +331,32 @@ export function AdminEventPage() {
   const activeKnockoutMatches = isKnockoutStage(activeStage)
     ? filterKnockoutMatchesForStage(knockoutMatches, activeStage)
     : []
+
+  const activeGroupQueue = useMemo(() => {
+    if (!activeGroupStage) return null
+    return buildGroupMatchQueue(
+      [...activeGroupStage.completed, ...activeGroupStage.pending],
+      entryMap,
+      activeGroupStage.group.label,
+    )
+  }, [activeGroupStage, entryMap])
+
+  const activeKnockoutQueue = useMemo(() => {
+    if (!activeKnockoutRound) return null
+    return buildKnockoutMatchQueue(knockoutMatches, entryMap, activeKnockoutRound)
+  }, [activeKnockoutRound, knockoutMatches, entryMap])
+
+  const handleShowEntryInfo = async (entry: TournamentEntry) => {
+    setInfoEntry(entry)
+    if (entry.entry_type === 'team' && entry.team_id) {
+      const rosters = await fetchTeamRosters([entry.team_id])
+      setInfoEntryRoster(
+        rosters.filter((r) => r.team_id === entry.team_id).map((r) => r.name),
+      )
+    } else {
+      setInfoEntryRoster(undefined)
+    }
+  }
 
   const needsEvenGroupsForKnockout =
     (event?.config.knockout_bracket ?? 'cross') === 'block' ||
@@ -1599,11 +1633,21 @@ export function AdminEventPage() {
           {activeGroupStage && (
             <section className="space-y-4">
               <PanelSectionTitle>Group {activeGroupStage.group.label} standings</PanelSectionTitle>
+
+              {activeGroupQueue && activeGroupQueue.ordered.length > 0 && (
+                <MatchQueuePanel
+                  ordered={activeGroupQueue.ordered}
+                  entryWait={activeGroupQueue.entryWait}
+                />
+              )}
+
               <GroupStandingsTable
                 label={activeGroupStage.group.label}
                 rows={activeGroupStage.rows}
                 manualRanks={activeGroupStage.hasManualRanks}
                 manualRankNote={activeGroupStage.group.manual_rank_note}
+                entryMap={entryMap}
+                onShowEntryInfo={handleShowEntryInfo}
               />
 
               {activeGroupStage.groupPlayComplete &&
@@ -1698,6 +1742,13 @@ export function AdminEventPage() {
 
             return (
               <section className="space-y-4">
+                {activeKnockoutQueue && activeKnockoutQueue.ordered.length > 0 && (
+                  <MatchQueuePanel
+                    title="Knockout queue"
+                    ordered={activeKnockoutQueue.ordered}
+                    entryWait={activeKnockoutQueue.entryWait}
+                  />
+                )}
                 <KnockoutBracket
                   matches={activeKnockoutMatches}
                   round={activeKnockoutRound ?? undefined}
@@ -1894,6 +1945,18 @@ export function AdminEventPage() {
         advanceCount={cfg.advance_count}
         entryMap={entryMap}
         onConfirm={handleConfirmGenerateKnockout}
+      />
+
+      <EntryInfoDialog
+        open={!!infoEntry}
+        entry={infoEntry}
+        eventType={event.event_type}
+        groupLabel={infoEntry ? entryGroupLabelMap.get(infoEntry.id) ?? null : null}
+        roster={infoEntryRoster}
+        onClose={() => {
+          setInfoEntry(null)
+          setInfoEntryRoster(undefined)
+        }}
       />
 
       <DeleteConfirmDialog

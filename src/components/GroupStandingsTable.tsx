@@ -1,5 +1,6 @@
-import type { StandingRow } from '../types'
+import type { StandingRow, TournamentEntry } from '../types'
 import { ManualRankBadge, ManualRankNote, SeededStarIcon } from './ui/primitives'
+import { PressHoldName } from './PressHoldName'
 
 const COL = {
   rank: 'w-[38px] shrink-0',
@@ -21,6 +22,8 @@ export function GroupStandingsTable({
   manualRanks,
   manualRankNote,
   externalHeader,
+  entryMap,
+  onShowEntryInfo,
 }: {
   rows: StandingRow[]
   label?: string
@@ -28,12 +31,15 @@ export function GroupStandingsTable({
   manualRankNote?: string | null
   /** When true, group title + manual badge render above the table (live page design). */
   externalHeader?: boolean
+  entryMap?: Map<string, TournamentEntry>
+  onShowEntryInfo?: (entry: TournamentEntry) => void
 }) {
   if (rows.length === 0) {
     return <p className="text-sm text-text-steel">No standings yet.</p>
   }
 
   const groupTitle = label ? `Group ${label} standings` : 'Standings'
+  const canShowInfo = !!entryMap && !!onShowEntryInfo
 
   return (
     <div className="space-y-3">
@@ -62,6 +68,8 @@ export function GroupStandingsTable({
         </div>
         {rows.map((row) => {
           const isLeader = row.rank === 1
+          const entry = entryMap?.get(row.entryId)
+          const nameClass = `truncate ${isLeader ? 'text-winner' : 'text-text-bluewhite'}`
           return (
             <div
               key={row.entryId}
@@ -78,7 +86,16 @@ export function GroupStandingsTable({
                 }`}
               >
                 <span className="truncate inline-flex items-center gap-1 min-w-0">
-                  <span className="truncate">{row.name}</span>
+                  {canShowInfo && entry ? (
+                    <PressHoldName
+                      className={nameClass}
+                      onHold={() => onShowEntryInfo(entry)}
+                    >
+                      {row.name}
+                    </PressHoldName>
+                  ) : (
+                    <span className={`truncate ${nameClass}`}>{row.name}</span>
+                  )}
                   {row.seeded && (
                     <span className="shrink-0 inline-flex" title="Seeded" aria-label="Seeded">
                       <SeededStarIcon size={14} />
@@ -110,6 +127,10 @@ export function GroupStandingsTable({
 
       {externalHeader && manualRanks && manualRankNote && (
         <ManualRankNote>{manualRankNote}</ManualRankNote>
+      )}
+
+      {canShowInfo && (
+        <p className="text-xs text-text-steel">Press and hold a name for player details.</p>
       )}
     </div>
   )

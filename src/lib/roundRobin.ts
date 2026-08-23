@@ -8,6 +8,51 @@ export function generateRoundRobinPairs<T>(items: T[]): [T, T][] {
   return pairs
 }
 
+/** Circle-method round-robin rounds (each player plays once per round). */
+export function generateRoundRobinRounds<T>(items: T[]): [T, T][][] {
+  if (items.length < 2) return []
+
+  const isOdd = items.length % 2 === 1
+  const slots: (T | null)[] = isOdd ? [...items, null] : [...items]
+  const rounds: [T, T][][] = []
+  const count = slots.length
+  const roundCount = count - 1
+
+  for (let round = 0; round < roundCount; round++) {
+    const pairs: [T, T][] = []
+    for (let i = 0; i < count / 2; i++) {
+      const home = slots[i]
+      const away = slots[count - 1 - i]
+      if (home != null && away != null) {
+        pairs.push([home, away])
+      }
+    }
+    rounds.push(pairs)
+
+    const fixed = slots[0]
+    const rotating = slots.slice(1)
+    const last = rotating.pop()
+    if (last !== undefined) rotating.unshift(last)
+    slots.splice(0, slots.length, fixed, ...rotating)
+  }
+
+  return rounds
+}
+
+export function generateRoundRobinPairsOrdered<T>(
+  items: T[],
+): { entryA: T; entryB: T; queueOrder: number }[] {
+  const rounds = generateRoundRobinRounds(items)
+  const result: { entryA: T; entryB: T; queueOrder: number }[] = []
+  let order = 0
+  for (const round of rounds) {
+    for (const [entryA, entryB] of round) {
+      result.push({ entryA, entryB, queueOrder: order++ })
+    }
+  }
+  return result
+}
+
 export function groupLabels(count: number): string[] {
   return Array.from({ length: count }, (_, i) => {
     if (i < 26) return String.fromCharCode(65 + i)

@@ -30,7 +30,7 @@ import type {
 } from '../types'
 import { assignEntriesToGroups } from './groupAssignment'
 import { sortKnockoutMatches } from './knockoutRounds'
-import { generateRoundRobinPairs } from './roundRobin'
+import { generateRoundRobinPairsOrdered } from './roundRobin'
 import { newRoundRobinPairsForEntry, nextGroupLabel, validateLateJoinTarget, type LateJoinMode } from './lateJoinAssignment'
 import {
   generateKnockoutPairings,
@@ -626,22 +626,23 @@ export async function setupGroupsAndMatches(
       })
     })
 
-    const pairs = generateRoundRobinPairs(assignment.entryIds)
-    pairs.forEach(([a, b]) => {
+    const pairs = generateRoundRobinPairsOrdered(assignment.entryIds)
+    pairs.forEach(({ entryA, entryB, queueOrder }) => {
       memberAndMatchWrites.push({
         ref: doc(collection(db, 'group_matches')),
         data: {
           tournament_id: tournamentId,
           event_id: event.id,
           group_id: groupRef.id,
-          entry_a_id: a,
-          entry_b_id: b,
+          entry_a_id: entryA,
+          entry_b_id: entryB,
           score_a: null,
           score_b: null,
           rubber_results: null,
           winner_entry_id: null,
           status: 'scheduled',
           outcome: 'normal',
+          queue_order: queueOrder,
         },
       })
     })
@@ -1086,7 +1087,11 @@ export async function saveGroupMatchResult(
     { eventType: event.event_type, config: event.config, stage: 'group' },
   )
 
-  await updateDoc(matchRef, { ...update, status: 'completed' })
+  await updateDoc(matchRef, {
+    ...update,
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+  })
 }
 
 export async function updateGroupMatchResult(
@@ -1288,7 +1293,11 @@ export async function saveKnockoutMatchResult(
     { eventType: event.event_type, config: event.config, stage },
   )
 
-  await updateDoc(matchRef, { ...update, status: 'completed' })
+  await updateDoc(matchRef, {
+    ...update,
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+  })
 
   const eventId = matchData.event_id as string
   const tournamentId = matchData.tournament_id as string

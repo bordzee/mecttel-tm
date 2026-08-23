@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  CaptionText,
   EmptyMessage,
-  FormLabel,
   ParticipantsTitle,
   SeededStarIcon,
-  SelectInput,
-  TextInput,
 } from './ui/primitives'
+import { ParticipantFilterToolbar } from './ParticipantFilterToolbar'
 import { getEntryDisplayName } from '../lib/displayNames'
-import { getComparableNames, normalizeEntryName } from '../lib/entryValidation'
+import {
+  buildParticipantOrgOptions,
+  filterParticipants,
+} from '../lib/participantFilters'
 import {
   getEntryOrganization,
-  getEntrySeededFilterStatus,
   isEntrySeeded,
 } from '../lib/groupLayout'
 import type { EventType, TournamentEntry } from '../types'
@@ -36,32 +35,12 @@ export function PublicParticipantsList({
   const countLabel =
     maxSlots != null ? `${entries.length} / ${maxSlots}` : String(entries.length)
 
-  const orgOptions = useMemo(() => {
-    const names = new Set<string>()
-    for (const entry of entries) {
-      const org = getEntryOrganization(entry)
-      if (org?.trim()) names.add(org.trim())
-    }
-    return [...names].sort((a, b) => a.localeCompare(b))
-  }, [entries])
+  const orgOptions = useMemo(() => buildParticipantOrgOptions(entries), [entries])
 
-  const filteredEntries = useMemo(() => {
-    const query = normalizeEntryName(search)
-    return entries.filter((entry) => {
-      if (query) {
-        const matchesSearch = getComparableNames(entry).some((name) => name.includes(query))
-        if (!matchesSearch) return false
-      }
-      if (filter === 'all') return true
-      if (filter === 'seeded') return getEntrySeededFilterStatus(entry) === 'seeded'
-      if (filter === 'non-seeded') return getEntrySeededFilterStatus(entry) === 'non-seeded'
-      if (filter === 'not-set') return getEntrySeededFilterStatus(entry) === 'not-set'
-      if (filter.startsWith('org:')) {
-        return getEntryOrganization(entry) === filter.slice(4)
-      }
-      return true
-    })
-  }, [entries, search, filter])
+  const filteredEntries = useMemo(
+    () => filterParticipants(entries, search, filter),
+    [entries, search, filter],
+  )
 
   useEffect(() => {
     if (!filter.startsWith('org:')) return
@@ -77,45 +56,16 @@ export function PublicParticipantsList({
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
-        <TextInput
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name…"
-          aria-label="Search participants"
+        <ParticipantFilterToolbar
+          search={search}
+          onSearchChange={setSearch}
+          filter={filter}
+          onFilterChange={setFilter}
+          orgOptions={orgOptions}
           disabled={entries.length === 0}
+          totalCount={entries.length}
+          filteredCount={filteredEntries.length}
         />
-
-        <div>
-          <FormLabel>Filter</FormLabel>
-          <SelectInput
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            aria-label="Filter participants"
-            disabled={entries.length === 0}
-          >
-            <option value="all">All participants</option>
-            {orgOptions.length > 0 && (
-              <optgroup label="Organization">
-                {orgOptions.map((org) => (
-                  <option key={org} value={`org:${org}`}>
-                    {org}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            <optgroup label="Seeded status">
-              <option value="seeded">Seeded</option>
-              <option value="non-seeded">Non-seeded</option>
-              <option value="not-set">Seeded not set</option>
-            </optgroup>
-          </SelectInput>
-        </div>
-
-        {(search.trim() || filter !== 'all') && entries.length > 0 && (
-          <CaptionText>
-            Showing {filteredEntries.length} of {entries.length}
-          </CaptionText>
-        )}
 
         <div className="h-[min(420px,50vh)] overflow-y-auto space-y-2 pr-0.5">
           {entries.length === 0 ? (
