@@ -1,5 +1,4 @@
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { isStorageConfigured, storage } from './firebase'
+import { getStorageService, isStorageConfigured } from './firebase'
 
 const MAX_BYTES = 2 * 1024 * 1024
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -12,7 +11,8 @@ const EXT_BY_TYPE: Record<string, string> = {
 
 const COVER_EXTENSIONS = ['jpg', 'png', 'webp'] as const
 
-function coverRef(tournamentId: string, ext: string) {
+async function coverRef(tournamentId: string, ext: string) {
+  const [{ ref }, storage] = await Promise.all([import('firebase/storage'), getStorageService()])
   return ref(storage, `tournaments/${tournamentId}/cover.${ext}`)
 }
 
@@ -77,16 +77,19 @@ export async function uploadTournamentImage(tournamentId: string, file: File): P
   await deleteTournamentImageFiles(tournamentId)
 
   const ext = EXT_BY_TYPE[file.type]!
-  await uploadBytes(coverRef(tournamentId, ext), file, { contentType: file.type })
-  return getDownloadURL(coverRef(tournamentId, ext))
+  const { getDownloadURL, uploadBytes } = await import('firebase/storage')
+  const target = await coverRef(tournamentId, ext)
+  await uploadBytes(target, file, { contentType: file.type })
+  return getDownloadURL(target)
 }
 
 export async function deleteTournamentImageFiles(tournamentId: string) {
   if (!isStorageConfigured) return
+  const { deleteObject } = await import('firebase/storage')
   await Promise.all(
     COVER_EXTENSIONS.map(async (ext) => {
       try {
-        await deleteObject(coverRef(tournamentId, ext))
+        await deleteObject(await coverRef(tournamentId, ext))
       } catch {
         // ignore missing files
       }

@@ -31,16 +31,16 @@ export function TournamentCard({
   return (
     <Link
       to={`/tournaments/${tournament.id}`}
-      className="block bg-card rounded-2xl border border-border overflow-hidden hover:border-brand-500/50 transition-colors"
+      className="block bg-card rounded-[14px] border border-border overflow-hidden transition-colors hover:bg-card-raised/60"
     >
       <TournamentCoverImage
         imageUrl={tournament.image_url}
         alt={tournament.name}
         className="rounded-none border-x-0 border-t-0 border-b border-border"
       />
-      <div className="p-4 space-y-3">
+      <div className="p-5 space-y-3">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-heading font-extrabold text-[17px] text-text-primary leading-snug">
+          <h3 className="font-heading font-semibold text-[17px] tracking-tight text-text-primary leading-snug">
             {tournament.name}
           </h3>
           <Pill variant={status}>{statusLabel(status)}</Pill>

@@ -24,3 +24,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local tooling
+.claude/
+integration/report*.json
+integration/playground.json

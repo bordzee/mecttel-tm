@@ -17,29 +17,33 @@ export function GroupStageNavigator({
 
   return (
     <nav
-      className="sticky top-[52px] z-[5] -mx-4 px-4 py-2 bg-navy/95 backdrop-blur border-y border-border"
+      className="sticky top-14 z-[5] -mx-4 px-4 bg-navy border-b border-border"
       aria-label="Stage navigator"
     >
-      <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-none">
+      <div className="flex gap-1 overflow-x-auto scrollbar-none" role="tablist">
         {tabs.map((tab) => {
           const active = tab.id === activeId
           return (
             <button
               key={tab.id}
               type="button"
+              role="tab"
+              aria-selected={active}
               onClick={() => onChange(tab.id)}
-              className={`shrink-0 snap-start inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-[13px] transition-colors ${
-                active
-                  ? 'border-brand-500 bg-brand-100 text-brand-500 font-bold'
-                  : 'border-border bg-card text-text-steel font-normal hover:border-border-strong hover:text-text-bluewhite'
+              className={`press relative shrink-0 h-11 px-3 inline-flex items-center gap-2 text-sm font-medium transition-colors ${
+                active ? 'text-text-primary' : 'text-text-steel hover:text-text-primary'
               }`}
             >
               {tab.label}
               {tab.pendingCount != null && tab.pendingCount > 0 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-soft text-amber">
-                  {tab.pendingCount}
-                </span>
+                <span className="font-mono text-xs text-text-faint">{tab.pendingCount}</span>
               )}
+              <span
+                aria-hidden
+                className={`absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-text-primary origin-left transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+                  active ? 'scale-x-100' : 'scale-x-0'
+                }`}
+              />
             </button>
           )
         })}

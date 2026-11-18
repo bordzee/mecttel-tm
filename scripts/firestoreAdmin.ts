@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { Firestore } from '@google-cloud/firestore'
 import { OAuth2Client } from 'google-auth-library'
@@ -40,6 +40,11 @@ async function accessTokenFromFirebaseCli(): Promise<string> {
 
 /** Admin Firestore client for local seed scripts. */
 export async function getAdminFirestore(projectId: string): Promise<Firestore> {
+  // Emulator: no credentials needed (set FIRESTORE_EMULATOR_HOST=127.0.0.1:8381).
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    return new Firestore({ projectId })
+  }
+
   const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
   if (credPath && existsSync(credPath)) {
     return new Firestore({ projectId, keyFilename: credPath })

@@ -76,31 +76,33 @@ function MatchRow({
 
   return (
     <div
-      className={`bg-card rounded-xl border p-3.5 space-y-2.5 ${
-        awaiting ? 'border-border' : 'border-border'
-      }`}
+      className="bg-card rounded-xl border border-border p-3.5 space-y-2.5"
     >
-      <p className={`text-[11px] font-bold uppercase tracking-wide ${labelClass}`}>{label}</p>
+      <p className={`text-xs font-semibold uppercase tracking-wide ${labelClass}`}>{label}</p>
       <div className="flex items-center justify-between gap-2">
         <span
-          className={`text-sm font-semibold truncate ${
-            awaiting ? 'text-text-steel' : 'text-text-bluewhite'
+          className={`text-sm font-medium truncate ${
+            awaiting ? 'text-text-steel' : 'text-text-primary'
           }`}
         >
           {entryName(match, 'a')}
         </span>
         {!isBye && !awaiting && match.score_a != null && (
-          <span className="text-lg font-extrabold text-text-primary tabular-nums">{match.score_a}</span>
+          <span className="text-lg font-medium text-text-primary tabular-nums">{match.score_a}</span>
         )}
-        {awaiting && <span className="text-lg font-extrabold text-text-steel tabular-nums">–</span>}
+        {awaiting && <span className="text-lg font-semibold text-text-steel tabular-nums">–</span>}
       </div>
       <div className="h-px bg-border" />
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold truncate text-text-steel">{entryName(match, 'b')}</span>
+        <span
+          className={`text-sm font-medium truncate ${awaiting ? 'text-text-steel' : 'text-text-primary'}`}
+        >
+          {entryName(match, 'b')}
+        </span>
         {!isBye && !awaiting && match.score_b != null && (
-          <span className="text-lg font-extrabold text-text-steel tabular-nums">{match.score_b}</span>
+          <span className="text-lg font-medium text-text-primary tabular-nums">{match.score_b}</span>
         )}
-        {awaiting && <span className="text-lg font-extrabold text-text-steel tabular-nums">–</span>}
+        {awaiting && <span className="text-lg font-semibold text-text-steel tabular-nums">–</span>}
       </div>
     </div>
   )
@@ -125,7 +127,7 @@ export function KnockoutBracket({
   const context = allMatches ?? matches
 
   const list = (
-    <div className="space-y-2.5">
+    <div className="grid gap-3 sm:grid-cols-2">
       {matches.map((match, index) => (
         <MatchRow key={match.id} match={match} index={index} allMatches={context} />
       ))}
@@ -153,7 +155,7 @@ export function KnockoutBracket({
         return (
           <section key={r} className="space-y-3">
             {!hideRoundTitle && <PanelSectionTitle>{roundLabel(r)}</PanelSectionTitle>}
-            <div className="space-y-2.5">
+            <div className="grid gap-3 sm:grid-cols-2">
               {items.map((match, index) => (
                 <MatchRow key={match.id} match={match} index={index} allMatches={context} />
               ))}

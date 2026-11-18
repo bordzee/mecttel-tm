@@ -222,5 +222,9 @@ export interface GroupLayoutOption {
 
 export interface Profile {
   id: string
-  role: 'admin'
+  /** "superadmin" manages admins and the master password; "admin" runs tournaments. */
+  role: 'admin' | 'superadmin'
+  email?: string
+  created_at?: string
+  created_by?: string
 }

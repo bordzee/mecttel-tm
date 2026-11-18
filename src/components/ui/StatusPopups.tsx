@@ -75,11 +75,7 @@ function PopupCard({
       role={isSuccess ? 'status' : 'alert'}
       aria-live={isSuccess ? 'polite' : 'assertive'}
       onAnimationEnd={handleAnimationEnd}
-      className={`status-popup status-popup--${phase} pointer-events-auto flex items-start gap-2.5 max-w-sm w-full rounded-2xl border px-4 py-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.45)] ${
-        isSuccess
-          ? 'bg-green-soft border-winner text-text-bluewhite'
-          : 'bg-red-soft border-live text-text-bluewhite'
-      }`}
+      className={`status-popup status-popup--${phase} pointer-events-auto flex items-start gap-2.5 max-w-sm w-full rounded-[14px] border border-border-strong bg-card px-4 py-3.5 text-text-primary shadow-[var(--shadow-pop)]`}
     >
       {isSuccess ? (
         <svg
@@ -108,7 +104,7 @@ function PopupCard({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="text-live shrink-0 mt-0.5"
+          className="text-danger shrink-0 mt-0.5"
           aria-hidden
         >
           <circle cx="12" cy="12" r="10" />
@@ -122,7 +118,7 @@ function PopupCard({
       <button
         type="button"
         onClick={dismissNow}
-        className="shrink-0 rounded-lg p-1 text-text-steel transition-colors hover:text-text-bluewhite"
+        className="-my-1.5 -mr-2 grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-text-steel transition-colors hover:bg-card-raised hover:text-text-primary"
         aria-label="Dismiss"
       >
         <svg
@@ -170,7 +166,7 @@ export function StatusPopups({
   if (!activeSuccess && !activeError) return null
 
   return createPortal(
-    <div className="fixed inset-x-0 bottom-6 z-[200] flex flex-col items-center gap-2.5 pointer-events-none px-4">
+    <div className="fixed inset-x-0 bottom-28 md:bottom-6 z-[200] flex flex-col items-center gap-2.5 pointer-events-none px-4">
       {activeSuccess ? (
         <PopupCard
           key={`success:${activeSuccess}`}

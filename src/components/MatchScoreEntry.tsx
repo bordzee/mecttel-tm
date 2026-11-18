@@ -23,6 +23,8 @@ interface Props {
   stage?: 'group' | 'quarters' | 'semis' | 'finals' | 'knockout_early'
   /** When true, completed group matches can be corrected. */
   allowEdit?: boolean
+  /** Render without its own card (inside a dialog that already provides one). */
+  bare?: boolean
   onSave: (data: {
     score_a: number
     score_b: number
@@ -42,12 +44,23 @@ function formStateFromMatch(match: GroupMatch | KnockoutMatch) {
   }
 }
 
+function Wrapper({
+  bare,
+  children,
+}: {
+  bare: boolean
+  children: React.ReactNode
+}) {
+  return bare ? <div className="space-y-4 pt-3">{children}</div> : <Card className="p-4 space-y-3">{children}</Card>
+}
+
 export function MatchScoreEntry({
   eventType,
   config,
   match,
   stage = 'group',
   allowEdit = false,
+  bare = false,
   onSave,
 }: Props) {
   const isTeam = eventType === 'team'
@@ -162,13 +175,16 @@ export function MatchScoreEntry({
             Edit score
           </Button>
         )}
+        {bare && !allowEdit && (
+          <CaptionText>This match has already been scored, possibly by another admin.</CaptionText>
+        )}
       </div>
     )
   }
 
   return (
-    <Card className="p-4 space-y-3">
-      <p className="text-sm font-semibold text-text-bluewhite">
+    <Wrapper bare={bare}>
+      <p className="text-sm font-medium text-text-primary">
         {homeName} vs {awayName}
         {isCompleted && editing ? (
           <span className="text-text-steel font-normal"> · editing</span>
@@ -211,6 +227,54 @@ export function MatchScoreEntry({
 
       {outcome === 'normal' && !isTeam && (
         <>
+          <div className="space-y-4">
+            {(
+              [
+                { side: 'a', name: homeName },
+                { side: 'b', name: awayName },
+              ] as const
+            ).map(({ side, name }) => {
+              const winsNeeded = (bestOf + 1) / 2
+              return (
+                <div key={side} className="space-y-2">
+                  <p className="text-sm font-medium text-text-primary">{name} wins</p>
+                  <div
+                    role="radiogroup"
+                    aria-label={`Result if ${name} wins`}
+                    className="grid gap-2"
+                    style={{ gridTemplateColumns: `repeat(${winsNeeded}, minmax(0, 1fr))` }}
+                  >
+                    {Array.from({ length: winsNeeded }, (_, loserSets) => {
+                      const a = side === 'a' ? winsNeeded : loserSets
+                      const b = side === 'a' ? loserSets : winsNeeded
+                      const selected = scoreA === String(a) && scoreB === String(b)
+                      return (
+                        <button
+                          key={loserSets}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => {
+                            setScoreA(String(a))
+                            setScoreB(String(b))
+                            setError('')
+                          }}
+                          className={`press ${bare ? 'h-14 text-xl' : 'h-11 text-base'} rounded-xl font-mono transition-colors ${
+                            selected
+                              ? 'bg-text-primary text-navy'
+                              : 'bg-card-raised text-text-primary hover:shadow-[inset_0_0_0_1px_var(--line-strong)]'
+                          }`}
+                        >
+                          {winsNeeded}–{loserSets}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-xs text-text-faint">Or enter another score</p>
           <div className="flex items-center justify-center gap-2">
             <input
               type="number"
@@ -218,7 +282,7 @@ export function MatchScoreEntry({
               min={0}
               value={scoreA}
               onChange={(e) => setScoreA(e.target.value)}
-              className="w-16 h-10 bg-navy border border-border rounded-xl text-center text-base font-extrabold text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500"
+              className="w-16 h-11 bg-card border border-border-strong rounded-[10px] text-center text-base font-mono text-text-primary focus:outline-none focus:border-text-primary focus:ring-1 focus:ring-text-primary"
               aria-label={`Sets won by ${homeName}`}
             />
             <span className="text-text-steel">–</span>
@@ -228,7 +292,7 @@ export function MatchScoreEntry({
               min={0}
               value={scoreB}
               onChange={(e) => setScoreB(e.target.value)}
-              className="w-16 h-10 bg-navy border border-border rounded-xl text-center text-base font-extrabold text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500"
+              className="w-16 h-11 bg-card border border-border-strong rounded-[10px] text-center text-base font-mono text-text-primary focus:outline-none focus:border-text-primary focus:ring-1 focus:ring-text-primary"
               aria-label={`Sets won by ${awayName}`}
             />
           </div>
@@ -259,6 +323,6 @@ export function MatchScoreEntry({
           {saving ? 'Saving…' : isCompleted ? 'Update score' : 'Save result'}
         </Button>
       </div>
-    </Card>
+    </Wrapper>
   )
 }

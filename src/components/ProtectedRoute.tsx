@@ -6,8 +6,15 @@ import { AdminLayout } from './AdminLayout'
 import { AuthCheckingSkeleton } from './ui/Skeleton'
 import { Button, WarningBanner } from './ui/primitives'
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isAdmin, loading, signOut } = useAuth()
+export function ProtectedRoute({
+  children,
+  requireSuperAdmin = false,
+}: {
+  children: React.ReactNode
+  /** Only the superadmin may open this page (managing admins, master password). */
+  requireSuperAdmin?: boolean
+}) {
+  const { user, isAdmin, isSuperAdmin, loading, signOut } = useAuth()
   const showAuthSkeleton = useMinLoading(loading)
   const location = useLocation()
 
@@ -22,7 +29,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
           </WarningBanner>
           <Link
             to="/"
-            className="text-sm font-semibold text-brand-500 hover:underline inline-block"
+            className="text-sm font-semibold text-accent-text hover:underline inline-block"
           >
             Back to home
           </Link>
@@ -47,11 +54,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return (
       <AdminLayout>
         <div className="flex flex-col items-center justify-center min-h-[40vh] px-4 text-center gap-4">
-          <p className="text-live font-semibold">Access denied</p>
+          <p className="text-danger font-semibold">Access denied</p>
           <p className="text-sm text-text-steel max-w-md">
-            Signed in as {user.email}, but no admin profile was found. Ensure{' '}
-            <code className="bg-card-raised px-1 rounded">profiles/{user.uid}</code> exists with{' '}
-            <code className="bg-card-raised px-1 rounded">role: admin</code>.
+            Signed in as {user.email}, but this account is not an admin (or was removed). Ask the superadmin for access.
           </p>
           <div className="flex flex-col sm:flex-row gap-2 w-full max-w-xs">
             <Button type="button" variant="secondary" onClick={() => signOut()} fullWidth>
@@ -59,11 +64,25 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
             </Button>
             <Link
               to="/admin/login"
-              className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-bold text-text-bluewhite hover:border-brand-500/50 transition-colors w-full"
+              className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-text-bluewhite hover:border-brand-500/50 transition-colors w-full"
             >
               Back to login
             </Link>
           </div>
+        </div>
+      </AdminLayout>
+    )
+  }
+
+  if (requireSuperAdmin && !isSuperAdmin) {
+    return (
+      <AdminLayout>
+        <div className="flex flex-col items-center justify-center min-h-[40vh] px-4 text-center gap-3">
+          <p className="text-danger font-semibold">Superadmin only</p>
+          <p className="text-sm text-text-steel max-w-md">Only the superadmin can manage admins and the master password.</p>
+          <Link to="/admin" className="text-sm font-medium text-accent-text hover:underline">
+            Back to the dashboard
+          </Link>
         </div>
       </AdminLayout>
     )

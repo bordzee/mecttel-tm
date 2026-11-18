@@ -26,7 +26,7 @@ export function RubberScoreEntry({ format, homeName, awayName, rubbers, onChange
     <div className="space-y-3">
       <div className="flex justify-between text-sm font-semibold text-text-bluewhite">
         <span className="truncate">{homeName}</span>
-        <span className="text-lg tabular-nums font-extrabold px-2 text-text-primary">
+        <span className="text-lg tabular-nums font-semibold px-2 text-text-primary">
           {calc.scoreA} – {calc.scoreB}
         </span>
         <span className="truncate text-right">{awayName}</span>
@@ -47,9 +47,9 @@ export function RubberScoreEntry({ format, homeName, awayName, rubbers, onChange
                 className={`px-3 py-1.5 rounded-lg text-sm font-semibold min-w-[44px] transition-colors ${
                   rubbers[i] === val
                     ? val === 'W'
-                      ? 'bg-brand-500 text-white'
+                      ? 'bg-brand-500 text-on-accent'
                       : val === 'L'
-                        ? 'bg-live text-white'
+                        ? 'bg-danger text-on-danger'
                         : 'bg-border text-text-bluewhite'
                     : 'bg-navy border border-border text-text-steel hover:border-border-strong'
                 }`}

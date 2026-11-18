@@ -17,12 +17,12 @@ import {
   TextInput,
 } from '../../components/ui/primitives'
 import { StatusPopups } from '../../components/ui/StatusPopups'
-import { DeleteConfirmDialog } from '../../components/ui/DeleteConfirmDialog'
+import { MasterPasswordDialog } from '../../components/ui/MasterPasswordDialog'
+import { deleteTournament } from '../../lib/guardedDelete'
 import {
   fetchTournament,
   fetchEvents,
   updateTournament,
-  deleteTournament,
 } from '../../lib/tournamentService'
 import { resolveTournamentImageForSave } from '../../lib/tournamentImageService'
 import { TournamentImageUpload } from '../../components/TournamentImageUpload'
@@ -44,7 +44,6 @@ export function AdminTournamentHubPage() {
   const [editImageUrlInput, setEditImageUrlInput] = useState('')
   const [clearImage, setClearImage] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [deleting, setDeleting] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
   const showPageSkeleton = useMinLoading(pageLoading)
   const [loadError, setLoadError] = useState('')
@@ -118,20 +117,10 @@ export function AdminTournamentHubPage() {
     }
   }
 
-  const handleDeleteTournament = async () => {
-    if (!tournament || deleting) return
-    setDeleting(true)
-    setError('')
-    try {
-      await deleteTournament(tournament.id)
-      setShowDeleteConfirm(false)
-      navigate('/admin', { replace: true, state: { message: 'Tournament deleted.' } })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete')
-      setShowDeleteConfirm(false)
-    } finally {
-      setDeleting(false)
-    }
+  const handleDeleteTournament = async (password: string) => {
+    if (!tournament) return
+    await deleteTournament(tournament.id, password)
+    navigate('/admin', { replace: true, state: { message: 'Tournament deleted.' } })
   }
 
   if (showPageSkeleton) {
@@ -171,12 +160,12 @@ export function AdminTournamentHubPage() {
             <MetaIconsRow date={tournament.start_date} venue={tournament.venue} />
           </div>
           <div className="flex gap-2 shrink-0">
-            <IconActionButton onClick={() => setEditing((v) => !v)}>
+            <IconActionButton label="Edit tournament" onClick={() => setEditing((v) => !v)}>
               <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M12 20h9" /><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z" />
               </svg>
             </IconActionButton>
-            <IconActionButton variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+            <IconActionButton label="Delete tournament" variant="danger" onClick={() => setShowDeleteConfirm(true)}>
               <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
               </svg>
@@ -218,14 +207,15 @@ export function AdminTournamentHubPage() {
           </div>
         )}
 
-        <DeleteConfirmDialog
-          open={showDeleteConfirm}
-          title="Delete this tournament?"
-          description="This permanently removes the tournament and all its divisions."
-          onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={handleDeleteTournament}
-          confirming={deleting}
-        />
+        {showDeleteConfirm && (
+          <MasterPasswordDialog
+            title="Delete this tournament?"
+            description="This permanently deletes the tournament and every division in it: entries, groups and results. It cannot be undone."
+            confirmLabel="Delete tournament"
+            onCancel={() => setShowDeleteConfirm(false)}
+            onConfirm={handleDeleteTournament}
+          />
+        )}
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">

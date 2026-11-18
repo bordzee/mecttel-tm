@@ -2,38 +2,35 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Roles live in profiles/{uid}. "superadmin" is set by hand (console or the admin
+    // tool) and can manage admins; "admin" runs tournaments.
     function isAdmin() {
       return request.auth != null
         && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
-        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'admin';
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ['admin', 'superadmin'];
+    }
+
+    function isSuperAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'superadmin';
+    }
+
+    // Deleting a division or tournament needs a delete grant: a short-lived document the
+    // admin can only create by presenting the master password's proof. The grant is
+    // written first, so a wrong password stops everything before any data is touched.
+    function hasDeleteGrant(grantId) {
+      return exists(/databases/$(database)/documents/delete_grants/$(grantId))
+        && get(/databases/$(database)/documents/delete_grants/$(grantId)).data.uid == request.auth.uid
+        && get(/databases/$(database)/documents/delete_grants/$(grantId)).data.created_at > request.time - duration.value(3, 'm');
     }
 
     function isString(v) {
       return v is string;
     }
 
-    function isOptionalString(v) {
-      return v == null || v is string;
-    }
-
-    function isBool(v) {
-      return v is bool;
-    }
-
     function isInt(v) {
       return v is int;
-    }
-
-    function eventStatus(v) {
-      return v in ['draft', 'upcoming', 'ongoing', 'ended'];
-    }
-
-    function eventType(v) {
-      return v in ['team', 'single', 'doubles', 'executive'];
-    }
-
-    function entryType(v) {
-      return v in ['team', 'player', 'pair'];
     }
 
     function matchStatus(v) {
@@ -85,36 +82,82 @@ service cloud.firestore {
         && isString(request.resource.data.event_id);
     }
 
+    // Scores are non-negative integers; a winner, when set, is one of the two entries;
+    // a completed match has both scores, a winner, and no tie.
+    function validResult() {
+      let d = request.resource.data;
+      return (d.score_a == null || (isInt(d.score_a) && d.score_a >= 0))
+        && (d.score_b == null || (isInt(d.score_b) && d.score_b >= 0))
+        && (d.winner_entry_id == null || d.winner_entry_id == d.entry_a_id || d.winner_entry_id == d.entry_b_id)
+        && (d.status != 'completed'
+          || (d.winner_entry_id != null && d.score_a != null && d.score_b != null && d.score_a != d.score_b));
+    }
+
     function validMatchWrite() {
       return scopedEventFields()
         && isString(request.resource.data.entry_a_id)
         && isString(request.resource.data.entry_b_id)
         && matchStatus(request.resource.data.status)
         && matchOutcome(request.resource.data.outcome)
-        && (request.resource.data.score_a == null || isInt(request.resource.data.score_a))
-        && (request.resource.data.score_b == null || isInt(request.resource.data.score_b))
-        && (request.resource.data.winner_entry_id == null || isString(request.resource.data.winner_entry_id));
+        && validResult();
     }
 
     match /profiles/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow create, update: if isAdmin()
-        && request.resource.data.keys().hasOnly(['role'])
+      // Everyone reads their own profile; only the superadmin lists or reads others.
+      allow get: if request.auth != null && (request.auth.uid == userId || isSuperAdmin());
+      allow list: if isSuperAdmin();
+      // Only the superadmin creates admins, and never another superadmin.
+      allow create: if isSuperAdmin()
+        && request.resource.data.keys().hasOnly(['role', 'email', 'created_at', 'created_by'])
         && request.resource.data.role == 'admin';
-      allow delete: if isAdmin();
+      allow update: if isSuperAdmin()
+        && resource.data.role == 'admin'
+        && request.resource.data.role == 'admin'
+        && request.resource.data.keys().hasOnly(['role', 'email', 'created_at', 'created_by']);
+      // Removing an admin takes away their access. The superadmin cannot be removed here.
+      allow delete: if isSuperAdmin() && resource.data.role == 'admin';
+    }
+
+    // The master password's proof. Nobody can read it; only the superadmin can replace it.
+    match /system/{docId} {
+      allow read: if false;
+      allow create, update: if docId == 'config'
+        && isSuperAdmin()
+        && request.resource.data.keys().hasOnly(['master_proof', 'updated_at'])
+        && request.resource.data.master_proof is string
+        && request.resource.data.master_proof.size() == 64;
+      allow delete: if false;
+    }
+
+    match /delete_grants/{grantId} {
+      allow read: if false;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['uid', 'proof', 'created_at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.created_at == request.time
+        && exists(/databases/$(database)/documents/system/config)
+        && request.resource.data.proof == get(/databases/$(database)/documents/system/config).data.master_proof;
+      allow update: if false;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
     match /tournaments/{tournamentId} {
       allow list: if isAdmin();
       allow list: if resource.data.public_visible == true;
       allow get: if isAdmin() || resource.data.public_visible == true;
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin();
+      // Deleting a tournament needs the master password (a delete grant, see above).
+      allow delete: if isAdmin() && hasDeleteGrant('tournament-' + tournamentId);
 
       match /events/{eventId} {
         allow list: if isAdmin();
         allow list: if resource.data.status in ['upcoming', 'ongoing'];
         allow get: if isAdmin() || resource.data.status in ['upcoming', 'ongoing'];
-        allow create, update, delete: if isAdmin();
+        allow create, update: if isAdmin();
+        // Same as tournaments: a division is deleted only with a delete grant.
+        // (Deleting the whole tournament removes its divisions, so its grant counts too.)
+        allow delete: if isAdmin()
+          && (hasDeleteGrant('event-' + eventId) || hasDeleteGrant('tournament-' + tournamentId));
       }
     }
 
@@ -177,7 +220,12 @@ service cloud.firestore {
       allow list: if isAdmin();
       allow list: if eventIsPublic(resource.data.tournament_id, resource.data.event_id);
       allow get: if isAdmin() || eventIsPublic(resource.data.tournament_id, resource.data.event_id);
-      allow create, update: if isAdmin() && validMatchWrite() && isString(request.resource.data.group_id);
+      allow create: if isAdmin() && validMatchWrite() && isString(request.resource.data.group_id);
+      // Who plays whom, and in which group, never changes after creation.
+      allow update: if isAdmin() && validMatchWrite()
+        && request.resource.data.group_id == resource.data.group_id
+        && request.resource.data.entry_a_id == resource.data.entry_a_id
+        && request.resource.data.entry_b_id == resource.data.entry_b_id;
       allow delete: if isAdmin();
     }
 
@@ -194,9 +242,7 @@ service cloud.firestore {
         && matchOutcome(request.resource.data.outcome)
         && (request.resource.data.entry_a_id == null || isString(request.resource.data.entry_a_id))
         && (request.resource.data.entry_b_id == null || isString(request.resource.data.entry_b_id))
-        && (request.resource.data.score_a == null || isInt(request.resource.data.score_a))
-        && (request.resource.data.score_b == null || isInt(request.resource.data.score_b))
-        && (request.resource.data.winner_entry_id == null || isString(request.resource.data.winner_entry_id))
+        && validResult()
         && optionalKnockoutSourceId(request.resource.data.get('source_match_a_id', null))
         && optionalKnockoutSourceId(request.resource.data.get('source_match_b_id', null))
         && optionalSourceFeeder(request.resource.data.get('source_feeder', null))

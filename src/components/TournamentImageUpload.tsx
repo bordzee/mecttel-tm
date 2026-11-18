@@ -82,36 +82,17 @@ export function TournamentImageUpload({
 
   return (
     <div className="space-y-2">
-      <FormLabel>Tournament image (optional)</FormLabel>
+      <p className="text-[13px] font-medium text-text-steel">Tournament image (optional)</p>
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-card-raised">
-        {displayUrl ? (
+      {displayUrl && (
+        <div className="overflow-hidden rounded-[14px] border border-border bg-card-raised">
           <img
             src={displayUrl}
             alt="Tournament cover preview"
             className="w-full aspect-[16/9] object-cover"
           />
-        ) : (
-          <div className="flex aspect-[16/9] items-center justify-center bg-navy/40 text-text-steel">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="40"
-              height="40"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect width="18" height="18" x="3" y="3" rx="2" />
-              <circle cx="9" cy="9" r="2" />
-              <path d="m21 15-5-5L5 21" />
-            </svg>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {isImageUploadEnabled && (
         <>
@@ -129,7 +110,7 @@ export function TournamentImageUpload({
               type="button"
               disabled={disabled}
               onClick={() => inputRef.current?.click()}
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-border-strong px-3.5 text-sm font-semibold text-text-bluewhite hover:border-brand-500/50 disabled:opacity-50"
+              className="press inline-flex h-11 items-center justify-center rounded-[10px] bg-card-raised px-4 text-sm font-medium text-text-primary hover:shadow-[inset_0_0_0_1px_var(--line-strong)] disabled:opacity-50"
             >
               {displayUrl ? 'Change file' : 'Upload file'}
             </button>
@@ -154,15 +135,15 @@ export function TournamentImageUpload({
           type="button"
           disabled={disabled}
           onClick={handleRemove}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-border px-3.5 text-sm font-semibold text-text-steel hover:text-live disabled:opacity-50"
+          className="press inline-flex h-11 items-center justify-center rounded-[10px] bg-card-raised px-4 text-sm font-medium text-text-steel hover:text-danger disabled:opacity-50"
         >
           Remove image
         </button>
       )}
 
       <p className="text-xs text-text-steel">{helperText}</p>
-      {localError && <p className="text-xs font-semibold text-live">{localError}</p>}
-      {urlError && <p className="text-xs font-semibold text-live">{urlError}</p>}
+      {localError && <p className="text-xs font-semibold text-danger">{localError}</p>}
+      {urlError && <p className="text-xs font-semibold text-danger">{urlError}</p>}
     </div>
   )
 }

@@ -177,6 +177,9 @@ export function resolveEffectiveKnockoutRounds(
     const depth = inferKnockoutDepths(matches)
     const byDepth = new Map<number, KnockoutRoundMatchLike[]>()
     for (const m of matches) {
+      // The third-place match shares the final's depth; counting it would make the
+      // final look like a semifinal (and its set rules would be wrong).
+      if (m.round === 'third_place') continue
       const d = depth.get(m.id)
       if (d === undefined) continue
       byDepth.set(d, [...(byDepth.get(d) ?? []), m])

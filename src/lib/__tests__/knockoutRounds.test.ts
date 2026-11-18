@@ -84,4 +84,34 @@ describe('knockoutRounds', () => {
     expect(effective.get('s4')).toBe('semi')
     expect(effective.get('f0')).toBe('final')
   })
+
+  it('labels the final and third-place match correctly when a third-place match exists', () => {
+    // 4 advancers: two semifinals feed a final (winners) and a third-place match (losers).
+    const matches = [
+      { id: 's1', round: 'semi' },
+      { id: 's2', round: 'semi' },
+      { id: 'f', round: 'final', source_match_a_id: 's1', source_match_b_id: 's2' },
+      { id: 't', round: 'third_place', source_match_a_id: 's1', source_match_b_id: 's2' },
+    ]
+    const rounds = resolveEffectiveKnockoutRounds(matches)
+    expect(rounds.get('s1')).toBe('semi')
+    expect(rounds.get('s2')).toBe('semi')
+    expect(rounds.get('f')).toBe('final')
+    expect(rounds.get('t')).toBe('third_place')
+  })
+
+  it('keeps final and third place separate in a larger bracket', () => {
+    const matches = [
+      ...['q1', 'q2', 'q3', 'q4'].map((id) => ({ id, round: 'quarter' })),
+      { id: 's1', round: 'semi', source_match_a_id: 'q1', source_match_b_id: 'q2' },
+      { id: 's2', round: 'semi', source_match_a_id: 'q3', source_match_b_id: 'q4' },
+      { id: 'f', round: 'final', source_match_a_id: 's1', source_match_b_id: 's2' },
+      { id: 't', round: 'third_place', source_match_a_id: 's1', source_match_b_id: 's2' },
+    ]
+    const rounds = resolveEffectiveKnockoutRounds(matches)
+    expect(['q1', 'q2', 'q3', 'q4'].map((id) => rounds.get(id))).toEqual(['quarter', 'quarter', 'quarter', 'quarter'])
+    expect(rounds.get('s1')).toBe('semi')
+    expect(rounds.get('f')).toBe('final')
+    expect(rounds.get('t')).toBe('third_place')
+  })
 })

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { EventType, TournamentEntry } from '../types'
 import { SeededSelect } from './SeededSelect'
 import {
@@ -9,6 +8,7 @@ import {
   TextInput,
 } from './ui/primitives'
 import { StatusPopups } from './ui/StatusPopups'
+import { Modal } from './ui/Modal'
 
 export type EntryEditFormState = {
   name: string
@@ -102,17 +102,14 @@ export function EntryEditDialog({
   const isDoubles = eventType === 'doubles'
   const isTeam = eventType === 'team'
 
-  return createPortal(
-    <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" aria-hidden />
-      {error ? (
-        <StatusPopups error={error} onErrorDismiss={onErrorDismiss ?? (() => {})} />
-      ) : null}
-      <div
-        className="relative w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="entry-edit-title"
+  return (
+    <>
+      {error ? <StatusPopups error={error} onErrorDismiss={onErrorDismiss ?? (() => {})} /> : null}
+      <Modal
+        labelledBy="entry-edit-title"
+        onClose={confirming ? undefined : onCancel}
+        scrimDismiss={false}
+        panelClassName="w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-[var(--shadow-pop)] max-h-[90vh] overflow-y-auto"
       >
         <PanelSectionTitle>Edit entry</PanelSectionTitle>
 
@@ -229,8 +226,8 @@ export function EntryEditDialog({
             {confirming ? 'Saving…' : 'Save changes'}
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+
+      </Modal>
+    </>
   )
 }

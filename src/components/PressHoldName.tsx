@@ -14,7 +14,7 @@ export function PressHoldName({
       type="button"
       title={title}
       onClick={onHold}
-      className={`truncate text-left cursor-pointer select-none touch-manipulation ${className}`}
+      className={`truncate text-left cursor-pointer select-none touch-manipulation py-3 -my-3 ${className}`}
     >
       {children}
     </button>

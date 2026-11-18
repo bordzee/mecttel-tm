@@ -10,8 +10,13 @@
     "test": "vitest run",
     "seed:mecttel-open": "tsx scripts/seed-mecttel-singles-open.ts",
     "seed:mecttel-registration": "tsx scripts/seed-mecttel-singles-open-registration.ts",
+    "test:sim": "vitest run --mode development --config vitest.sim.config.ts integration/sim.test.ts integration/scenarios.test.ts integration/masterDelete.test.ts integration/admins.test.ts",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-tt-rules \"vitest run --config vitest.rules.config.ts\"",
+    "seed:emulator-admin": "tsx scripts/seed-emulator-admin.ts",
+    "emulators": "firebase emulators:start --only auth,firestore --project demo-tt-app",
     "firebase:login": "firebase login",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "admin-tool": "tsx scripts/admin-tool.ts"
   },
   "dependencies": {
     "firebase": "^12.16.0",
@@ -20,6 +25,7 @@
     "react-router-dom": "^7.18.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",

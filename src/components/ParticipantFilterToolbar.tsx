@@ -89,7 +89,7 @@ export function ParticipantFilterToolbar({
           onClick={() => setFilterOpen((open) => !open)}
           className={`h-12 w-12 shrink-0 rounded-xl border flex items-center justify-center transition-colors ${
             filterActive
-              ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+              ? 'border-brand-500 bg-brand-500/15 text-accent-text'
               : 'border-border bg-card-raised text-text-bluewhite hover:border-border-strong'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
@@ -108,7 +108,7 @@ export function ParticipantFilterToolbar({
                 onClick={() => selectFilter(opt.value)}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   filter === opt.value
-                    ? 'bg-brand-500 text-white'
+                    ? 'bg-brand-500 text-on-accent'
                     : 'bg-card border border-border text-text-bluewhite hover:border-border-strong'
                 }`}
               >

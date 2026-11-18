@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GroupStandingsTable } from './GroupStandingsTable'
 import { GroupStageNavigator } from './GroupStageNavigator'
 import { KnockoutBracket } from './KnockoutBracket'
@@ -7,15 +7,8 @@ import { EmptyMessage } from './ui/primitives'
 import { BracketsTabSkeleton } from './ui/Skeleton'
 import { StatusPopups } from './ui/StatusPopups'
 import { useMinLoading } from '../hooks/useMinLoading'
-import {
-  fetchGroups,
-  fetchGroupMembers,
-  fetchGroupMatches,
-  fetchKnockoutMatches,
-  fetchEntries,
-  fetchEvent,
-  fetchTeamRosters,
-} from '../lib/tournamentService'
+import { fetchTeamRosters } from '../lib/tournamentService'
+import { createLiveEventLoader } from '../lib/liveEventData'
 import { resolveGroupStandings } from '../lib/standings'
 import { buildKnockoutStageTabs, filterKnockoutMatchesForStage, isKnockoutStage, knockoutRoundFromStageId } from '../lib/knockoutTabs'
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent'
@@ -41,34 +34,34 @@ export function PublicBracketsView({
   const [infoEntry, setInfoEntry] = useState<TournamentEntry | null>(null)
   const [infoRoster, setInfoRoster] = useState<string[] | undefined>()
 
-  const fetchEventData = useCallback(async () => {
+  // Participants are reused between live updates; see createLiveEventLoader.
+  const loader = useRef(createLiveEventLoader({ withMembers: true }))
+
+  const fetchEventData = useCallback(
+    async (options?: { force?: boolean }) => {
     try {
-      const [ev, g, gm, km, e] = await Promise.all([
-        fetchEvent(tournamentId, eventId),
-        fetchGroups(tournamentId, eventId),
-        fetchGroupMatches(tournamentId, eventId),
-        fetchKnockoutMatches(tournamentId, eventId),
-        fetchEntries(tournamentId, eventId),
-      ])
-      const m = await fetchGroupMembers(tournamentId, eventId, g.map((x) => x.id))
+      const live = await loader.current(tournamentId, eventId, options)
+      const { event: ev, groups: g, groupMatches: gm, knockoutMatches: km, entries: e, members: m } = live
       setEvent(ev)
       setGroups(g)
       setGroupMatches(gm)
       setKnockoutMatches(km)
       setEntries(e)
-      setMembers(m.map((x) => ({ group_id: x.group_id, entry_id: x.entry_id })))
+      setMembers(m)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load brackets')
     }
-  }, [tournamentId, eventId])
+    },
+    [tournamentId, eventId],
+  )
 
   useEffect(() => {
     setLoading(true)
-    fetchEventData().finally(() => setLoading(false))
+    fetchEventData({ force: true }).finally(() => setLoading(false))
   }, [fetchEventData])
 
-  useRealtimeEvent(tournamentId, eventId, fetchEventData, (msg) => setError(msg))
+  useRealtimeEvent(tournamentId, eventId, () => fetchEventData(), (msg) => setError(msg))
 
   const entryMap = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries])
 

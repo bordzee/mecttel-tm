@@ -6,11 +6,17 @@
   "storage": {
     "rules": "storage.rules"
   },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log"]
-    }
-  ]
+  "emulators": {
+    "auth": {
+      "port": 9199
+    },
+    "firestore": {
+      "port": 8381,
+      "websocketPort": 9460
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  }
 }

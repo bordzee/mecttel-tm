@@ -67,7 +67,7 @@ export function PublicParticipantsList({
           filteredCount={filteredEntries.length}
         />
 
-        <div className="h-[min(420px,50vh)] overflow-y-auto space-y-2 pr-0.5">
+        <div className="space-y-2">
           {entries.length === 0 ? (
             <EmptyMessage>No entries submitted yet.</EmptyMessage>
           ) : filteredEntries.length === 0 ? (
@@ -111,7 +111,7 @@ function PublicParticipantRow({
     <li className="bg-card-raised rounded-xl border border-border px-3 py-3">
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-[15px] font-bold text-text-primary truncate">{name}</p>
+          <p className="text-[15px] font-semibold text-text-primary truncate">{name}</p>
           {pairDetail && <p className="text-sm text-text-steel mt-0.5">{pairDetail}</p>}
           {org && <p className="text-sm text-text-steel mt-0.5">{org}</p>}
           {eventType === 'team' && roster && roster.length > 0 && (

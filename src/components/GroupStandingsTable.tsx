@@ -10,7 +10,7 @@ const COL = {
 
 function HeaderCell({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
-    <div className={`flex items-center justify-center h-full text-[11px] font-bold text-text-steel ${className ?? ''}`}>
+    <div className={`flex items-center justify-center h-full text-xs font-semibold text-text-steel ${className ?? ''}`}>
       {children}
     </div>
   )
@@ -45,7 +45,7 @@ export function GroupStandingsTable({
     <div className="space-y-3">
       {externalHeader && label && (
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-heading text-base font-extrabold text-text-primary">{groupTitle}</h3>
+          <h2 className="font-heading text-base font-semibold text-text-primary">{groupTitle}</h2>
           {manualRanks && <ManualRankBadge />}
         </div>
       )}
@@ -59,7 +59,7 @@ export function GroupStandingsTable({
         )}
         <div className="bg-card-raised h-[38px] flex items-stretch border-b border-border">
           <HeaderCell className={COL.rank}>#</HeaderCell>
-          <div className="flex-1 min-w-0 flex items-center px-3 text-[11px] font-bold text-text-steel">
+          <div className="flex-1 min-w-0 flex items-center px-3 text-xs font-semibold text-text-steel">
             Player / Team
           </div>
           <HeaderCell className={COL.stat}>W</HeaderCell>
@@ -67,23 +67,26 @@ export function GroupStandingsTable({
           <HeaderCell className={COL.diff}>+/-</HeaderCell>
         </div>
         {rows.map((row) => {
-          const isLeader = row.rank === 1
+          // Only mark a leader once someone has actually played.
+          const isLeader = row.rank === 1 && row.played > 0
           const entry = entryMap?.get(row.entryId)
-          const nameClass = `truncate ${isLeader ? 'text-winner' : 'text-text-bluewhite'}`
+          const nameClass = 'truncate text-text-primary'
           return (
             <div
               key={row.entryId}
-              className={`flex items-stretch h-[46px] border-t border-border ${
-                isLeader ? 'bg-brand-100' : ''
-              }`}
+              className="flex items-stretch h-[46px] border-t border-border"
             >
-              <div className={`${COL.rank} flex items-center justify-center text-sm font-bold text-text-steel tabular-nums`}>
-                {row.rank}
+              <div className={`${COL.rank} flex items-center justify-center text-sm text-text-steel tabular-nums`}>
+                {isLeader ? (
+                  <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-100 text-xs font-semibold text-accent-text">
+                    {row.rank}
+                  </span>
+                ) : (
+                  row.rank
+                )}
               </div>
               <div
-                className={`flex-1 min-w-0 flex items-center px-3 text-[15px] font-semibold min-w-0 ${
-                  isLeader ? 'text-winner' : 'text-text-bluewhite'
-                }`}
+                className="flex-1 min-w-0 flex items-center px-3 text-[15px] font-medium text-text-primary"
               >
                 <span className="truncate inline-flex items-center gap-1 min-w-0">
                   {canShowInfo && entry ? (
@@ -117,7 +120,7 @@ export function GroupStandingsTable({
         })}
         {manualRanks && manualRankNote && !externalHeader && (
           <div className="px-4 py-3 bg-amber-soft border-t border-amber/30 text-sm text-text-bluewhite">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-amber mb-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber mb-1">
               Why manual ranks?
             </p>
             <p>{manualRankNote}</p>
