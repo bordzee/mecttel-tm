@@ -1,11 +1,26 @@
+import { useId, useLayoutEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { formatDisplayDate } from '../../lib/formatDate'
 
 export function BrandDot({ className = '' }: { className?: string }) {
   return (
-    <span
-      className={`inline-block w-4 h-4 rounded-full bg-brand-500 shrink-0 ${className}`}
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      className={`shrink-0 ${className}`}
       aria-hidden
-    />
+    >
+      <circle cx="12" cy="12" r="10" fill="var(--accent)" />
+      <path
+        d="M5.2 7.6c3.4 1.1 6.2 4.4 6.9 9.2"
+        fill="none"
+        stroke="var(--accent-ink)"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        opacity=".7"
+      />
+    </svg>
   )
 }
 
@@ -13,7 +28,7 @@ export function BackLink({ to, children }: { to: string; children: React.ReactNo
   return (
     <Link
       to={to}
-      className="inline-flex items-center gap-1.5 text-sm text-text-steel hover:text-text-bluewhite font-semibold transition-colors"
+      className="inline-flex items-center gap-1.5 min-h-10 -ml-1 pr-2 text-sm text-text-steel hover:text-text-primary font-medium transition-colors"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="m15 18-6-6 6-6" />
@@ -36,7 +51,7 @@ export function BackButton({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 text-sm text-text-steel hover:text-text-bluewhite font-semibold transition-colors ${className}`}
+      className={`inline-flex items-center gap-1.5 min-h-10 -ml-1 pr-2 text-sm text-text-steel hover:text-text-primary font-medium transition-colors ${className}`}
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="m15 18-6-6 6-6" />
@@ -48,30 +63,30 @@ export function BackButton({
 
 export function PageTitle({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <h1 className={`font-heading text-[22px] font-extrabold text-text-primary leading-tight ${className}`}>
+    <h1 className={`font-heading text-2xl sm:text-[28px] font-semibold tracking-tight text-text-primary leading-tight ${className}`}>
       {children}
     </h1>
   )
 }
 
 export function EventPageTitle({ children }: { children: React.ReactNode }) {
-  return <h1 className="font-heading text-2xl font-extrabold text-text-primary leading-tight">{children}</h1>
+  return <h1 className="font-heading text-2xl sm:text-[28px] font-semibold tracking-tight text-text-primary leading-tight">{children}</h1>
 }
 
 export function ScreenSectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="font-heading text-lg font-extrabold text-text-primary">{children}</h2>
+  return <h2 className="font-heading text-lg font-semibold text-text-primary">{children}</h2>
 }
 
 export function EventAdminTitle({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <h1 className={`font-heading text-[22px] font-extrabold text-text-primary leading-tight flex-1 min-w-0 ${className}`}>
+    <h1 className={`font-heading text-2xl sm:text-[28px] font-semibold tracking-tight text-text-primary leading-tight flex-1 min-w-0 ${className}`}>
       {children}
     </h1>
   )
 }
 
 export function ParticipantsTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="font-heading text-lg font-extrabold text-text-primary">{children}</h2>
+  return <h2 className="font-heading text-lg font-semibold text-text-primary">{children}</h2>
 }
 
 export function MetaIconsRow({ date, venue }: { date?: string | null; venue?: string | null }) {
@@ -83,7 +98,7 @@ export function MetaIconsRow({ date, venue }: { date?: string | null; venue?: st
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" />
           </svg>
-          <span>{date}</span>
+          <span>{formatDisplayDate(date)}</span>
         </>
       )}
       {date && venue && <span className="w-[3px] h-[3px] rounded-full bg-text-steel" aria-hidden />}
@@ -108,7 +123,7 @@ export function ConfigRowsCard({ rows }: { rows: { label: string; value: string 
           className={`flex items-center justify-between gap-3 px-4 py-3.5 ${i > 0 ? 'border-t border-border' : ''}`}
         >
           <span className="text-[13px] font-medium text-text-steel">{row.label}</span>
-          <span className="text-sm font-bold text-text-bluewhite">{row.value}</span>
+          <span className="text-sm font-semibold text-text-bluewhite">{row.value}</span>
         </div>
       ))}
     </div>
@@ -117,7 +132,7 @@ export function ConfigRowsCard({ rows }: { rows: { label: string; value: string 
 
 export function SeedBadge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-500 bg-brand-100 px-2 py-1 rounded-lg shrink-0">
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-accent-text bg-brand-100 px-2 py-0.5 rounded-full shrink-0">
       <SeededStarIcon size={12} />
       {children}
     </span>
@@ -132,7 +147,7 @@ export function SeededStarIcon({ size = 14, className = '' }: { size?: number; c
       height={size}
       viewBox="0 0 24 24"
       fill="currentColor"
-      className={`shrink-0 text-brand-500 ${className}`}
+      className={`shrink-0 text-accent-text ${className}`}
       aria-hidden
     >
       <path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7-6.3-4.6L5.7 21l2.3-7-6-4.6h7.6z" />
@@ -142,30 +157,31 @@ export function SeededStarIcon({ size = 14, className = '' }: { size?: number; c
 
 export function StepIndicator({ steps, activeIndex }: { steps: string[]; activeIndex: number }) {
   return (
-    <div className="flex gap-2">
+    <ol className="flex items-center gap-3 text-sm font-medium text-text-faint" aria-label="Progress">
       {steps.map((label, i) => {
         const active = i === activeIndex
+        const complete = i < activeIndex
         return (
-          <div
-            key={label}
-            className={`flex-1 flex items-center gap-2 rounded-[10px] px-3 py-2 border ${
-              active
-                ? 'bg-brand-100 border-brand-500 text-brand-500'
-                : 'bg-card border-border text-text-steel'
-            }`}
-          >
-            <span
-              className={`w-[22px] h-[22px] rounded-full flex items-center justify-center text-xs font-extrabold shrink-0 ${
-                active ? 'bg-brand-500 text-white' : 'bg-card-raised text-text-steel'
-              }`}
-            >
-              {i + 1}
+          <li key={label} className="flex items-center gap-3" aria-current={active ? 'step' : undefined}>
+            <span className={`inline-flex items-center gap-2 ${active ? 'text-text-primary' : ''}`}>
+              <span
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono shrink-0 ${
+                  active
+                    ? 'bg-text-primary text-navy'
+                    : complete
+                      ? 'bg-green-soft text-winner'
+                      : 'bg-card-raised'
+                }`}
+              >
+                {complete ? '✓' : i + 1}
+              </span>
+              {label}
             </span>
-            <span className={`text-[13px] ${active ? 'font-bold' : 'font-bold'}`}>{label}</span>
-          </div>
+            {i < steps.length - 1 && <span className="w-8 h-px bg-border-strong" aria-hidden />}
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }
 
@@ -181,7 +197,7 @@ export function SegmentedControl<T extends string>({
   disabledValues?: T[]
 }) {
   return (
-    <div className="flex gap-[3px] p-[3px] rounded-[10px] bg-navy border border-border">
+    <div className="flex gap-0.5 p-[3px] rounded-[10px] bg-card-raised">
       {options.map((opt) => {
         const active = value === opt.value
         const disabled = disabledValues.includes(opt.value)
@@ -191,10 +207,11 @@ export function SegmentedControl<T extends string>({
             type="button"
             disabled={disabled}
             onClick={() => onChange(opt.value)}
-            className={`flex-1 min-w-0 h-9 rounded-lg text-[13px] transition-colors ${
+            aria-pressed={active}
+            className={`press flex-1 min-w-0 h-10 rounded-lg text-[13px] font-medium transition-colors ${
               active
-                ? 'bg-brand-500 text-white font-bold'
-                : 'bg-transparent text-text-steel font-semibold hover:text-text-bluewhite'
+                ? 'bg-seg-on text-text-primary shadow-[0_0_0_1px_var(--line)]'
+                : 'bg-transparent text-text-steel hover:text-text-primary'
             } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             {opt.label}
@@ -222,21 +239,21 @@ export function NumberStepper({
         type="button"
         onClick={() => onChange(Math.max(min, value - 1))}
         disabled={value <= min}
-        className="w-10 h-10 rounded-[10px] border border-border bg-navy flex items-center justify-center text-text-bluewhite disabled:opacity-50"
+        className="press w-10 h-10 rounded-[10px] bg-card-raised flex items-center justify-center text-text-bluewhite disabled:opacity-40"
         aria-label="Decrease"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="M5 12h14" />
         </svg>
       </button>
-      <span className="text-base font-extrabold text-text-primary tabular-nums min-w-[1ch] text-center">
+      <span className="text-base font-medium font-mono text-text-primary tabular-nums min-w-[2ch] text-center">
         {value}
       </span>
       <button
         type="button"
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
-        className="w-10 h-10 rounded-[10px] border border-border bg-navy flex items-center justify-center text-text-bluewhite disabled:opacity-50"
+        className="press w-10 h-10 rounded-[10px] bg-card-raised flex items-center justify-center text-text-bluewhite disabled:opacity-40"
         aria-label="Increase"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -260,7 +277,7 @@ export function QuickAddPill({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-full border border-brand-500 bg-brand-100 px-3 py-2 text-xs font-bold text-brand-500 hover:bg-brand-500/20 transition-colors ${className}`}
+      className={`press inline-flex items-center justify-center gap-1.5 rounded-full bg-card-raised px-3.5 h-9 text-[13px] font-medium text-text-primary hover:shadow-[inset_0_0_0_1px_var(--line-strong)] ${className}`}
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M5 12h14" /><path d="M12 5v14" />
@@ -282,7 +299,7 @@ export function AddDivisionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center justify-center gap-2 w-full h-[50px] rounded-xl border-[1.5px] border-border-strong text-brand-500 font-semibold text-[15px] hover:border-brand-500/50 transition-colors disabled:opacity-50"
+      className="press inline-flex items-center justify-center gap-2 w-full h-12 rounded-[10px] bg-card-raised text-text-primary font-medium text-[15px] hover:shadow-[inset_0_0_0_1px_var(--line-strong)] disabled:opacity-50"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M5 12h14" /><path d="M12 5v14" />
@@ -297,7 +314,7 @@ export function RemoveRowButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-[13px] font-semibold text-live shrink-0 hover:text-red-400 transition-colors"
+      className="inline-flex items-center gap-1 text-[13px] font-medium text-danger shrink-0 hover:opacity-80 transition-opacity"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
@@ -309,7 +326,7 @@ export function RemoveRowButton({ onClick }: { onClick: () => void }) {
 
 export function SuccessBanner({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2 bg-green-soft border border-winner rounded-xl p-3 text-sm text-text-bluewhite">
+    <div className="flex items-start gap-2.5 bg-green-soft rounded-xl p-3.5 text-sm text-text-primary">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-winner shrink-0 mt-0.5" aria-hidden>
         <path d="M20 6 9 17l-5-5" />
       </svg>
@@ -339,7 +356,7 @@ export function InfoNoteCard({ children }: { children: React.ReactNode }) {
 
 export function InlineError({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-1.5 text-xs font-semibold text-live">
+    <div className="flex items-center gap-1.5 text-xs font-semibold text-danger">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" />
       </svg>
@@ -356,7 +373,7 @@ export function TextActionButton({
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center gap-1 text-sm font-semibold text-text-bluewhite hover:text-brand-500 transition-colors ${className}`}
+      className={`inline-flex items-center justify-center gap-1 text-sm font-medium text-text-primary hover:text-accent-text transition-colors ${className}`}
       {...props}
     >
       {children}
@@ -366,7 +383,7 @@ export function TextActionButton({
 
 export function AddDivisionLink({ to }: { to: string }) {
   return (
-    <Link to={to} className="inline-flex items-center gap-1.5 text-sm text-brand-500 font-semibold hover:text-brand-700">
+    <Link to={to} className="inline-flex items-center gap-1.5 min-h-10 text-sm text-accent-text font-medium hover:underline">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M5 12h14" /><path d="M12 5v14" />
       </svg>
@@ -379,17 +396,22 @@ export function IconActionButton({
   children,
   variant = 'default',
   onClick,
+  label,
 }: {
   children: React.ReactNode
   variant?: 'default' | 'danger'
   onClick?: () => void
+  /** Accessible name: icon-only buttons have no visible text. */
+  label: string
 }) {
   return (
     <button
       type="button"
+      aria-label={label}
+      title={label}
       onClick={onClick}
-      className={`w-[38px] h-[38px] rounded-[10px] border border-border bg-card flex items-center justify-center shrink-0 ${
-        variant === 'danger' ? 'text-live' : 'text-text-bluewhite'
+      className={`press w-10 h-10 rounded-[10px] bg-card-raised flex items-center justify-center shrink-0 ${
+        variant === 'danger' ? 'text-danger' : 'text-text-bluewhite'
       }`}
     >
       {children}
@@ -398,15 +420,15 @@ export function IconActionButton({
 }
 
 export function PanelSectionTitle({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-heading text-base font-extrabold text-text-primary">{children}</h3>
+  return <h2 className="font-heading text-base font-semibold text-text-primary tracking-tight">{children}</h2>
 }
 
 export function AdminPageTitle({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <h1 className={`font-heading text-[26px] font-extrabold text-text-primary leading-tight ${className}`}>{children}</h1>
+  return <h1 className={`font-heading text-2xl sm:text-[28px] font-semibold tracking-tight text-text-primary leading-tight ${className}`}>{children}</h1>
 }
 
 export function DashboardTitle({ children }: { children: React.ReactNode }) {
-  return <h1 className="font-heading text-[26px] font-extrabold text-text-primary leading-tight">{children}</h1>
+  return <h1 className="font-heading text-2xl sm:text-[28px] font-semibold tracking-tight text-text-primary leading-tight">{children}</h1>
 }
 
 export function SectionHeaderRow({
@@ -418,7 +440,7 @@ export function SectionHeaderRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <h3 className="font-heading text-[17px] font-extrabold text-text-primary">{title}</h3>
+      <h2 className="font-heading text-[17px] font-semibold tracking-tight text-text-primary">{title}</h2>
       {trailing}
     </div>
   )
@@ -426,7 +448,7 @@ export function SectionHeaderRow({
 
 export function WarningBanner({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2 bg-amber-soft border border-amber rounded-xl p-3 text-[13px] font-medium text-amber leading-snug">
+    <div className="flex items-start gap-2.5 bg-amber-soft rounded-xl p-3.5 text-[13px] font-medium text-text-primary leading-snug [&_svg]:text-amber">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="16"
@@ -451,7 +473,7 @@ export function WarningBanner({ children }: { children: React.ReactNode }) {
 
 export function ErrorBanner({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2.5 bg-[#FF3B3B14] border border-live rounded-xl p-3 text-[13px] font-medium text-live leading-snug">
+    <div className="flex items-start gap-2.5 bg-danger-soft rounded-xl p-3.5 text-[13px] font-medium text-text-primary leading-snug [&_svg]:text-danger">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="18"
@@ -476,7 +498,7 @@ export function ErrorBanner({ children }: { children: React.ReactNode }) {
 
 export function EmptyStatePanel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2.5 rounded-xl border border-border bg-[#0C284780] py-7 px-4 text-center">
+    <div className="flex flex-col items-center justify-center gap-2.5 rounded-[14px] bg-card ring-1 ring-border py-9 px-4 text-center">
       <p className="text-sm text-text-steel">{children}</p>
     </div>
   )
@@ -496,15 +518,15 @@ export function DeleteConfirmPanel({
   confirming?: boolean
 }) {
   return (
-    <div className="bg-[#FF3B3B14] border border-live rounded-2xl p-4 space-y-3">
-      <p className="text-sm font-bold text-live">{title}</p>
+    <div className="bg-danger-soft rounded-2xl p-4 space-y-3">
+      <p className="text-sm font-semibold text-danger">{title}</p>
       <p className="text-[13px] text-text-bluewhite leading-snug">{description}</p>
       <div className="grid grid-cols-2 gap-2.5">
         <button
           type="button"
           onClick={onCancel}
           disabled={confirming}
-          className="h-[46px] rounded-xl bg-winner text-white font-semibold text-[15px] hover:opacity-90 disabled:opacity-50"
+          className="press h-12 rounded-[10px] bg-card-raised text-text-primary font-medium text-[15px] hover:opacity-90 disabled:opacity-50"
         >
           Keep
         </button>
@@ -512,7 +534,7 @@ export function DeleteConfirmPanel({
           type="button"
           onClick={onConfirm}
           disabled={confirming}
-          className="h-[46px] rounded-xl bg-live text-white font-bold text-[15px] hover:bg-red-600 disabled:opacity-50"
+          className="press h-12 rounded-[10px] bg-danger text-on-danger font-semibold text-[15px] hover:opacity-90 disabled:opacity-50"
         >
           {confirming ? 'Deleting…' : 'Delete'}
         </button>
@@ -523,7 +545,7 @@ export function DeleteConfirmPanel({
 
 export function ManualRankBadge() {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber bg-amber-soft px-2.5 py-1 rounded-full border border-amber">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber bg-amber-soft px-2.5 py-0.5 rounded-full">
       Manual ranks
     </span>
   )
@@ -531,13 +553,13 @@ export function ManualRankBadge() {
 
 export function ManualRankNote({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl bg-amber-soft border border-amber p-3 space-y-1.5">
+    <div className="rounded-xl bg-amber-soft p-3.5 space-y-1.5">
       <div className="flex items-center gap-1.5">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber shrink-0" aria-hidden>
           <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
           <path d="M12 9v4" /><path d="M12 17h.01" />
         </svg>
-        <p className="text-[11px] font-bold uppercase tracking-wide text-amber">Manual ranks</p>
+        <p className="text-xs font-medium uppercase tracking-[0.08em] text-amber">Manual ranks</p>
       </div>
       <p className="text-[13px] text-text-bluewhite leading-snug">{children}</p>
     </div>
@@ -548,7 +570,7 @@ export function IconTextLink({ to, children }: { to: string; children: React.Rea
   return (
     <Link
       to={to}
-      className="inline-flex items-center justify-center gap-1.5 w-full text-sm text-brand-500 font-semibold hover:text-brand-700 transition-colors"
+      className="inline-flex items-center justify-center gap-1.5 w-full text-sm text-accent-text font-semibold hover:text-accent-text transition-colors"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -580,7 +602,7 @@ export function AddEntryButton({
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center gap-1.5 h-[46px] bg-brand-100 text-brand-500 border-[1.5px] border-brand-500 rounded-xl font-semibold text-[15px] transition-colors hover:bg-brand-500/20 disabled:opacity-50 disabled:cursor-not-allowed ${fullWidth ? 'w-full' : ''} ${className}`}
+      className={`press inline-flex items-center justify-center gap-1.5 h-12 bg-brand-100 text-accent-text rounded-[10px] font-semibold text-[15px] hover:bg-brand-500/20 disabled:opacity-50 disabled:cursor-not-allowed ${fullWidth ? 'w-full' : ''} ${className}`}
       {...props}
     />
   )
@@ -594,7 +616,7 @@ export function DeleteDivisionButton({
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center gap-1.5 w-full h-[50px] bg-live text-white rounded-xl font-bold text-[15px] hover:bg-red-600 transition-colors disabled:opacity-50 ${className}`}
+      className={`press inline-flex items-center justify-center gap-1.5 w-full h-12 bg-danger-soft text-danger rounded-[10px] font-semibold text-[15px] hover:opacity-90 disabled:opacity-50 ${className}`}
       {...props}
     >
       <svg
@@ -630,7 +652,7 @@ export function SectionTitle({
       {live && (
         <span className="w-2 h-2 rounded-full bg-live animate-tt-pulse shrink-0" aria-hidden />
       )}
-      <h2 className="font-heading text-xl font-extrabold text-text-primary">{children}</h2>
+      <h2 className="font-heading text-xl font-semibold tracking-tight text-text-primary">{children}</h2>
     </div>
   )
 }
@@ -644,15 +666,15 @@ type PillVariant = 'live' | 'upcoming' | 'draft' | 'ongoing' | 'ended'
 const pillStyles: Record<PillVariant, string> = {
   live: 'bg-live-bg text-live-text',
   ongoing: 'bg-live-bg text-live-text',
-  upcoming: 'bg-brand-100 text-brand-500',
-  draft: 'bg-card-raised text-text-steel border border-border',
-  ended: 'bg-card-raised text-text-steel border border-border',
+  upcoming: 'bg-card-raised text-text-steel',
+  draft: 'bg-card-raised text-text-steel',
+  ended: 'bg-card-raised text-text-steel',
 }
 
 export function Pill({ variant, children }: { variant: PillVariant; children: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${pillStyles[variant]}`}
+      className={`inline-flex items-center gap-1.5 shrink-0 text-xs font-medium px-2.5 py-0.5 rounded-full ${pillStyles[variant]}`}
     >
       {(variant === 'live' || variant === 'ongoing') && (
         <span className="w-2 h-2 rounded-full bg-live animate-tt-pulse" aria-hidden />
@@ -664,7 +686,7 @@ export function Pill({ variant, children }: { variant: PillVariant; children: Re
 
 export function TagPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex text-xs font-semibold px-2.5 py-1 rounded-lg bg-card-raised border border-border text-text-bluewhite">
+    <span className="inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full bg-card-raised text-text-bluewhite">
       {children}
     </span>
   )
@@ -672,7 +694,7 @@ export function TagPill({ children }: { children: React.ReactNode }) {
 
 export function StatusChip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex text-xs font-semibold px-2.5 py-1 rounded-lg bg-card-raised border border-border text-text-steel">
+    <span className="inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full bg-card-raised text-text-steel">
       {children}
     </span>
   )
@@ -705,16 +727,16 @@ export function CenteredState({ children }: { children: React.ReactNode }) {
 type ButtonVariant = 'primary' | 'secondary' | 'dashed' | 'destructive'
 
 const buttonBase =
-  'inline-flex items-center justify-center font-semibold text-[15px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+  'press inline-flex items-center justify-center gap-2 font-medium text-[15px] disabled:opacity-50 disabled:cursor-not-allowed'
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary:
-    'h-[52px] bg-brand-500 text-white rounded-xl hover:bg-brand-700 disabled:bg-card-raised disabled:text-text-steel disabled:opacity-100',
+    'h-12 bg-brand-500 text-on-accent rounded-[10px] hover:bg-brand-700 disabled:bg-card-raised disabled:text-text-faint disabled:opacity-100',
   secondary:
-    'h-[52px] bg-transparent text-text-bluewhite border-[1.5px] border-border-strong rounded-xl hover:border-brand-500/50',
+    'h-12 bg-card-raised text-text-primary rounded-[10px] hover:shadow-[inset_0_0_0_1px_var(--line-strong)]',
   dashed:
-    'h-[50px] bg-brand-100 text-brand-500 border-[1.5px] border-brand-500 rounded-xl hover:bg-brand-500/20',
-  destructive: 'h-[50px] bg-live text-white rounded-xl hover:bg-red-600 font-bold',
+    'h-12 bg-brand-100 text-accent-text rounded-[10px] hover:bg-brand-500/20',
+  destructive: 'h-12 bg-danger text-on-danger rounded-[10px] hover:opacity-90 font-semibold',
 }
 
 export function Button({
@@ -767,7 +789,7 @@ export function Card({
   as?: 'div' | 'section' | 'form'
 } & React.HTMLAttributes<HTMLElement>) {
   return (
-    <Tag className={`bg-card rounded-2xl border border-border ${className}`} {...props}>
+    <Tag className={`bg-card rounded-[14px] border border-border ${className}`} {...props}>
       {children}
     </Tag>
   )
@@ -775,20 +797,44 @@ export function Card({
 
 export function MutedPanel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-card-raised border border-border rounded-2xl p-4 space-y-3 ${className}`}>
+    <div className={`bg-card-raised rounded-[14px] p-4 space-y-3 ${className}`}>
       {children}
     </div>
   )
 }
 
+/**
+ * Label for the form control that follows it (as a sibling, or inside the next
+ * sibling). It links itself to that control, so screen readers announce the label
+ * and tapping the label focuses the field, without every call site passing ids.
+ */
 export function FormLabel({ children }: { children: React.ReactNode }) {
-  return <label className="block text-[13px] font-semibold text-text-steel mb-1.5">{children}</label>
+  const ref = useRef<HTMLLabelElement>(null)
+  const generatedId = useId()
+
+  useLayoutEffect(() => {
+    const label = ref.current
+    const next = label?.nextElementSibling
+    if (!label || !next) return
+    const control = next.matches('input,select,textarea')
+      ? next
+      : next.querySelector('input,select,textarea')
+    if (!control) return
+    if (!control.id) control.id = generatedId
+    label.htmlFor = control.id
+  })
+
+  return (
+    <label ref={ref} className="block text-[13px] font-medium text-text-steel mb-1.5">
+      {children}
+    </label>
+  )
 }
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className="w-full h-12 bg-navy border border-border rounded-xl px-3.5 text-[15px] text-text-primary placeholder:text-text-steel focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500"
+      className="w-full h-12 bg-card border border-border-strong rounded-[10px] px-3.5 text-base text-text-primary placeholder:text-text-faint focus:outline-none focus:border-text-primary focus:ring-1 focus:ring-text-primary"
       {...props}
     />
   )
@@ -797,7 +843,7 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className="w-full h-12 bg-navy border border-border rounded-xl px-3.5 text-[15px] text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500"
+      className="w-full h-12 bg-card border border-border-strong rounded-[10px] px-3.5 text-base text-text-primary focus:outline-none focus:border-text-primary focus:ring-1 focus:ring-text-primary"
       {...props}
     />
   )
@@ -806,19 +852,17 @@ export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>
 export function TextInputLight(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className="w-full h-12 bg-white border-[1.5px] border-[#D9E0EA] rounded-xl px-3.5 text-[15px] text-text-on-light placeholder:text-text-muted-light focus:outline-none focus:ring-2 focus:ring-brand-500/25 focus:border-brand-500"
+      className="w-full h-12 bg-card border border-border-strong rounded-[10px] px-3.5 text-base text-text-primary placeholder:text-text-faint focus:outline-none focus:border-text-primary focus:ring-1 focus:ring-text-primary"
       {...props}
     />
   )
 }
 
-export function FormLabelLight({ children }: { children: React.ReactNode }) {
-  return <label className="block text-[13px] font-semibold text-text-muted-light mb-1.5">{children}</label>
-}
+export const FormLabelLight = FormLabel
 
 export function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex text-xs font-semibold px-2.5 py-1 rounded-lg bg-card-raised border border-border text-text-bluewhite">
+    <span className="inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-full bg-card-raised text-text-bluewhite">
       {children}
     </span>
   )
@@ -829,11 +873,11 @@ export function EmptyMessage({ children }: { children: React.ReactNode }) {
 }
 
 export function ErrorMessage({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <p className={`text-sm text-live ${className}`}>{children}</p>
+  return <p className={`text-sm text-danger ${className}`}>{children}</p>
 }
 
 export function SuccessMessage({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-brand-500">{children}</p>
+  return <p className="text-sm text-accent-text">{children}</p>
 }
 
 export function MetaText({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -846,7 +890,7 @@ export function CaptionText({ children, className = '' }: { children: React.Reac
 
 export function TextLink({ to, children }: { to: string; children: React.ReactNode }) {
   return (
-    <Link to={to} className="text-sm text-brand-500 font-semibold hover:text-brand-700">
+    <Link to={to} className="text-sm text-accent-text font-semibold hover:text-accent-text">
       {children}
     </Link>
   )
@@ -860,7 +904,7 @@ export function DestructiveTextButton({
   return (
     <button
       type="button"
-      className={`text-sm text-live hover:text-red-400 px-2 py-1 ${className}`}
+      className={`text-sm text-danger hover:opacity-80 px-2 py-1 ${className}`}
       {...props}
     >
       {children}

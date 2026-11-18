@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
+import { GroupStageNavigator } from '../components/GroupStageNavigator'
 import { AppLayout } from '../components/AppLayout'
 import { PublicParticipantsList } from '../components/PublicParticipantsList'
 import { PublicBracketsView } from '../components/PublicBracketsView'
@@ -13,14 +14,13 @@ import {
   InfoNoteCard,
   MetaIconsRow,
   Pill,
-  SegmentedControl,
   TagPill,
   WarningBanner,
 } from '../components/ui/primitives'
 import { formatSetRulesSummary, normalizeSetRules } from '../components/SetRulesPicker'
 import { loadTeamRostersByTeamId } from '../lib/entryDisplay'
 import { fetchTournament, fetchEvent, fetchEntries, fetchGroups } from '../lib/tournamentService'
-import { entrySortKey, getStartLayoutOptions } from '../lib/groupLayout'
+import { entrySortKey, getStartLayoutOptions, isLayoutCompatibleWithBlock } from '../lib/groupLayout'
 import { isFirebaseConfigured } from '../lib/firebase'
 import { EVENT_TYPE_LABELS, STATUS_LABELS, KNOCKOUT_BRACKET_LABELS } from '../lib/constants'
 import { getCategoryDisplay, getEventDisplayName } from '../lib/displayNames'
@@ -111,7 +111,12 @@ export function EventDetailPage() {
   const layoutPreview = useMemo(() => {
     if (!event || entries.length < 2) return []
     if (event.config.group_count && event.config.entries_per_group) return []
-    return getStartLayoutOptions(entries.length, event.config).slice(0, 4)
+    const all = getStartLayoutOptions(entries.length, event.config)
+    const bracket = event.config.knockout_bracket ?? 'cross'
+    // Block and mirror only work with an even number of groups, so do not promise the others.
+    const usable =
+      bracket === 'block' || bracket === 'mirror' ? all.filter(isLayoutCompatibleWithBlock) : all
+    return (usable.length ? usable : all).slice(0, 4)
   }, [event, entries.length])
 
   const sortedEntries = useMemo(
@@ -219,17 +224,17 @@ export function EventDetailPage() {
           <TournamentCoverImage imageUrl={tournament.image_url} alt={tournament.name} />
         </div>
 
-        <SegmentedControl
-          value={activePublicTab}
-          onChange={setPublicTab}
-          options={publicTabs}
+        <GroupStageNavigator
+          tabs={publicTabs.map((t) => ({ id: t.value, label: t.label }))}
+          activeId={activePublicTab}
+          onChange={(id) => setPublicTab(id as PublicDivisionTab)}
         />
 
         {activePublicTab === 'details' && (
           <div className="space-y-4">
             <section className="bg-card rounded-2xl border border-border p-4 space-y-2">
               <p className="text-[13px] font-semibold text-text-steel">Tournament</p>
-              <p className="font-heading text-lg font-extrabold text-text-primary">{tournament.name}</p>
+              <p className="font-heading text-lg font-semibold text-text-primary">{tournament.name}</p>
               <MetaIconsRow date={tournament.start_date} venue={tournament.venue} />
             </section>
 

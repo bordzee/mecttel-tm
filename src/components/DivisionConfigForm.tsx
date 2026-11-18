@@ -1,5 +1,4 @@
 import { DEFAULT_SET_RULES } from '../lib/constants'
-import { MAX_PER_GROUP } from '../lib/groupLayout'
 import { buildEventName, hasCategoryPicker } from '../lib/displayNames'
 import {
   FormLabel,
@@ -33,7 +32,7 @@ export function createDivisionDraft(partial?: Partial<DivisionDraft>): DivisionD
     category: 'open',
     custom_name: '',
     advance_count: 2,
-    knockout_bracket: 'cross',
+    knockout_bracket: 'mirror',
     team_format: 'SSS',
     roster_size: 3,
     table_count: 1,
@@ -168,9 +167,9 @@ export function DivisionConfigForm({
   return (
     <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-heading text-base font-extrabold text-text-primary">
+        <h2 className="font-heading text-base font-semibold text-text-primary">
           {title ?? displayName}
-        </h3>
+        </h2>
         {onRemove && <RemoveRowButton onClick={onRemove} />}
       </div>
 
@@ -244,7 +243,7 @@ export function DivisionConfigForm({
         <NumberStepper
           value={draft.advance_count}
           min={1}
-          max={MAX_PER_GROUP}
+          max={Math.max(2, draft.advance_count)}
           onChange={(advance_count) => patch({ advance_count })}
         />
       </div>

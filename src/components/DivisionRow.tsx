@@ -25,7 +25,7 @@ export function DivisionRow({ event, to }: { event: TournamentEvent; to: string 
       className="flex items-center gap-3 bg-card rounded-xl border border-border px-3.5 py-3.5 hover:border-brand-500/50 transition-colors"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-base font-bold text-text-primary truncate">{name}</p>
+        <p className="text-base font-semibold text-text-primary truncate">{name}</p>
         <p className="text-xs text-text-steel mt-1">{divisionSubtitle(event.status)}</p>
       </div>
       <Pill variant={eventPillVariant(event.status)}>

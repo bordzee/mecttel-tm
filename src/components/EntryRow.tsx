@@ -22,7 +22,7 @@ export function EntryRow({
   return (
     <div className="flex items-center gap-2.5 bg-card rounded-xl border border-border px-3 py-3">
       <div className="flex-1 min-w-0">
-        <span className="text-[15px] font-bold text-text-primary block truncate">
+        <span className="text-[15px] font-semibold text-text-primary block truncate">
           {getEntryDisplayName(entry)}
         </span>
         {org && <span className="text-sm text-text-steel block mt-0.5">{org}</span>}
@@ -42,7 +42,7 @@ export function EntryRow({
           <button
             type="button"
             onClick={onEdit}
-            className="text-text-steel hover:text-brand-500 p-1"
+            className="press grid h-10 w-10 place-items-center rounded-[10px] text-text-steel hover:bg-card-raised hover:text-accent-text"
             aria-label="Edit entry"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -54,7 +54,7 @@ export function EntryRow({
           <button
             type="button"
             onClick={onMove}
-            className="text-text-steel hover:text-brand-500 p-1"
+            className="press grid h-10 w-10 place-items-center rounded-[10px] text-text-steel hover:bg-card-raised hover:text-accent-text"
             aria-label="Move to another group"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -66,7 +66,7 @@ export function EntryRow({
           <button
             type="button"
             onClick={onRemove}
-            className="text-text-steel hover:text-live p-1"
+            className="press grid h-10 w-10 place-items-center rounded-[10px] text-text-steel hover:bg-card-raised hover:text-danger"
             aria-label="Remove entry"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

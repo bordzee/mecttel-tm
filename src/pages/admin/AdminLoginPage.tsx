@@ -8,9 +8,12 @@ import { StatusPopups } from '../../components/ui/StatusPopups'
 import {
   BackLink,
   Button,
+  BrandDot,
   FormLabelLight,
   TextInputLight,
+  WarningBanner,
 } from '../../components/ui/primitives'
+import { ThemeToggle } from '../../components/ThemeToggle'
 
 export function AdminLoginPage() {
   const { signIn, signOut, user, isAdmin, loading: authLoading } = useAuth()
@@ -36,7 +39,7 @@ export function AdminLoginPage() {
     setLoading(true)
     try {
       const profile = await signIn(email, password)
-      if (profile?.role !== 'admin') {
+      if (profile?.role !== 'admin' && profile?.role !== 'superadmin') {
         await signOut()
         setError('This account does not have admin access.')
         return
@@ -65,40 +68,47 @@ export function AdminLoginPage() {
   return (
     <div className="min-h-screen bg-navy flex flex-col">
       <StatusPopups error={error} onErrorDismiss={() => setError('')} />
-      <header className="px-4 h-[52px] flex items-center">
+      <header className="px-4 h-14 flex items-center justify-between">
         <BackLink to="/">Public site</BackLink>
+        <ThemeToggle />
       </header>
-      <div className="flex-1 flex flex-col items-center justify-center px-5 pb-10">
-        <div className="w-11 h-11 rounded-full bg-brand-500 flex items-center justify-center mb-3">
-          <span className="font-heading font-extrabold text-lg text-white">TT</span>
-        </div>
+      <div className="flex-1 flex flex-col items-center justify-center px-5 pb-16 gap-5">
+        <BrandDot className="!w-11 !h-11" />
         <form
           onSubmit={handleSubmit}
-          className="w-full max-w-sm bg-white rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.35)] p-6 space-y-4"
+          className="w-full max-w-sm bg-card rounded-[14px] border border-border p-6 space-y-4"
         >
-          <h1 className="font-heading text-[22px] font-extrabold text-text-on-light">Admin Login</h1>
+          <div className="space-y-1">
+            <h1 className="font-heading text-[22px] font-semibold tracking-tight text-text-primary">Admin sign in</h1>
+            <p className="text-sm text-text-steel">For tournament organizers.</p>
+          </div>
 
           {!isFirebaseConfigured && (
-            <div className="text-xs font-medium text-[#8A5A00] bg-[#FFF4E0] border border-[#F0C066] p-2.5 rounded-[10px]">
-              Firebase is not configured. Sign-in may be unavailable.
-            </div>
+            <WarningBanner>Firebase is not configured. Sign-in may be unavailable.</WarningBanner>
           )}
 
           {!authLoading && user && !isAdmin && (
-            <div className="text-xs font-medium text-[#8A5A00] bg-[#FFF4E0] border border-[#F0C066] p-2.5 rounded-[10px]">
+            <WarningBanner>
               Signed in as {user.email} without admin access. Sign out and use an admin account.
-            </div>
+            </WarningBanner>
           )}
 
           <div>
             <FormLabelLight>Email</FormLabelLight>
-            <TextInputLight type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            <TextInputLight
+              type="email"
+              required
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
           <div>
             <FormLabelLight>Password</FormLabelLight>
             <TextInputLight
               type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />

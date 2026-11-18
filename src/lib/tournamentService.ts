@@ -6,13 +6,13 @@ import {
   getDocs,
   orderBy,
   query,
+  runTransaction,
   updateDoc,
   where,
   writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { deleteEventData, deleteTournamentData, deleteWhere, deleteEventScopeWhere, deleteQueryDocs, deleteEntryReferences, stripUndefined } from './firebaseHelpers'
-import { deleteTournamentImageFiles } from './tournamentImageService'
+import { deleteWhere, deleteEventScopeWhere, deleteQueryDocs, deleteEntryReferences, stripUndefined } from './firebaseHelpers'
 import type {
   EventType,
   Category,
@@ -29,6 +29,7 @@ import type {
   StandingRow,
 } from '../types'
 import { assignEntriesToGroups } from './groupAssignment'
+import { getEntryDisplayName } from './displayNames'
 import { sortKnockoutMatches } from './knockoutRounds'
 import { generateRoundRobinPairsOrdered, queueOrderForPair } from './roundRobin'
 import { newRoundRobinPairsForEntry, nextGroupLabel, validateLateJoinTarget, type LateJoinMode } from './lateJoinAssignment'
@@ -76,7 +77,7 @@ async function commitBatchSets(pendingSets: PendingWrite[]) {
   }
 }
 
-async function syncTournamentPublicVisibility(tournamentId: string) {
+export async function syncTournamentPublicVisibility(tournamentId: string) {
   const [events, tournament] = await Promise.all([
     fetchEvents(tournamentId),
     fetchTournament(tournamentId),
@@ -153,15 +154,14 @@ export async function fetchPublicTournaments(): Promise<
   const snap = await getDocs(
     query(collection(db, 'tournaments'), where('public_visible', '==', true)),
   )
-  const results: (Tournament & { events: TournamentEvent[] })[] = []
-
-  for (const d of snap.docs) {
-    const tournament = withId(d.id, d.data() as Omit<Tournament, 'id'>)
-    const publicEvents = await fetchPublicEvents(tournament.id)
-    if (publicEvents.length) {
-      results.push({ ...tournament, events: publicEvents })
-    }
-  }
+  // One request per tournament, in parallel: the home page waits for the slowest, not the sum.
+  const loaded = await Promise.all(
+    snap.docs.map(async (d) => {
+      const tournament = withId(d.id, d.data() as Omit<Tournament, 'id'>)
+      return { ...tournament, events: await fetchPublicEvents(tournament.id) }
+    }),
+  )
+  const results = loaded.filter((t) => t.events.length > 0)
 
   return results.sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date ?? ''))
 }
@@ -170,15 +170,12 @@ export async function fetchAllTournaments(): Promise<
   (Tournament & { events: TournamentEvent[] })[]
 > {
   const snap = await getDocs(query(collection(db, 'tournaments'), orderBy('created_at', 'desc')))
-  const results: (Tournament & { events: TournamentEvent[] })[] = []
-
-  for (const d of snap.docs) {
-    const tournament = withId(d.id, d.data() as Omit<Tournament, 'id'>)
-    const events = await fetchEvents(tournament.id)
-    results.push({ ...tournament, events })
-  }
-
-  return results
+  return Promise.all(
+    snap.docs.map(async (d) => {
+      const tournament = withId(d.id, d.data() as Omit<Tournament, 'id'>)
+      return { ...tournament, events: await fetchEvents(tournament.id) }
+    }),
+  )
 }
 
 export async function fetchTournament(id: string) {
@@ -273,9 +270,8 @@ export async function updateEvent(
   patch: Partial<TournamentEvent>,
 ) {
   if (patch.status === 'ended') {
-    await deleteEventData(tournamentId, eventId)
-    await syncTournamentPublicVisibility(tournamentId)
-    return { id: eventId, tournament_id: tournamentId, ...patch } as TournamentEvent
+    // Ending a division deletes its data, which needs the master password.
+    throw new Error('Use deleteDivision to remove a division')
   }
   await updateDoc(doc(db, 'tournaments', tournamentId, 'events', eventId), stripUndefined(patch))
   if (patch.status) await syncTournamentPublicVisibility(tournamentId)
@@ -320,15 +316,7 @@ export async function fetchEntries(tournamentId: string, eventId: string): Promi
   return hydrateEntries(tournamentId, eventId)
 }
 
-export async function deleteTournament(id: string) {
-  await deleteTournamentData(id)
-  void deleteTournamentImageFiles(id).catch(() => {})
-}
 
-export async function deleteEvent(tournamentId: string, eventId: string) {
-  await deleteEventData(tournamentId, eventId)
-  await syncTournamentPublicVisibility(tournamentId)
-}
 
 function entryScope(tournamentId: string, eventId: string) {
   return { tournament_id: tournamentId, event_id: eventId }
@@ -998,6 +986,20 @@ export async function moveEntryToGroup(
   const targetGroup = groups.find((g) => g.id === targetGroupId)
   if (!targetGroup) throw new Error('Target group not found')
 
+  // Moving replaces the player's matches, so recorded results would be lost and
+  // their opponents' standings would change. Refuse instead of deleting results.
+  const playedInSource = groupMatches.filter(
+    (m) =>
+      m.group_id === sourceGroupId &&
+      m.status === 'completed' &&
+      (m.entry_a_id === entryId || m.entry_b_id === entryId),
+  ).length
+  if (playedInSource > 0) {
+    throw new Error(
+      `${getEntryDisplayName(entry)} has already played ${playedInSource} match${playedInSource === 1 ? '' : 'es'} in this group, so they can no longer be moved. Moving would delete those results.`,
+    )
+  }
+
   const targetEntryIds = members
     .filter((m) => m.group_id === targetGroupId)
     .map((m) => m.entry_id)
@@ -1064,6 +1066,30 @@ async function loadEventForMatch(matchData: {
   return fetchEvent(matchData.tournament_id, matchData.event_id)
 }
 
+/**
+ * Writes a first-time result inside a transaction. The match is re-read and
+ * re-validated at commit time, so two admins scoring the same match cannot
+ * silently overwrite each other: the second save fails with a clear message.
+ */
+async function completeMatchOnce(
+  collectionName: 'group_matches' | 'knockout_matches',
+  matchId: string,
+  update: Record<string, unknown>,
+  validate: (match: GroupMatch | KnockoutMatch) => void,
+) {
+  const matchRef = doc(db, collectionName, matchId)
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(matchRef)
+    if (!snap.exists()) throw new Error('Match not found')
+    validate({ id: matchId, ...snap.data() } as GroupMatch | KnockoutMatch)
+    tx.update(matchRef, {
+      ...update,
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+    })
+  })
+}
+
 export async function saveGroupMatchResult(
   matchId: string,
   update: {
@@ -1083,17 +1109,13 @@ export async function saveGroupMatchResult(
     tournament_id: matchData.tournament_id as string,
     event_id: matchData.event_id as string,
   })
-  validateMatchResultSave(
-    { id: matchId, ...matchData } as GroupMatch,
-    update,
-    { eventType: event.event_type, config: event.config, stage: 'group' },
+  await completeMatchOnce('group_matches', matchId, update, (fresh) =>
+    validateMatchResultSave(fresh as GroupMatch, update, {
+      eventType: event.event_type,
+      config: event.config,
+      stage: 'group',
+    }),
   )
-
-  await updateDoc(matchRef, {
-    ...update,
-    status: 'completed',
-    completed_at: new Date().toISOString(),
-  })
 }
 
 export async function updateGroupMatchResult(
@@ -1320,17 +1342,13 @@ export async function saveKnockoutMatchResult(
     tournament_id: matchData.tournament_id as string,
     event_id: matchData.event_id as string,
   })
-  validateMatchResultSave(
-    { id: matchId, ...matchData } as KnockoutMatch,
-    update,
-    { eventType: event.event_type, config: event.config, stage },
+  await completeMatchOnce('knockout_matches', matchId, update, (fresh) =>
+    validateMatchResultSave(fresh as KnockoutMatch, update, {
+      eventType: event.event_type,
+      config: event.config,
+      stage,
+    }),
   )
-
-  await updateDoc(matchRef, {
-    ...update,
-    status: 'completed',
-    completed_at: new Date().toISOString(),
-  })
 
   const eventId = matchData.event_id as string
   const tournamentId = matchData.tournament_id as string
@@ -1415,7 +1433,7 @@ export async function generateKnockoutBracket(tournamentId: string, event: Tourn
     }
 
     const computed = computeStandings(entryIds, groupMatches, entryMap)
-    if (needsManualRankResolution(computed) && !group.manual_rank_order?.length) {
+    if (needsManualRankResolution(computed, advanceCount) && !group.manual_rank_order?.length) {
       throw new Error(
         `Group ${group.label} has tied standings — set manual ranks before generating knockout`,
       )
@@ -1443,6 +1461,14 @@ export async function generateKnockoutBracket(tournamentId: string, event: Tourn
 
   if (tree.length) {
     await commitBatchSets(buildKnockoutTreeWrites(tournamentId, event.id, tree))
+  }
+
+  // Block and mirror cannot be built with an odd number of groups, so the bracket above is a
+  // cross bracket. Record that so the division does not keep claiming to be mirror.
+  if ((bracketType === 'block' || bracketType === 'mirror') && groupOrder.length % 2 !== 0) {
+    await updateDoc(doc(db, 'tournaments', tournamentId, 'events', event.id), {
+      config: { ...event.config, knockout_bracket: 'cross' },
+    })
   }
 
   if (tree.length) {

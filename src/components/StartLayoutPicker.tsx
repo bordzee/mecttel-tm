@@ -16,6 +16,11 @@ export function StartLayoutPicker({
 }) {
   if (!options.length) return null
 
+  // Best layout: an even number of groups (mirror works) and a full bracket with no byes.
+  const isPow2 = (n: number) => n >= 2 && (n & (n - 1)) === 0
+  const clean = (o: StartLayoutOption) => o.groupCount % 2 === 0 && isPow2(o.groupCount * advanceCount)
+  const recommendedKey = (options.find(clean) ?? options.find((o) => o.groupCount % 2 === 0))?.key
+
   return (
     <div className="space-y-2">
       <FormLabel>Select group layout</FormLabel>
@@ -49,8 +54,18 @@ export function StartLayoutPicker({
                   {byePreview && (
                     <span className="block text-xs text-text-steel mt-0.5 break-words">{byePreview}</span>
                   )}
+                  {opt.key === recommendedKey && (
+                    <span className="inline-block text-xs font-semibold text-accent-text mt-1.5 mr-2">
+                      Recommended: even groups, clean bracket
+                    </span>
+                  )}
+                  {opt.groupCount % 2 !== 0 && (
+                    <span className="inline-block text-xs text-amber mt-1.5 mr-2">
+                      odd group count: mirror not available
+                    </span>
+                  )}
                   {opt.uneven && (
-                    <span className="inline-block text-[11px] font-semibold text-text-steel mt-1.5">
+                    <span className="inline-block text-xs font-semibold text-text-steel mt-1.5">
                       uneven
                     </span>
                   )}

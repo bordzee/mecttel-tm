@@ -1,13 +1,4 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  limit,
-  query,
-  where,
-  writeBatch,
-  type DocumentReference,
-} from 'firebase/firestore'
+import { collection, getDocs, limit, query, where, writeBatch, type DocumentReference, doc } from 'firebase/firestore'
 import { db } from './firebase'
 
 /** Firestore rejects `undefined`; omit those fields before writes. */
@@ -98,6 +89,27 @@ async function deleteEntryMatchReferences(
   }
 }
 
+export async function deleteEntryReferences(
+  tournamentId: string,
+  eventId: string,
+  entryId: string,
+) {
+  await deleteEntryMatchReferences(tournamentId, eventId, entryId)
+}
+
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+      if (i < attempts) await new Promise((r) => setTimeout(r, 400 * i))
+    }
+  }
+  throw lastError
+}
+
 async function deleteEventScopedData(tournamentId: string, eventId: string) {
   const eventScope = [
     { field: 'tournament_id', value: tournamentId },
@@ -131,33 +143,15 @@ async function deleteEventScopedData(tournamentId: string, eventId: string) {
   await deleteQueryDocs([doc(db, 'tournaments', tournamentId, 'events', eventId)])
 }
 
-async function withRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
-  let lastError: unknown
-  for (let i = 1; i <= attempts; i++) {
-    try {
-      return await fn()
-    } catch (err) {
-      lastError = err
-      if (i < attempts) {
-        await new Promise((r) => setTimeout(r, 400 * i))
-      }
-    }
-  }
-  throw lastError
-}
-
-export async function deleteEntryReferences(
-  tournamentId: string,
-  eventId: string,
-  entryId: string,
-) {
-  await deleteEntryMatchReferences(tournamentId, eventId, entryId)
-}
-
+/**
+ * Deletes a division and everything in it. Security rules refuse the final step unless
+ * a delete grant exists, so call this only through guardedDelete.ts (master password).
+ */
 export async function deleteEventData(tournamentId: string, eventId: string) {
   await withRetry(() => deleteEventScopedData(tournamentId, eventId))
 }
 
+/** Same, for a whole tournament. */
 export async function deleteTournamentData(tournamentId: string) {
   await withRetry(async () => {
     const eventsSnap = await getDocs(collection(db, 'tournaments', tournamentId, 'events'))

@@ -1,8 +1,5 @@
 import { initializeApp, getApps, type FirebaseOptions } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
-import { getFunctions } from 'firebase/functions'
-import { getStorage } from 'firebase/storage'
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 
 const firebaseConfig: FirebaseOptions = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -33,13 +30,25 @@ export const isImageUploadEnabled = Boolean(
 
 const demoConfig: FirebaseOptions = { apiKey: 'demo', projectId: 'demo', appId: 'demo' }
 
-const app = isFirebaseConfigured
+export const app = isFirebaseConfigured
   ? getApps().length
     ? getApps()[0]!
     : initializeApp(firebaseConfig)
   : getApps()[0] ?? initializeApp(demoConfig)
 
-export const auth = getAuth(app)
 export const db = getFirestore(app)
-export const functions = getFunctions(app)
-export const storage = getStorage(app)
+
+// Storage is only used by organizers, so it is loaded on demand and stays out of the public bundle.
+export async function getStorageService() {
+  const { getStorage } = await import('firebase/storage')
+  return getStorage(app)
+}
+
+/** Local development against the Firebase emulators: VITE_USE_EMULATOR=true npm run dev */
+if (import.meta.env.VITE_USE_EMULATOR === 'true') {
+  try {
+    connectFirestoreEmulator(db, '127.0.0.1', 8381)
+  } catch {
+    // Already connected (hot reload).
+  }
+}

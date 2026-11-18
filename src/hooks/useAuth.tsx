@@ -6,7 +6,8 @@ import {
   signOut as firebaseSignOut,
 } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
-import { auth, db, isFirebaseConfigured } from '../lib/firebase'
+import { db, isFirebaseConfigured } from '../lib/firebase'
+import { auth } from '../lib/firebaseAuth'
 import type { Profile } from '../types'
 
 interface AuthContextValue {
@@ -14,6 +15,7 @@ interface AuthContextValue {
   profile: Profile | null
   loading: boolean
   isAdmin: boolean
+  isSuperAdmin: boolean
   signIn: (email: string, password: string) => Promise<Profile | null>
   signOut: () => Promise<void>
 }
@@ -63,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(credential.user)
       setProfile(p)
     }
-    if (p?.role !== 'admin') {
+    if (p?.role !== 'admin' && p?.role !== 'superadmin') {
       await firebaseSignOut(auth)
       setUser(null)
       setProfile(null)
@@ -84,7 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         profile,
         loading,
-        isAdmin: profile?.role === 'admin',
+        isAdmin: profile?.role === 'admin' || profile?.role === 'superadmin',
+        isSuperAdmin: profile?.role === 'superadmin',
         signIn,
         signOut,
       }}

@@ -32,6 +32,30 @@ describe('standings', () => {
     expect(needsManualRankResolution(rows)).toBe(true)
   })
 
+  it('only asks for a manual decision when the tie can affect who advances', () => {
+    const row = (entryId: string, wins: number, diff: number, rank: number) => ({
+      entryId,
+      name: entryId,
+      played: 4,
+      wins,
+      losses: 4 - wins,
+      scoreFor: 0,
+      scoreAgainst: 0,
+      diff,
+      rank,
+    })
+    // 4th and 5th tied, two advance: nothing to decide
+    const bottomTie = [row('a', 4, 8, 1), row('b', 3, 5, 2), row('c', 2, 1, 3), row('d', 1, -4, 4), row('e', 1, -4, 5)]
+    expect(needsManualRankResolution(bottomTie)).toBe(true)
+    expect(needsManualRankResolution(bottomTie, 2)).toBe(false)
+    // 2nd and 3rd tied across the cut line
+    const cutTie = [row('a', 4, 8, 1), row('b', 3, 5, 2), row('c', 3, 5, 3), row('d', 1, -4, 4), row('e', 0, -6, 5)]
+    expect(needsManualRankResolution(cutTie, 2)).toBe(true)
+    // 1st and 2nd tied, both advance: their order still sets the seeding
+    const topTie = [row('a', 4, 8, 1), row('b', 4, 8, 2), row('c', 2, 1, 3), row('d', 1, -4, 4), row('e', 0, -6, 5)]
+    expect(needsManualRankResolution(topTie, 2)).toBe(true)
+  })
+
   it('ignores completed matches without a valid winner', () => {
     const entryMap = new Map<string, TournamentEntry>()
     const rows = computeStandings(

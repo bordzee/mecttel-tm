@@ -132,14 +132,25 @@ export function applyManualRankOrder(
   return ordered
 }
 
-/** True when automatic tie-break leaves two or more entries tied on wins and diff. */
-export function needsManualRankResolution(rows: StandingRow[]): boolean {
-  const tieGroups = new Map<string, number>()
-  for (const row of rows) {
+/**
+ * True when automatic tie-break leaves two or more entries tied on wins and diff.
+ *
+ * Pass `advanceCount` to ignore ties that cannot matter: a tie only needs a manual
+ * decision if at least one tied entry sits in a qualifying place (it decides who
+ * advances, or the order they are seeded). A tie for the bottom places of a group
+ * that nobody advances from is left alone.
+ */
+export function needsManualRankResolution(rows: StandingRow[], advanceCount?: number): boolean {
+  const tieGroups = new Map<string, number[]>()
+  rows.forEach((row, index) => {
     const key = `${row.wins}:${row.diff}`
-    tieGroups.set(key, (tieGroups.get(key) ?? 0) + 1)
-  }
-  return [...tieGroups.values()].some((count) => count > 1)
+    tieGroups.set(key, [...(tieGroups.get(key) ?? []), index])
+  })
+  return [...tieGroups.values()].some(
+    (positions) =>
+      positions.length > 1 &&
+      (advanceCount == null || positions.some((position) => position < advanceCount)),
+  )
 }
 
 export function resolveGroupStandings(

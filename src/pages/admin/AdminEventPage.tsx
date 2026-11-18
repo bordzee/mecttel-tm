@@ -1,31 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AdminLayout } from '../../components/AdminLayout'
-import {
-  AddEntryButton,
-  BackLink,
-  Button,
-  CaptionText,
-  DeleteDivisionButton,
-  EmptyMessage,
-  EventAdminTitle,
-  FormLabel,
-  InfoNoteCard,
-  IconActionButton,
-  PanelSectionTitle,
-  Pill,
-  SectionHeaderRow,
-  TextInput,
-  WarningBanner,
-} from '../../components/ui/primitives'
-import { GroupStandingsTable } from '../../components/GroupStandingsTable'
-import { GroupRankEditor } from '../../components/GroupRankEditor'
+import { BackLink, Button, DeleteDivisionButton, EmptyMessage, EventAdminTitle, InfoNoteCard, IconActionButton, PanelSectionTitle, Pill, SectionHeaderRow, WarningBanner } from '../../components/ui/primitives'
 import { GroupStageNavigator } from '../../components/GroupStageNavigator'
-import { KnockoutBracket } from '../../components/KnockoutBracket'
-import { MatchScoreEntry } from '../../components/MatchScoreEntry'
 import { EntryEditDialog, type EntryEditFormState } from '../../components/EntryEditDialog'
 import { ConflictWarnings } from '../../components/ConflictWarnings'
-import { SeededSelect } from '../../components/SeededSelect'
 import { LateEntryDialog } from '../../components/LateEntryDialog'
 import { MoveEntryDialog } from '../../components/MoveEntryDialog'
 import { GenerateGroupStageDialog } from '../../components/GenerateGroupStageDialog'
@@ -35,49 +14,19 @@ import { EventQueueView } from '../../components/EventQueueView'
 import { ParticipantsListDialog } from '../../components/ParticipantsListDialog'
 import { SetRulesEditorDialog } from '../../components/SetRulesEditorDialog'
 import { formatSetRulesSummary, normalizeSetRules } from '../../lib/setRules'
-import {
-  fetchTournament,
-  fetchEvent,
-  fetchEntries,
-  updateEvent,
-  updateEventSetRules,
-  deleteEvent,
-  deleteEntry,
-  moveEntryToGroup,
-  addTeamEntry,
-  addPlayerEntry,
-  addPairEntry,
-  updatePlayerEntry,
-  updatePairEntry,
-  updateTeamEntry,
-  generateGroupStage,
-  addLateJoinEntry,
-  type LateJoinEntryInput,
-  fetchGroups,
-  fetchGroupMembers,
-  fetchGroupMatches,
-  fetchKnockoutMatches,
-  saveGroupMatchResult,
-  updateGroupMatchResult,
-  updateKnockoutMatchResult,
-  saveGroupRankOrder,
-  clearGroupRankOrder,
-  regenerateKnockoutFromRanks,
-  saveKnockoutMatchResult,
-  fetchTeamRosters,
-} from '../../lib/tournamentService'
+import { fetchTournament, fetchEvent, fetchEntries, updateEvent, updateEventSetRules, deleteEntry, moveEntryToGroup, addTeamEntry, addPlayerEntry, addPairEntry, updatePlayerEntry, updatePairEntry, updateTeamEntry, generateGroupStage, addLateJoinEntry, type LateJoinEntryInput, fetchGroups, fetchGroupMembers, fetchGroupMatches, fetchKnockoutMatches, saveGroupRankOrder, clearGroupRankOrder, regenerateKnockoutFromRanks, fetchTeamRosters } from '../../lib/tournamentService'
 import { assignEntriesToGroups, assignmentWarningsForMembers, canAddEntryToGroup } from '../../lib/groupAssignment'
-import { buildOrderedGroupQueue } from '../../lib/matchQueue'
+import { buildGroupStageData } from '../../lib/groupStageData'
 import {
   getStartLayoutOptions,
   isLayoutCompatibleWithBlock,
+  MIN_PER_GROUP,
   parseSeededValue,
 } from '../../lib/groupLayout'
 import { suggestBalanceGroup, type GroupSummary } from '../../lib/lateJoinAssignment'
-import { buildKnockoutStageTabs, filterKnockoutMatchesForStage, isKnockoutStage, knockoutRoundFromStageId, matchEffectiveRound } from '../../lib/knockoutTabs'
-import { hasPendingEarlierKnockoutRound, setRulesStageForRound, formatKnockoutByePreviewFromGroupSizes } from '../../lib/knockoutRounds'
-import { knockoutMatchHasCompletedDependents } from '../../lib/knockoutSeeding'
-import { computeStandings, resolveGroupStandings, needsManualRankResolution } from '../../lib/standings'
+import { buildKnockoutStageTabs, filterKnockoutMatchesForStage, isKnockoutStage, knockoutRoundFromStageId } from '../../lib/knockoutTabs'
+import { formatKnockoutByePreviewFromGroupSizes } from '../../lib/knockoutRounds'
+import { resolveGroupStandings, needsManualRankResolution } from '../../lib/standings'
 import { validateTournamentStart } from '../../lib/matchOutcomes'
 import { getEntryDisplayName, getEventDisplayName, isPlayerEventType } from '../../lib/displayNames'
 import {
@@ -100,7 +49,15 @@ import { useMinLoading } from '../../hooks/useMinLoading'
 import { AdminEventPageSkeleton } from '../../components/ui/Skeleton'
 import { StatusPopups } from '../../components/ui/StatusPopups'
 import { DeleteConfirmDialog } from '../../components/ui/DeleteConfirmDialog'
+import { MasterPasswordDialog } from '../../components/ui/MasterPasswordDialog'
+import { deleteDivision } from '../../lib/guardedDelete'
+import { BracketsPanel } from './division/BracketsPanel'
+import { EntryForm } from './division/EntryForm'
 import type { Tournament, TournamentEvent, TournamentEntry, Group, KnockoutBracketType } from '../../types'
+
+
+/** Two groups of the minimum size is the smallest division that can start. */
+const MIN_ENTRIES_TO_START = MIN_PER_GROUP * 2
 
 type AdminDivisionTab = 'participants' | 'late-check-in' | 'queue' | 'brackets'
 
@@ -156,6 +113,11 @@ export function AdminEventPage() {
   const [entryEditError, setEntryEditError] = useState('')
   const [pageErrorDismissed, setPageErrorDismissed] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState | null>(null)
+  const [masterDelete, setMasterDelete] = useState<{
+    title: string
+    description: string
+    confirmLabel: string
+  } | null>(null)
   const [participantsDialogOpen, setParticipantsDialogOpen] = useState(false)
   const [movingEntry, setMovingEntry] = useState<TournamentEntry | null>(null)
   const [setRulesDialogOpen, setSetRulesDialogOpen] = useState(false)
@@ -260,29 +222,10 @@ export function AdminEventPage() {
 
   const entryMap = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries])
 
-  const groupStageData = useMemo(() => {
-    return groups.map((group) => {
-      const entryIds = members.filter((m) => m.group_id === group.id).map((m) => m.entry_id)
-      const matches = groupMatches.filter((m) => m.group_id === group.id)
-      const completed = matches.filter((m) => m.status === 'completed')
-      const pending = buildOrderedGroupQueue(
-        matches.filter((m) => m.status !== 'completed'),
-        completed,
-      )
-      const computedRows = computeStandings(entryIds, matches, entryMap)
-      return {
-        group,
-        entryIds,
-        matches,
-        pending,
-        completed,
-        computedRows,
-        rows: resolveGroupStandings(entryIds, matches, entryMap, group.manual_rank_order),
-        groupPlayComplete: matches.length > 0 && pending.length === 0,
-        hasManualRanks: !!group.manual_rank_order?.length,
-      }
-    })
-  }, [groups, members, groupMatches, entryMap])
+  const groupStageData = useMemo(
+    () => buildGroupStageData(groups, members, groupMatches, entryMap),
+    [groups, members, groupMatches, entryMap],
+  )
 
   const allGroupPlayComplete =
     groupStageData.length > 0 && groupStageData.every((g) => g.groupPlayComplete)
@@ -946,7 +889,9 @@ export function AdminEventPage() {
     setDeleteConfirm({
       title: `Remove ${getEntryDisplayName(entry)}?`,
       description: canManageOngoingParticipants
-        ? 'This removes the player and deletes all of their group-stage matches.'
+        ? completedMatchesFor(entry.id) > 0
+          ? `This removes the player and deletes all of their group-stage matches, including ${completedMatchesFor(entry.id)} already scored. Their opponents' standings will change.`
+          : 'This removes the player and deletes all of their group-stage matches.'
         : 'This entry will be permanently removed from the division.',
       confirmLabel: 'Remove',
       confirmingLabel: 'Removing…',
@@ -960,7 +905,19 @@ export function AdminEventPage() {
     })
   }
 
+  const completedMatchesFor = (entryId: string) =>
+    groupMatches.filter(
+      (m) => m.status === 'completed' && (m.entry_a_id === entryId || m.entry_b_id === entryId),
+    ).length
+
   const handleOpenMoveEntry = (entry: TournamentEntry) => {
+    const played = completedMatchesFor(entry.id)
+    if (played > 0) {
+      setError(
+        `${getEntryDisplayName(entry)} has already played ${played} match${played === 1 ? '' : 'es'}, so they can no longer be moved. Moving would delete those results.`,
+      )
+      return
+    }
     const currentGroupId = members.find((m) => m.entry_id === entry.id)?.group_id
     const otherGroups = groupSummaries.filter((g) => g.groupId !== currentGroupId)
     if (!otherGroups.length) {
@@ -1002,34 +959,30 @@ export function AdminEventPage() {
       setMessage('Set rules saved')
       setSetRulesDialogOpen(false)
       await fetchEventData()
-    } catch (err) {
-      throw err
     } finally {
+      // Errors propagate to the dialog, which shows them inline.
       setLoading(false)
     }
   }
 
+  // Deleting a division is irreversible, so it asks for the master password (checked on the server).
   const handleDeleteEvent = () => {
     if (!tournament || !event || !tournamentId) return
-    setDeleteConfirm({
+    setMasterDelete({
       title: `Delete "${getEventDisplayName(event)}"?`,
-      description: 'This permanently removes the division and all its data.',
-      onConfirm: async () => {
-        await deleteEvent(tournamentId, event.id)
-        navigate(`/admin/tournaments/${tournamentId}`)
-      },
+      description:
+        'This permanently deletes the division and everything in it: entries, groups and results. It cannot be undone.',
+      confirmLabel: 'Delete division',
     })
   }
 
   const handleDeleteDivisionData = () => {
     if (!tournamentId || !event) return
-    setDeleteConfirm({
+    setMasterDelete({
       title: 'Delete division data?',
-      description: 'This permanently removes all division records. This cannot be undone.',
-      onConfirm: async () => {
-        await updateEvent(tournamentId, event.id, { status: 'ended' })
-        navigate(`/admin/tournaments/${tournamentId}`)
-      },
+      description:
+        'This permanently deletes the division and all of its entries, groups and match results, and removes it from the public site. It cannot be undone.',
+      confirmLabel: 'Delete division data',
     })
   }
 
@@ -1130,7 +1083,7 @@ export function AdminEventPage() {
     const unresolved = groupStageData.filter(
       (g) =>
         g.groupPlayComplete &&
-        needsManualRankResolution(g.computedRows) &&
+        needsManualRankResolution(g.computedRows, event?.config.advance_count) &&
         !g.group.manual_rank_order?.length,
     )
     if (unresolved.length) {
@@ -1312,80 +1265,19 @@ export function AdminEventPage() {
     : adminTabs[0]!.id
 
   const renderEntryForm = (lateOnly: boolean) => (
-    <form onSubmit={handleAddEntry} className="bg-card border border-border rounded-2xl p-4 space-y-3">
-      {event.event_type === 'team' && (
-        <>
-          <div>
-            <FormLabel>Team name</FormLabel>
-            <TextInput name="name" placeholder="Enter team name" required />
-          </div>
-          <div>
-            <FormLabel>Organization (optional)</FormLabel>
-            <TextInput name="organization" placeholder="Club or organization" />
-          </div>
-          <div>
-            <FormLabel>Roster</FormLabel>
-            <TextInput name="roster" placeholder={`Roster names, comma-separated (e.g. 3–${rosterSize} players)`} required />
-          </div>
-          <SeededSelect />
-        </>
-      )}
-      {isPlayerEventType(event.event_type) && (
-        <>
-          <div>
-            <FormLabel>Player name</FormLabel>
-            <TextInput name="name" placeholder="Enter player name" required />
-          </div>
-          <div>
-            <FormLabel>Organization (optional)</FormLabel>
-            <TextInput name="organization" placeholder="Club or organization" />
-          </div>
-          <SeededSelect />
-        </>
-      )}
-      {event.event_type === 'doubles' && (
-        <>
-          <div>
-            <FormLabel>Pair name</FormLabel>
-            <TextInput name="pair_name" placeholder="Pair name (optional)" />
-          </div>
-          <div>
-            <FormLabel>Player A</FormLabel>
-            <TextInput name="player_a" placeholder="Player A" required />
-          </div>
-          <div>
-            <FormLabel>Player B</FormLabel>
-            <TextInput name="player_b" placeholder="Player B" required />
-          </div>
-          <div>
-            <FormLabel>Organization</FormLabel>
-            <TextInput name="organization" placeholder="Organization (optional)" />
-          </div>
-          <SeededSelect />
-        </>
-      )}
-      <AddEntryButton
-        type="submit"
-        disabled={
-          addingEntry ||
-          loading ||
-          (!lateOnly && canEditEntries && cfg.total_slots != null && entries.length >= cfg.total_slots)
-        }
-        fullWidth
-      >
-        {addingEntry ? 'Adding…' : lateOnly ? 'Add late entry' : 'Add entry'}
-      </AddEntryButton>
-      {!lateOnly && (
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => setParticipantsDialogOpen(true)}
-          fullWidth
-        >
-          Show participants
-        </Button>
-      )}
-    </form>
+    <EntryForm
+      eventType={event.event_type}
+      rosterSize={rosterSize}
+      lateOnly={lateOnly}
+      adding={addingEntry}
+      submitDisabled={
+        addingEntry ||
+        loading ||
+        (!lateOnly && canEditEntries && cfg.total_slots != null && entries.length >= cfg.total_slots)
+      }
+      onSubmit={handleAddEntry}
+      onShowParticipants={() => setParticipantsDialogOpen(true)}
+    />
   )
 
   return (
@@ -1418,14 +1310,17 @@ export function AdminEventPage() {
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {canEditSetRules && (
-              <IconActionButton onClick={() => setSetRulesDialogOpen(true)}>
+              <IconActionButton label="Edit set rules" onClick={() => setSetRulesDialogOpen(true)}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M12 20h9" /><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z" />
                 </svg>
               </IconActionButton>
             )}
           {canEditDivisionSettings && (
-            <IconActionButton onClick={editingDivision ? closeDivisionEdit : openDivisionEdit}>
+            <IconActionButton
+              label="Edit division settings"
+              onClick={editingDivision ? closeDivisionEdit : openDivisionEdit}
+            >
               <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M12 20h9" /><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.855z" />
               </svg>
@@ -1475,7 +1370,7 @@ export function AdminEventPage() {
             <SectionHeaderRow
               title="Participants"
               trailing={
-                <span className="text-[13px] font-bold text-text-steel tabular-nums">
+                <span className="text-[13px] font-semibold text-text-steel tabular-nums">
                   {entryCountLabel}
                 </span>
               }
@@ -1486,8 +1381,8 @@ export function AdminEventPage() {
                 {canManageOngoingParticipants && (
                   <InfoNoteCard>
                     Remove players or move them to another group before knockout is generated.
-                    Moving a player deletes their matches in the old group and creates new
-                    round-robin matches in the target group.
+                    Only a player who has not played any match yet can be moved; their
+                    unplayed matches are replaced by new ones in the target group.
                   </InfoNoteCard>
                 )}
                 <Button
@@ -1513,6 +1408,13 @@ export function AdminEventPage() {
               >
                 Ready
               </Button>
+            )}
+            {event.status === 'upcoming' && !canShowReadyButton && (
+              <InfoNoteCard>
+                {entries.length < MIN_ENTRIES_TO_START
+                  ? `A division needs at least ${MIN_ENTRIES_TO_START} entries to make two groups of ${MIN_PER_GROUP}. Add ${MIN_ENTRIES_TO_START - entries.length} more to start the group stage.`
+                  : 'No group layout fits this many entries. Add or remove an entry to start the group stage.'}
+              </InfoNoteCard>
             )}
             {canEditEntries && (
               <DeleteDivisionButton onClick={handleDeleteEvent} disabled={loading}>
@@ -1541,7 +1443,7 @@ export function AdminEventPage() {
 
         {event.status === 'ongoing' && groups.length === 0 && (
           <WarningBanner>
-            Group stage data is missing. End this division and start it again if setup failed.
+            Group stage data is missing. Delete this division's data and start it again if setup failed.
           </WarningBanner>
         )}
 
@@ -1555,279 +1457,30 @@ export function AdminEventPage() {
         )}
 
         {activeAdminTab === 'brackets' && event.status === 'ongoing' && groups.length > 0 && (
-        <>
-          <GroupStageNavigator tabs={stageTabs} activeId={activeStage} onChange={setActiveStage} />
-
-          <div className="space-y-3">
-            <div className="bg-card border border-border-strong rounded-2xl p-4 space-y-3.5">
-              <PanelSectionTitle>Knockout stage</PanelSectionTitle>
-              {liveKnockoutByePreview && !knockoutMatches.length && (
-                <InfoNoteCard>
-                  Current knockout estimate: {liveKnockoutByePreview}
-                </InfoNoteCard>
-              )}
-              {!allGroupPlayComplete ? (
-                <>
-                  <CaptionText>
-                    Finish all group-stage matches before generating the knockout bracket.
-                    {pendingGroupMatchCount > 0
-                      ? ` ${pendingGroupMatchCount} match${pendingGroupMatchCount === 1 ? '' : 'es'} still to score`
-                      : groupsAwaitingScores.length > 0
-                        ? ` — group${groupsAwaitingScores.length === 1 ? '' : 's'} ${groupsAwaitingScores.map((g) => g.group.label).join(', ')} ${groupsAwaitingScores.length === 1 ? 'has' : 'have'} no completed matches yet`
-                        : ''}
-                    .
-                  </CaptionText>
-                  <Button type="button" disabled fullWidth>
-                    Generate knockout bracket
-                  </Button>
-                </>
-              ) : knockoutHasScores ? (
-                <CaptionText>
-                  Knockout scoring has started — the bracket can no longer be regenerated from group
-                  ranks.
-                </CaptionText>
-              ) : knockoutMatches.length === 0 ? (
-                <>
-                  <CaptionText>
-                    Save any manual group ranks first, then generate the bracket from the final
-                    positions.
-                  </CaptionText>
-                  <Button
-                    type="button"
-                    onClick={() => openGenerateKnockoutDialog('generate')}
-                    disabled={loading}
-                    fullWidth
-                  >
-                    Generate knockout bracket
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <CaptionText>
-                    Update manual group ranks if needed, then regenerate the bracket from the latest
-                    standings.
-                  </CaptionText>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => openGenerateKnockoutDialog('regenerate')}
-                    disabled={loading}
-                    fullWidth
-                  >
-                    Regenerate knockout from ranks
-                  </Button>
-                </>
-              )}
-            </div>
-            {knockoutMatches.length > 0 && !knockoutHasScores && (
-              <WarningBanner>
-                Once knockout scoring starts, ranks can no longer update the bracket.
-              </WarningBanner>
-            )}
-          </div>
-
-          {activeGroupStage && (
-            <section className="space-y-4">
-              <PanelSectionTitle>Group {activeGroupStage.group.label} standings</PanelSectionTitle>
-
-              <GroupStandingsTable
-                label={activeGroupStage.group.label}
-                rows={activeGroupStage.rows}
-                manualRanks={activeGroupStage.hasManualRanks}
-                manualRankNote={activeGroupStage.group.manual_rank_note}
-                entryMap={entryMap}
-                onShowEntryInfo={handleShowEntryInfo}
-              />
-
-              {activeGroupStage.groupPlayComplete &&
-                (activeGroupStage.hasManualRanks ||
-                  needsManualRankResolution(activeGroupStage.computedRows)) && (
-                <GroupRankEditor
-                  groupLabel={activeGroupStage.group.label}
-                  rows={activeGroupStage.computedRows}
-                  manualRankOrder={activeGroupStage.group.manual_rank_order}
-                  manualRankNote={activeGroupStage.group.manual_rank_note}
-                  saving={loading}
-                  disabled={knockoutHasScores}
-                  diffLabel={event.event_type === 'team' ? 'rubbers' : 'sets'}
-                  onSave={(orderedEntryIds, note) =>
-                    handleSaveGroupRanks(activeGroupStage.group.id, orderedEntryIds, note)
-                  }
-                  onClear={() => handleClearGroupRanks(activeGroupStage.group.id)}
-                />
-              )}
-
-              {activeGroupStage.pending.length > 0 && (
-                <div>
-                  <PanelSectionTitle>To score ({activeGroupStage.pending.length})</PanelSectionTitle>
-                  <div className="space-y-3 mt-3">
-                    {activeGroupStage.pending.map((m) => (
-                      <MatchScoreEntry
-                        key={m.id}
-                        eventType={event.event_type}
-                        config={cfg}
-                        match={m}
-                        stage="group"
-                        onSave={async (data) => {
-                          await saveGroupMatchResult(m.id, data)
-                          await fetchEventData()
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeGroupStage.completed.length > 0 && (
-                <details className="group">
-                  <summary className="flex items-center justify-between bg-card rounded-xl border border-border px-3.5 py-3 cursor-pointer list-none">
-                    <span className="text-sm font-bold text-text-bluewhite">
-                      Completed ({activeGroupStage.completed.length})
-                    </span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-steel group-open:rotate-180 transition-transform" aria-hidden>
-                      <path d="m6 9 6 6 6-6" />
-                    </svg>
-                  </summary>
-                  <div className="mt-2 space-y-2">
-                    {activeGroupStage.completed.map((m) => (
-                      <div key={m.id} className="rounded-[10px] border border-border bg-[#0C284780] px-3.5 py-2.5">
-                        <MatchScoreEntry
-                          eventType={event.event_type}
-                          config={cfg}
-                          match={m}
-                          stage="group"
-                          allowEdit={!knockoutHasScores}
-                          onSave={async (data) => {
-                            const { warnings: editWarnings } = await updateGroupMatchResult(m.id, data)
-                            if (editWarnings.length) {
-                              setWarnings((prev) => [...new Set([...prev, ...editWarnings])])
-                            }
-                            setMessage('Score updated.')
-                            await fetchEventData()
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
-            </section>
-          )}
-
-          {activeKnockoutRound && activeKnockoutMatches.length > 0 && (() => {
-            const scorable = activeKnockoutMatches.filter(
-              (m) => m.status !== 'completed' && m.entry_a_id && m.entry_b_id && m.outcome !== 'bye',
-            )
-            const completedKnockout = activeKnockoutMatches.filter(
-              (m) => m.status === 'completed' && m.outcome !== 'bye',
-            )
-            const finalMatch = knockoutMatches.find(
-              (m) => matchEffectiveRound(m, knockoutMatches) === 'final',
-            )
-            const knockoutDone = finalMatch?.status === 'completed'
-            const waitingOnEarlierRound =
-              activeKnockoutRound != null &&
-              hasPendingEarlierKnockoutRound(knockoutMatches, activeKnockoutRound)
-
-            return (
-              <section className="space-y-4">
-                <KnockoutBracket
-                  matches={activeKnockoutMatches}
-                  round={activeKnockoutRound ?? undefined}
-                  allMatches={knockoutMatches}
-                />
-                {scorable.length > 0 && (
-                  <div className="space-y-3">
-                    {scorable.map((m) => (
-                      <MatchScoreEntry
-                        key={m.id}
-                        eventType={event.event_type}
-                        config={cfg}
-                        match={m}
-                        stage={setRulesStageForRound(matchEffectiveRound(m, knockoutMatches))}
-                        onSave={async (data) => {
-                          const stage = setRulesStageForRound(
-                            matchEffectiveRound(m, knockoutMatches),
-                          )
-                          await saveKnockoutMatchResult(m.id, data, stage)
-                          await fetchEventData()
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-                {completedKnockout.length > 0 && (
-                  <details className="group">
-                    <summary className="flex items-center justify-between bg-card rounded-xl border border-border px-3.5 py-3 cursor-pointer list-none">
-                      <span className="text-sm font-bold text-text-bluewhite">
-                        Completed ({completedKnockout.length})
-                      </span>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-steel group-open:rotate-180 transition-transform" aria-hidden>
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                    </summary>
-                    <div className="mt-2 space-y-2">
-                      {completedKnockout.map((m) => (
-                        <div key={m.id} className="rounded-[10px] border border-border bg-[#0C284780] px-3.5 py-2.5">
-                          <MatchScoreEntry
-                            eventType={event.event_type}
-                            config={cfg}
-                            match={m}
-                            stage={setRulesStageForRound(matchEffectiveRound(m, knockoutMatches))}
-                            allowEdit={!knockoutMatchHasCompletedDependents(m.id, knockoutMatches)}
-                            onSave={async (data) => {
-                              const stage = setRulesStageForRound(
-                                matchEffectiveRound(m, knockoutMatches),
-                              )
-                              const { warnings: editWarnings } = await updateKnockoutMatchResult(
-                                m.id,
-                                data,
-                                stage,
-                              )
-                              if (editWarnings.length) {
-                                setWarnings((prev) => [...new Set([...prev, ...editWarnings])])
-                              }
-                              setMessage('Score updated.')
-                              await fetchEventData()
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
-                {scorable.length === 0 &&
-                  activeKnockoutRound === 'semi' &&
-                  finalMatch &&
-                  finalMatch.status !== 'completed' &&
-                  !waitingOnEarlierRound && (
-                  <div className="rounded-xl border border-border bg-[#0C284780] p-3.5 space-y-2">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-text-steel">FINAL · WAITING</p>
-                    <div className="flex items-center justify-between gap-3 text-sm">
-                      <span className="font-semibold text-text-steel truncate">
-                        {finalMatch.entry_a ? getEntryDisplayName(finalMatch.entry_a) : 'Winner SF1'}
-                      </span>
-                      <span className="text-xs text-text-steel shrink-0">vs</span>
-                      <span className="font-semibold text-text-steel truncate text-right">
-                        {finalMatch.entry_b ? getEntryDisplayName(finalMatch.entry_b) : 'Winner SF2'}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                {scorable.length === 0 && activeKnockoutRound !== 'final' && !knockoutDone && waitingOnEarlierRound && (
-                  <p className="text-sm text-text-steel">
-                    Waiting for earlier round results — winners advance automatically.
-                  </p>
-                )}
-                {knockoutDone && activeKnockoutRound === 'final' && (
-                  <p className="text-sm text-brand-500 font-semibold">
-                    Division complete. Click <strong>Delete division data</strong> below to remove all records.
-                  </p>
-                )}
-              </section>
-            )
-          })()}
-        </>
+          <BracketsPanel
+            event={event}
+            loading={loading}
+            entryMap={entryMap}
+            stageTabs={stageTabs}
+            activeStage={activeStage}
+            onStageChange={setActiveStage}
+            liveKnockoutByePreview={liveKnockoutByePreview}
+            knockoutMatches={knockoutMatches}
+            allGroupPlayComplete={allGroupPlayComplete}
+            pendingGroupMatchCount={pendingGroupMatchCount}
+            groupsAwaitingScores={groupsAwaitingScores}
+            knockoutHasScores={knockoutHasScores}
+            onGenerateKnockout={openGenerateKnockoutDialog}
+            activeGroupStage={activeGroupStage}
+            activeKnockoutRound={activeKnockoutRound}
+            activeKnockoutMatches={activeKnockoutMatches}
+            onShowEntryInfo={handleShowEntryInfo}
+            onSaveGroupRanks={handleSaveGroupRanks}
+            onClearGroupRanks={handleClearGroupRanks}
+            onRefresh={fetchEventData}
+            onWarnings={(w) => setWarnings((prev) => [...new Set([...prev, ...w])])}
+            onMessage={setMessage}
+          />
         )}
 
         {event.status === 'ongoing' && (
@@ -1940,6 +1593,19 @@ export function AdminEventPage() {
           setInfoEntryRoster(undefined)
         }}
       />
+
+      {masterDelete && tournamentId && event && (
+        <MasterPasswordDialog
+          title={masterDelete.title}
+          description={masterDelete.description}
+          confirmLabel={masterDelete.confirmLabel}
+          onCancel={() => setMasterDelete(null)}
+          onConfirm={async (password) => {
+            await deleteDivision(tournamentId, event.id, password)
+            navigate(`/admin/tournaments/${tournamentId}`)
+          }}
+        />
+      )}
 
       <DeleteConfirmDialog
         open={!!deleteConfirm}

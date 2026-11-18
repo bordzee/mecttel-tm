@@ -18,12 +18,12 @@ export function MatchCard({
   return (
     <div className="bg-card rounded-xl border border-border p-3.5 space-y-2.5">
       {label && (
-        <p className="text-[11px] font-bold uppercase tracking-wide text-text-steel">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-steel">{label}</p>
       )}
       <div className="flex items-center gap-2.5">
         <span
           className={`flex-1 min-w-0 text-[15px] font-semibold truncate ${
-            homeWon ? 'text-winner font-bold' : 'text-text-bluewhite'
+            homeWon ? 'text-winner font-semibold' : 'text-text-bluewhite'
           }`}
         >
           {homeName}
@@ -47,7 +47,7 @@ export function MatchCard({
         )}
         {scoreA != null && (
           <span
-            className={`text-lg font-extrabold tabular-nums shrink-0 ${
+            className={`text-lg font-semibold tabular-nums shrink-0 ${
               homeWon ? 'text-winner' : 'text-text-primary'
             }`}
           >
@@ -59,14 +59,14 @@ export function MatchCard({
       <div className="flex items-center gap-2.5">
         <span
           className={`flex-1 min-w-0 text-[15px] font-semibold truncate ${
-            awayWon ? 'text-winner font-bold' : 'text-text-steel'
+            awayWon ? 'text-winner font-semibold' : 'text-text-steel'
           }`}
         >
           {awayName}
         </span>
         {scoreB != null && (
           <span
-            className={`text-lg font-extrabold tabular-nums shrink-0 ${
+            className={`text-lg font-semibold tabular-nums shrink-0 ${
               awayWon ? 'text-winner' : 'text-text-steel'
             }`}
           >

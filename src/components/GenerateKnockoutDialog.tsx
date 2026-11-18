@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { KnockoutBracketPicker } from './KnockoutBracketPicker'
 import { Button, PanelSectionTitle, WarningBanner } from './ui/primitives'
 import { getEntryDisplayName } from '../lib/displayNames'
 import { generateKnockoutPairings } from '../lib/knockoutSeeding'
 import { getTopAdvancers } from '../lib/standings'
 import type { KnockoutBracketType, StandingRow, TournamentEntry } from '../types'
+import { Modal } from './ui/Modal'
 
 function buildEntryGroupRankLookup(
   standingsByGroup: Map<string, StandingRow[]>,
@@ -127,62 +127,58 @@ export function GenerateKnockoutDialog({
 
   if (!open) return null
 
-  return createPortal(
-    <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" aria-hidden />
+  return (
+    <Modal
+      labelledBy="generate-knockout-title"
+      z="z-[250]"
+      scrimDismiss={false}
+      onClose={loading ? undefined : onClose}
+      panelClassName="w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-[var(--shadow-pop)] max-h-[90vh] overflow-y-auto"
+    >
+      <PanelSectionTitle>{title}</PanelSectionTitle>
+      <p id="generate-knockout-title" className="text-sm text-text-steel leading-snug">
+        Choose cross, block, or mirror seeding for the first knockout round. This is saved on the
+        division and used when generating from group ranks.
+      </p>
 
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="generate-knockout-title"
-        className="relative w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] max-h-[90vh] overflow-y-auto"
-      >
-        <PanelSectionTitle>{title}</PanelSectionTitle>
-        <p id="generate-knockout-title" className="text-sm text-text-steel leading-snug">
-          Choose cross, block, or mirror seeding for the first knockout round. This is saved on the
-          division and used when generating from group ranks.
-        </p>
+      <KnockoutBracketPicker
+        value={activeBracket}
+        onChange={setActiveBracket}
+        evenGroupsRequired={evenGroupsRequired}
+      />
 
-        <KnockoutBracketPicker
-          value={activeBracket}
-          onChange={setActiveBracket}
-          evenGroupsRequired={evenGroupsRequired}
-        />
+      {evenGroupsRequired && (
+        <WarningBanner>
+          Block and mirror require an even number of groups ({groupCount} groups now). Use Cross,
+          or adjust the group layout before generating knockout.
+        </WarningBanner>
+      )}
 
-        {evenGroupsRequired && (
-          <WarningBanner>
-            Block and mirror require an even number of groups ({groupCount} groups now). Use Cross,
-            or adjust the group layout before generating knockout.
-          </WarningBanner>
-        )}
-
-        {firstRoundPreview.length > 0 && (
-          <div className="space-y-2 rounded-2xl border border-border-strong bg-navy/40 p-3.5">
-            <p className="text-sm font-extrabold text-text-primary">
-              First knockout round preview
-            </p>
-            <ul className="space-y-1.5 text-sm text-text-bluewhite">
-              {firstRoundPreview.map((pairing) => (
-                <li key={pairing.key}>{pairing.label}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2.5 pt-1">
-          <Button variant="secondary" onClick={onClose} disabled={loading} fullWidth>
-            Cancel
-          </Button>
-          <Button
-            disabled={loading || selectionInvalid}
-            onClick={() => onConfirm(activeBracket)}
-            fullWidth
-          >
-            {loading ? 'Generating…' : confirmLabel}
-          </Button>
+      {firstRoundPreview.length > 0 && (
+        <div className="space-y-2 rounded-2xl border border-border-strong bg-navy/40 p-3.5">
+          <p className="text-sm font-semibold text-text-primary">
+            First knockout round preview
+          </p>
+          <ul className="space-y-1.5 text-sm text-text-bluewhite">
+            {firstRoundPreview.map((pairing) => (
+              <li key={pairing.key}>{pairing.label}</li>
+            ))}
+          </ul>
         </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2.5 pt-1">
+        <Button variant="secondary" onClick={onClose} disabled={loading} fullWidth>
+          Cancel
+        </Button>
+        <Button
+          disabled={loading || selectionInvalid}
+          onClick={() => onConfirm(activeBracket)}
+          fullWidth
+        >
+          {loading ? 'Generating…' : confirmLabel}
+        </Button>
       </div>
-    </div>,
-    document.body,
+    </Modal>
   )
 }

@@ -387,6 +387,41 @@ function buildPlayInGroupRankPairings(
     }
   }
 
+  // The ring above can box itself in (the last two players left share a group) even when a
+  // clean pairing exists. Search all play-in players for one with no same-group match-up.
+  const leftover = [...playInIds].filter((id) => !used.has(id))
+  const needsRepair =
+    pairings.length < matchCount &&
+    leftover.length === 2 &&
+    entryGroup.get(leftover[0]!) === entryGroup.get(leftover[1]!)
+  if (needsRepair) {
+    const all = [...playInIds]
+    const solve = (ids: string[]): [string, string][] | null => {
+      if (ids.length === 0) return []
+      const [first, ...rest] = ids
+      for (let i = 0; i < rest.length; i++) {
+        if (entryGroup.get(rest[i]!) === entryGroup.get(first!)) continue
+        const others = [...rest.slice(0, i), ...rest.slice(i + 1)]
+        const tail = solve(others)
+        if (tail) return [[first!, rest[i]!], ...tail]
+      }
+      return null
+    }
+    const clean = all.length <= 16 ? solve(all) : null
+    if (clean && clean.length >= matchCount) {
+      pairings.length = 0
+      used.clear()
+      for (const [aId, bId] of clean.slice(0, matchCount)) {
+        const a = findAdvancerRow(aId, advancersByGroup)
+        const b = findAdvancerRow(bId, advancersByGroup)
+        if (!a || !b) continue
+        pairings.push({ a, b, side: pairings.length % 2 === 0 ? 'left' : 'right', rankA: 0, rankB: 0 })
+        used.add(aId)
+        used.add(bId)
+      }
+    }
+  }
+
   const remaining = [...playInIds].filter((id) => !used.has(id))
   while (pairings.length < matchCount && remaining.length >= 2) {
     const aId = remaining.shift()!
@@ -921,7 +956,7 @@ export function generateKnockoutPairings(
   let firstRound: KnockoutSlot[]
 
   if (useByeBracket) {
-    const bracketLabel = knockoutBracketTypeLabel(bracketType)
+    const bracketLabel = knockoutBracketTypeLabel(effectiveType)
     if (useGroupRankPairing) {
       warnings.push({
         message: `${allAdvancers.length} advancers — ${bracketLabel} knockout uses seeded byes with group-rank play-in`,

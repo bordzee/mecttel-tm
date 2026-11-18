@@ -42,6 +42,7 @@ export function HomePage() {
   if (!isFirebaseConfigured) {
     return (
       <AppLayout>
+        <h1 className="sr-only">Tournaments</h1>
         <div className="space-y-[26px] pt-1">
           <WarningBanner>
             Firebase configuration missing — live data may be unavailable.
@@ -72,6 +73,7 @@ export function HomePage() {
   if (isEmpty) {
     return (
       <AppLayout>
+        <h1 className="sr-only">Tournaments</h1>
         <div className="space-y-[26px] pt-1">
           <section className="space-y-3">
             <SectionTitle live>Ongoing</SectionTitle>
@@ -88,6 +90,7 @@ export function HomePage() {
 
   return (
     <AppLayout>
+      <h1 className="sr-only">Tournaments</h1>
       <StatusPopups error={error} onErrorDismiss={() => setError('')} />
       <div className="space-y-[26px] pt-1">
         <section className="space-y-3">
@@ -95,7 +98,7 @@ export function HomePage() {
           {ongoing.length === 0 ? (
             <EmptyStatePanel>No ongoing tournaments.</EmptyStatePanel>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               {ongoing.map((t) => (
                 <TournamentCard key={t.id} tournament={t} events={t.events} />
               ))}
@@ -108,7 +111,7 @@ export function HomePage() {
           {upcoming.length === 0 ? (
             <EmptyStatePanel>No upcoming tournaments.</EmptyStatePanel>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               {upcoming.map((t) => (
                 <TournamentCard key={t.id} tournament={t} events={t.events} />
               ))}

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import {
   validateLateJoinTarget,
   type GroupSummary,
@@ -16,6 +15,7 @@ import {
   SelectInput,
   WarningBanner,
 } from './ui/primitives'
+import { Modal } from './ui/Modal'
 
 export function LateEntryDialog({
   entryLabel,
@@ -61,100 +61,97 @@ export function LateEntryDialog({
           : 'Selected group'
         : 'New group'
 
-  return createPortal(
-    <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" aria-hidden />
-      <div
-        className="relative w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="late-entry-title"
-      >
-        <PanelSectionTitle>Late check-in</PanelSectionTitle>
-        <p className="text-sm text-text-steel leading-snug">
-          Assign <span className="font-bold text-text-bluewhite">{entryLabel}</span> to a group.
-          Only missing round-robin matches will be created.
-        </p>
+  return (
+    <Modal
+      labelledBy="late-entry-title"
+      z="z-[250]"
+      scrimDismiss={false}
+      onClose={confirming ? undefined : onCancel}
+      panelClassName="w-full max-w-md bg-card border border-border-strong rounded-2xl p-4 space-y-4 shadow-xl max-h-[90vh] overflow-y-auto"
+    >
+      <PanelSectionTitle>Late check-in</PanelSectionTitle>
+      <p className="text-sm text-text-steel leading-snug">
+        Assign <span className="font-semibold text-text-bluewhite">{entryLabel}</span> to a group.
+        Only missing round-robin matches will be created.
+      </p>
 
-        <div className="space-y-2">
-          <FormLabel>Assignment</FormLabel>
-          <SegmentedControl
-            value={mode}
-            onChange={(v) => setMode(v as LateJoinMode)}
-            options={[
-              { value: 'balance', label: 'Balance' },
-              { value: 'pick', label: 'Pick group' },
-              { value: 'new_group', label: 'New group' },
-            ]}
-            disabledValues={!suggestion ? ['balance'] : []}
-          />
-        </div>
-
-        {mode === 'balance' && suggestion && (
-          <InfoNoteCard>
-            Suggested: <strong>Group {suggestion.label}</strong> (smallest / best fit)
-          </InfoNoteCard>
-        )}
-
-        {mode === 'pick' && (
-          <div className="space-y-2">
-            <FormLabel>Group</FormLabel>
-            <SelectInput value={pickedGroupId} onChange={(e) => setPickedGroupId(e.target.value)}>
-              {groups.map((g) => (
-                <option key={g.groupId} value={g.groupId}>
-                  Group {g.label} ({g.entries.length} entries)
-                </option>
-              ))}
-            </SelectInput>
-            {pickBlocked && pickValidation.error && (
-              <ErrorBanner>{pickValidation.error}</ErrorBanner>
-            )}
-          </div>
-        )}
-
-        {mode === 'new_group' && (
-          <InfoNoteCard>
-            Creates a separate group with round-robin only among its members. Existing groups stay
-            unchanged. Late groups may have 2 players (minimum 3 applies at initial registration).
-          </InfoNoteCard>
-        )}
-
-        {activeWarnings.length > 0 && (
-          <WarningBanner>
-            <ul className="space-y-1 list-disc list-inside">
-              {activeWarnings.map((w) => (
-                <li key={w}>{w}</li>
-              ))}
-            </ul>
-          </WarningBanner>
-        )}
-
-        <p className="text-xs text-text-steel">
-          Adding to: <span className="font-semibold text-text-bluewhite">{targetLabel}</span>
-        </p>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          <Button variant="secondary" onClick={onCancel} disabled={confirming} fullWidth>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              if (mode === 'new_group') onConfirm('new_group')
-              else if (mode === 'balance' && suggestion) onConfirm('balance', suggestion.groupId)
-              else onConfirm('pick', pickedGroupId)
-            }}
-            disabled={
-              confirming ||
-              (mode === 'pick' && (!pickedGroupId || pickBlocked)) ||
-              (mode === 'balance' && !suggestion)
-            }
-            fullWidth
-          >
-            {confirming ? 'Adding…' : 'Confirm'}
-          </Button>
-        </div>
+      <div className="space-y-2">
+        <FormLabel>Assignment</FormLabel>
+        <SegmentedControl
+          value={mode}
+          onChange={(v) => setMode(v as LateJoinMode)}
+          options={[
+            { value: 'balance', label: 'Balance' },
+            { value: 'pick', label: 'Pick group' },
+            { value: 'new_group', label: 'New group' },
+          ]}
+          disabledValues={!suggestion ? ['balance'] : []}
+        />
       </div>
-    </div>,
-    document.body,
+
+      {mode === 'balance' && suggestion && (
+        <InfoNoteCard>
+          Suggested: <strong>Group {suggestion.label}</strong> (smallest / best fit)
+        </InfoNoteCard>
+      )}
+
+      {mode === 'pick' && (
+        <div className="space-y-2">
+          <FormLabel>Group</FormLabel>
+          <SelectInput value={pickedGroupId} onChange={(e) => setPickedGroupId(e.target.value)}>
+            {groups.map((g) => (
+              <option key={g.groupId} value={g.groupId}>
+                Group {g.label} ({g.entries.length} entries)
+              </option>
+            ))}
+          </SelectInput>
+          {pickBlocked && pickValidation.error && (
+            <ErrorBanner>{pickValidation.error}</ErrorBanner>
+          )}
+        </div>
+      )}
+
+      {mode === 'new_group' && (
+        <InfoNoteCard>
+          Creates a separate group with round-robin only among its members. Existing groups stay
+          unchanged. Late groups may have 2 players (minimum 3 applies at initial registration).
+        </InfoNoteCard>
+      )}
+
+      {activeWarnings.length > 0 && (
+        <WarningBanner>
+          <ul className="space-y-1 list-disc list-inside">
+            {activeWarnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </WarningBanner>
+      )}
+
+      <p className="text-xs text-text-steel">
+        Adding to: <span className="font-semibold text-text-bluewhite">{targetLabel}</span>
+      </p>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <Button variant="secondary" onClick={onCancel} disabled={confirming} fullWidth>
+          Cancel
+        </Button>
+        <Button
+          onClick={() => {
+            if (mode === 'new_group') onConfirm('new_group')
+            else if (mode === 'balance' && suggestion) onConfirm('balance', suggestion.groupId)
+            else onConfirm('pick', pickedGroupId)
+          }}
+          disabled={
+            confirming ||
+            (mode === 'pick' && (!pickedGroupId || pickBlocked)) ||
+            (mode === 'balance' && !suggestion)
+          }
+          fullWidth
+        >
+          {confirming ? 'Adding…' : 'Confirm'}
+        </Button>
+      </div>
+    </Modal>
   )
 }

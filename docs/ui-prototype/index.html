@@ -1,0 +1,1183 @@
+<title>Tournament Manager Redesign</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one calm column (max 1080). The table-tennis tables are the screen's moment: each court is drawn top-down, green, with its net line. */
+:root {
+  --bg: #F2F5F3; --surface: #FFFFFF; --surface-2: #E8EDEA;
+  --line: rgba(16,22,20,.10); --line-strong: rgba(16,22,20,.22);
+  --text: #101614; --text-2: #46524D; --text-3: #66726D;
+  --accent: #C2470A; --accent-ink: #FFFFFF; --accent-soft: rgba(194,71,10,.10); --accent-text: #A83C06;
+  --court: #1D6650; --court-ink: #FFFFFF; --court-line: rgba(255,255,255,.72); --court-idle: #DCE6E1;
+  --ok: #1B7348; --ok-soft: rgba(27,115,72,.12); --warn: #8A5A00; --warn-soft: rgba(138,90,0,.12);
+  --shadow: 0 1px 2px rgba(16,22,20,.08), 0 12px 32px -8px rgba(16,22,20,.28);
+  --scrim: rgba(10,16,14,.46); --seg-on: #FFFFFF;
+  --font: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+  --ease-out: cubic-bezier(.32,.72,0,1); --ease-io: cubic-bezier(.77,0,.175,1);
+  --t-press: 120ms; --t-ui: 160ms; --t-pop: 220ms; --t-move: 300ms;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0B100E; --surface: #131A17; --surface-2: #1B2420;
+    --line: rgba(232,240,236,.10); --line-strong: rgba(232,240,236,.22);
+    --text: #E9F0ED; --text-2: #A5B2AC; --text-3: #8A9791;
+    --accent: #F2753A; --accent-ink: #1C0A02; --accent-soft: rgba(242,117,58,.15); --accent-text: #F58A55;
+    --court: #17513F; --court-idle: #17211D;
+    --ok: #52C38C; --ok-soft: rgba(82,195,140,.14); --warn: #E2B04F; --warn-soft: rgba(226,176,79,.14);
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 16px 40px -8px rgba(0,0,0,.7);
+    --scrim: rgba(0,0,0,.6); --seg-on: #2C3833;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0B100E; --surface: #131A17; --surface-2: #1B2420;
+  --line: rgba(232,240,236,.10); --line-strong: rgba(232,240,236,.22);
+  --text: #E9F0ED; --text-2: #A5B2AC; --text-3: #8A9791;
+  --accent: #F2753A; --accent-ink: #1C0A02; --accent-soft: rgba(242,117,58,.15); --accent-text: #F58A55;
+  --court: #17513F; --court-idle: #17211D;
+  --ok: #52C38C; --ok-soft: rgba(82,195,140,.14); --warn: #E2B04F; --warn-soft: rgba(226,176,79,.14);
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 16px 40px -8px rgba(0,0,0,.7);
+  --scrim: rgba(0,0,0,.6); --seg-on: #2C3833;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 56px; min-height: 100%;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; text-align: inherit; }
+h1, h2, h3, p { margin: 0; }
+h1, h2 { text-wrap: balance; }
+p { text-wrap: pretty; }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: 6px; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+
+/* top bar */
+.bar-top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); border-bottom: 1px solid var(--line); margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding-inline: max(16px, env(safe-area-inset-left, 0px)); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
+.bar-in { max-width: 1080px; margin: 0 auto; min-height: 56px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding-block: 8px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: -.01em; color: var(--text); text-decoration: none; }
+.brand svg { flex: none; }
+.spacer { flex: 1; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--surface-2); max-width: 100%; }
+.seg button { height: 32px; padding: 0 12px; border-radius: 8px; color: var(--text-2); font-weight: 500; text-align: center; transition: background-color var(--t-ui), color var(--t-ui); white-space: nowrap; }
+.seg button[aria-pressed="true"], .seg button[aria-checked="true"] { background: var(--seg-on); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+.seg button[disabled] { opacity: .4; cursor: not-allowed; }
+.seg.fill { display: flex; }
+.seg.fill button { flex: 1; height: 40px; }
+.proto { color: var(--text-3); font-size: 12px; }
+.jump { height: 36px; border: 0; border-radius: 10px; padding: 0 10px; background: var(--surface-2); max-width: 190px; font-size: 13px; }
+.icon-btn { position: relative; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--text-2); transition: background-color var(--t-ui), transform var(--t-press); }
+.icon-btn::after { content: ""; position: absolute; inset: -4px; }
+@media (hover: hover) { .icon-btn:hover { background: var(--surface-2); color: var(--text); } }
+.icon-btn:active, .btn:active, .tab:active, .pill:active { transform: scale(.96); }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* buttons */
+.btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 16px; border-radius: 10px; font-weight: 500; white-space: nowrap; transition: background-color var(--t-ui), box-shadow var(--t-ui), transform var(--t-press), opacity var(--t-ui); text-decoration: none; text-align: center; }
+.btn svg.i { margin-left: -3px; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-quiet { background: var(--surface-2); color: var(--text); }
+.btn-ghost { color: var(--text-2); }
+.btn-danger { background: var(--warn-soft); color: var(--warn); }
+.btn-sm { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.btn-block { width: 100%; }
+.btn[disabled] { opacity: .4; cursor: not-allowed; transform: none; }
+@media (hover: hover) {
+  .btn-primary:hover:not([disabled]) { background: color-mix(in oklab, var(--accent), var(--text) 12%); }
+  .btn-quiet:hover:not([disabled]) { box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .btn-ghost:hover:not([disabled]) { background: var(--surface-2); color: var(--text); }
+  .btn-danger:hover:not([disabled]) { box-shadow: inset 0 0 0 1px var(--warn); }
+}
+@media (pointer: coarse) { .btn, .btn-sm { min-height: 44px; } .seg button { height: 38px; } }
+
+/* page head */
+main { padding-top: 28px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+.view, .view > div, .sec { min-width: 0; }
+.sec, .form, .pad, .dcard, .head, .rows, .names, .danger, .court-card, .tcard, .dialog, .setrow, .qres, .qres .blk, .f, .find, .call, .progress, .login .panel { grid-template-columns: minmax(0, 1fr); }
+.view > div[style*="display:grid"] { grid-template-columns: minmax(0, 1fr); }
+.crumb { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); text-decoration: none; font-weight: 500; margin-left: -4px; padding: 4px; border-radius: 8px; justify-self: start; }
+@media (hover: hover) { .crumb:hover { color: var(--text); } }
+h1 { font-size: 28px; line-height: 1.15; letter-spacing: -.022em; font-weight: 600; }
+h2 { font-size: 20px; line-height: 1.25; letter-spacing: -.01em; font-weight: 600; }
+.sub { color: var(--text-2); }
+.head { display: grid; gap: 12px; }
+.head-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
+.label { font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
+.chip.live { background: var(--accent-soft); color: var(--accent-text); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: live 2s ease-in-out infinite; }
+@keyframes live { 50% { opacity: .35; } }
+.progress { display: grid; gap: 8px; max-width: 420px; }
+.progress .t { display: flex; justify-content: space-between; gap: 12px; color: var(--text-2); }
+.meter { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transition: transform var(--t-move) var(--ease-io); border-radius: 999px; }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { position: relative; height: 44px; padding: 0 12px; color: var(--text-2); font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; transition: color var(--t-ui), transform var(--t-press); }
+.tab::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: var(--text); transform: scaleX(0); transition: transform var(--t-pop) var(--ease-out); border-radius: 2px; }
+.tab[aria-selected="true"] { color: var(--text); }
+.tab[aria-selected="true"]::after { transform: scaleX(1); }
+@media (hover: hover) { .tab:hover { color: var(--text); } }
+.count { font-family: var(--mono); font-size: 12px; color: var(--text-3); }
+
+/* surfaces */
+.panel { background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--line); }
+.pad { padding: 20px; display: grid; gap: 16px; }
+.rows { display: grid; }
+.row { display: grid; align-items: center; gap: 12px 16px; padding: 14px 20px; }
+.row + .row { border-top: 1px solid var(--line); }
+button.row, a.row { width: 100%; text-decoration: none; color: inherit; transition: background-color var(--t-ui); }
+@media (hover: hover) { button.row:hover, a.row:hover { background: color-mix(in oklab, var(--surface), var(--text) 3%); } }
+.empty { padding: 36px 20px; text-align: center; color: var(--text-2); display: grid; gap: 12px; justify-items: center; }
+.empty strong { color: var(--text); font-weight: 600; font-size: 16px; }
+.banner { display: flex; gap: 12px; padding: 12px 16px; border-radius: 12px; background: var(--warn-soft); color: var(--text); align-items: flex-start; }
+.banner.ok { background: var(--ok-soft); }
+.banner svg { color: var(--warn); margin-top: 2px; }
+.banner.ok svg { color: var(--ok); }
+
+/* courts */
+.courts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.court-card { display: grid; gap: 12px; padding: 16px; background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--line); align-content: start; }
+.court-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.court-top b { font-weight: 600; font-size: 16px; }
+.court { position: relative; min-height: 108px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; background: var(--court); color: var(--court-ink); border-radius: 10px; padding: 14px 24px; isolation: isolate; transition: background-color var(--t-move); }
+.court::before { content: ""; position: absolute; inset: 8px; border: 1.5px solid var(--court-line); border-radius: 5px; opacity: .55; z-index: -1; }
+.court::after { content: ""; position: absolute; top: 8px; bottom: 8px; left: 50%; width: 2px; margin-left: -1px; background: var(--court-line); opacity: .85; z-index: -1; }
+.court .side { display: grid; gap: 2px; min-width: 0; padding: 0 12px; }
+.court .side:last-child { text-align: right; }
+.court .nm { font-weight: 600; font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
+.court .og { font-size: 12px; opacity: .78; }
+.court.idle { background: var(--court-idle); color: var(--text-2); text-align: center; }
+.court.idle::before, .court.idle::after { opacity: .18; }
+.court.idle .mid { grid-column: 1 / -1; display: grid; gap: 2px; padding: 0 12px; }
+.court.idle b { color: var(--text); font-weight: 600; }
+.court.enter, .court.enter .side { animation: place var(--t-move) var(--ease-out) both; }
+@keyframes place { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.court-meta { display: flex; justify-content: space-between; gap: 12px; color: var(--text-2); font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions .btn { flex: 1 1 auto; }
+.actions.end { justify-content: flex-end; }
+.actions.end .btn { flex: 0 0 auto; }
+
+/* lists */
+.tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.field { position: relative; display: flex; align-items: center; }
+.field svg { position: absolute; left: 12px; color: var(--text-3); pointer-events: none; }
+.field input { height: 40px; width: 240px; max-width: 100%; padding: 0 12px 0 38px; border-radius: 10px; border: 0; background: var(--surface); box-shadow: 0 0 0 1px var(--line-strong); font-size: 16px; }
+.field input::placeholder, .in::placeholder { color: var(--text-3); }
+.qrow { grid-template-columns: 28px 1fr auto; }
+.qrow .pos { font-family: var(--mono); color: var(--text-3); font-size: 13px; }
+.names { min-width: 0; display: grid; gap: 2px; }
+.names .vs { font-weight: 500; overflow-wrap: anywhere; }
+.names .note { font-size: 13px; color: var(--text-2); }
+.names .note.warn { color: var(--warn); }
+.score { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 500; font-size: 16px; white-space: nowrap; }
+.win { font-weight: 600; }
+.lose { color: var(--text-2); }
+.wrow { grid-template-columns: 1fr auto; }
+.erow { grid-template-columns: 1fr auto; }
+.erow .ctl { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* tables */
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: right; font-size: 12px; font-weight: 500; color: var(--text-3); padding: 10px 12px; letter-spacing: .04em; text-transform: uppercase; }
+td { padding: 12px; text-align: right; border-top: 1px solid var(--line); font-family: var(--mono); }
+th:first-child, td:first-child { text-align: left; padding-left: 20px; width: 44px; }
+th:nth-child(2), td:nth-child(2) { text-align: left; }
+td:nth-child(2) { font-family: var(--font); font-weight: 500; }
+th:last-child, td:last-child { padding-right: 20px; }
+.rank { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; background: var(--surface-2); color: var(--text-2); }
+.rank.q { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+.ph { padding: 16px 20px 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ph h3 { font-size: 16px; font-weight: 600; }
+.pnote { padding: 0 20px 16px; color: var(--text-2); font-size: 13px; }
+
+/* bracket */
+.bracket { display: grid; grid-template-columns: minmax(200px, 1fr) 40px minmax(200px, 1fr); grid-template-rows: auto auto; gap: 16px 0; align-items: center; min-width: 520px; padding: 20px; }
+.bm { background: var(--surface); box-shadow: 0 0 0 1px var(--line-strong); border-radius: 10px; overflow: hidden; }
+.bm .s { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; }
+.bm .s + .s { border-top: 1px solid var(--line); }
+.bm .s span:first-child { overflow-wrap: anywhere; }
+.bm .prov { color: var(--text-3); }
+.bm .tag { font-size: 12px; color: var(--text-3); padding: 8px 14px 0; }
+.join { grid-column: 2; grid-row: 1 / span 2; align-self: stretch; margin: 40px 0; border: 1px solid var(--line-strong); border-left: 0; border-radius: 0 8px 8px 0; position: relative; }
+.join::after { content: ""; position: absolute; right: -20px; top: 50%; width: 20px; border-top: 1px solid var(--line-strong); }
+.fin { grid-column: 3; grid-row: 1 / span 2; }
+.stub { position: relative; }
+.stub::after { content: ""; position: absolute; right: -40px; top: 50%; width: 40px; border-top: 1px solid var(--line-strong); }
+.bnote { color: var(--text-2); padding: 0 20px 20px; }
+
+/* cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.tcard { display: grid; gap: 16px; padding: 20px; text-align: left; background: var(--surface); border-radius: 14px; box-shadow: 0 0 0 1px var(--line); text-decoration: none; color: inherit; transition: background-color var(--t-ui); align-content: start; }
+a.tcard, button.tcard { cursor: pointer; }
+@media (hover: hover) { a.tcard:hover, button.tcard:hover { background: color-mix(in oklab, var(--surface), var(--text) 3%); } }
+.tcard h3 { font-size: 16px; font-weight: 600; }
+.tcard .meta { color: var(--text-2); font-size: 13px; }
+.tlive { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+.tlive div { display: grid; gap: 2px; }
+.tlive b { font-family: var(--mono); font-weight: 500; font-size: 20px; }
+.tlive span { font-size: 12px; color: var(--text-3); }
+.sec { display: grid; gap: 14px; }
+.sec-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stepper { display: inline-flex; align-items: center; gap: 4px; }
+.stepper .num { min-width: 28px; text-align: center; font-weight: 500; font-size: 16px; }
+.stepper .icon-btn[disabled] { opacity: .35; cursor: not-allowed; }
+
+/* forms */
+.form { display: grid; gap: 18px; max-width: 540px; }
+.f { display: grid; gap: 6px; }
+.lab { font-size: 13px; font-weight: 500; color: var(--text-2); }
+.opt { color: var(--text-3); font-weight: 400; margin-left: 4px; }
+.in { height: 44px; width: 100%; padding: 0 12px; border: 0; border-radius: 10px; background: var(--surface); box-shadow: 0 0 0 1px var(--line-strong); font-size: 16px; }
+select.in { appearance: none; padding-right: 36px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A9791' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+.in:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.in.bad { box-shadow: 0 0 0 2px var(--warn); }
+.msg { font-size: 13px; color: var(--text-2); }
+.msg.err { color: var(--warn); }
+.inline { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.inline .f { flex: 1 1 200px; }
+.sw { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; color: var(--text-2); font-weight: 500; }
+.sw i { position: relative; width: 40px; height: 24px; border-radius: 999px; background: var(--line-strong); transition: background-color var(--t-ui); flex: none; }
+.sw i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); transition: transform var(--t-pop) var(--ease-out); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.sw[aria-checked="true"] { color: var(--text); }
+.sw[aria-checked="true"] i { background: var(--accent); }
+.sw[aria-checked="true"] i::after { transform: translateX(16px); }
+.drop { position: relative; display: grid; gap: 4px; justify-items: center; text-align: center; padding: 24px 16px; border-radius: 12px; box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--text-2); cursor: pointer; transition: background-color var(--t-ui); }
+.drop:focus-within { outline: 2px solid var(--text); outline-offset: 2px; }
+@media (hover: hover) { .drop:hover { background: var(--surface-2); } }
+.drop strong { color: var(--text); font-weight: 500; }
+.steps { display: flex; align-items: center; gap: 12px; color: var(--text-3); font-weight: 500; }
+.steps .st { display: inline-flex; align-items: center; gap: 8px; }
+.steps .n { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); font-size: 12px; font-family: var(--mono); }
+.steps .st.on { color: var(--text); }
+.steps .st.on .n { background: var(--text); color: var(--bg); }
+.steps .st.dn .n { background: var(--ok-soft); color: var(--ok); }
+.steps .ln { width: 32px; height: 1px; background: var(--line-strong); }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { height: 36px; padding: 0 14px; border-radius: 999px; background: var(--surface-2); color: var(--text); font-weight: 500; transition: box-shadow var(--t-ui), transform var(--t-press); display: inline-flex; align-items: center; gap: 6px; }
+@media (hover: hover) { .pill:hover { box-shadow: inset 0 0 0 1px var(--line-strong); } }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+.copt { display: grid; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); transition: box-shadow var(--t-ui); align-content: start; }
+.copt b { font-weight: 600; }
+.copt span { font-size: 13px; color: var(--text-2); }
+.copt[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--text); }
+.copt[disabled] { opacity: .45; cursor: not-allowed; }
+@media (hover: hover) { .copt:not([aria-checked="true"]):not([disabled]):hover { box-shadow: inset 0 0 0 1px var(--text-3); } }
+.setting { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 16px; padding: 14px 20px; }
+.setting + .setting { border-top: 1px solid var(--line); }
+.setting .names .note { font-size: 13px; }
+.dcard { display: grid; gap: 16px; padding: 20px; }
+.dcard-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dcard-h h3 { font-size: 16px; font-weight: 600; }
+.login { min-height: 60vh; display: grid; place-items: center; align-content: center; gap: 20px; }
+.login .panel { width: min(400px, 100%); padding: 24px; display: grid; gap: 18px; }
+.login .mark { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; justify-self: center; }
+.danger { display: grid; gap: 12px; padding: 20px; }
+.danger h3 { font-size: 16px; font-weight: 600; }
+.nf { text-align: center; display: grid; gap: 16px; justify-items: center; padding: 56px 0; }
+.nf .big { font-family: var(--mono); font-size: 64px; line-height: 1; letter-spacing: -.04em; color: var(--text-3); }
+.nf .big b { color: var(--accent); font-weight: 500; }
+
+/* dialog + toast */
+#dlg { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; }
+#dlg[hidden] { display: none; }
+.scrim { position: absolute; inset: 0; background: var(--scrim); opacity: 0; transition: opacity var(--t-pop) var(--ease-out); }
+.dialog { position: relative; width: min(460px, 100%); max-height: 100%; overflow: auto; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow), 0 0 0 1px var(--line); padding: 24px; display: grid; gap: 20px; opacity: 0; transform: scale(.95); transition: opacity var(--t-pop) var(--ease-out), transform var(--t-pop) var(--ease-out); }
+#dlg.open .scrim { opacity: 1; }
+#dlg.open .dialog { opacity: 1; transform: none; }
+#dlg:not(.open) .scrim, #dlg:not(.open) .dialog { transition-duration: 140ms; }
+.dialog h2 { font-size: 20px; }
+.dialog form { display: grid; gap: 18px; }
+.setrow { display: grid; gap: 8px; }
+.setrow .who { font-weight: 500; display: flex; justify-content: space-between; gap: 12px; }
+.sets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.sets button { height: 48px; border-radius: 10px; background: var(--surface-2); font-family: var(--mono); font-size: 18px; text-align: center; transition: background-color var(--t-ui), color var(--t-ui), transform var(--t-press); }
+.sets button:active { transform: scale(.96); }
+.sets button[aria-checked="true"] { background: var(--text); color: var(--bg); }
+.qres { display: grid; gap: 18px; }
+.qres .blk { display: grid; gap: 8px; }
+.qres .blk > span { font-weight: 500; }
+.qres .sets button { height: 56px; font-size: 20px; }
+.next { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 16px 20px; border-radius: 14px; background: var(--accent-soft); }
+.next .names .vs { font-size: 16px; font-weight: 600; }
+.next .names .note { color: var(--text); opacity: .8; }
+.find { display: grid; gap: 2px; padding: 16px 20px; border-radius: 14px; background: var(--accent-soft); margin-bottom: 12px; animation: place var(--t-pop) var(--ease-out) both; }
+.find b { font-size: 20px; font-weight: 600; letter-spacing: -.01em; line-height: 1.25; }
+@media (hover: hover) { .sets button:not([aria-checked="true"]):hover { box-shadow: inset 0 0 0 1px var(--line-strong); } }
+.verdict { min-height: 44px; color: var(--text-2); display: flex; align-items: center; }
+.verdict.good { color: var(--text); font-weight: 500; }
+.verdict.bad { color: var(--warn); }
+.dlg-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.call { text-align: center; display: grid; gap: 8px; padding: 8px 0; }
+.call .tb { font-size: 32px; font-weight: 600; letter-spacing: -.022em; line-height: 1.1; }
+.call .p { font-size: 20px; font-weight: 500; }
+.call .v { color: var(--text-3); }
+.minirow { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; }
+.minirow + .minirow { border-top: 1px solid var(--line); }
+.order { display: grid; gap: 6px; }
+.order .o { display: grid; grid-template-columns: 28px 1fr auto auto; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--surface-2); }
+.order .o span.pos { font-family: var(--mono); color: var(--text-3); }
+#toasts { position: fixed; left: 0; right: 0; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; display: grid; justify-items: center; gap: 8px; pointer-events: none; padding-inline: 16px; }
+.toast { pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: 480px; padding: 8px 8px 8px 16px; border-radius: 12px; background: var(--text); color: var(--bg); box-shadow: var(--shadow); animation: toast-in var(--t-pop) var(--ease-out) both; }
+.toast.out { animation: toast-out 160ms var(--ease-out) both; }
+.toast button { height: 32px; padding: 0 12px; border-radius: 8px; font-weight: 600; background: color-mix(in oklab, var(--bg), transparent 82%); transition: transform var(--t-press); }
+.toast button:active { transform: scale(.96); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(8px); } }
+.foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-3); font-size: 12px; padding-top: 8px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.view { animation: view var(--t-move) var(--ease-out) both; display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+@keyframes view { from { opacity: 0; transform: translateY(6px); } }
+@media (max-width: 560px) {
+  h1 { font-size: 24px; }
+  .row, .setting { padding: 12px 16px; }
+  .qrow { grid-template-columns: 24px 1fr; }
+  .qrow > :last-child { grid-column: 2; justify-self: start; }
+  .proto { display: none; }
+  .court { padding: 14px 8px; }
+  .erow { grid-template-columns: 1fr; }
+  .erow .ctl { justify-content: flex-start; }
+  .setting { grid-template-columns: 1fr; }
+  .bar-in .brand { order: 1; }
+  .bar-in .spacer { order: 2; }
+  #theme { order: 3; }
+  .jump { order: 4; flex: 1 1 140px; max-width: none; }
+  .bar-in .seg { order: 5; }
+  .next .btn { width: 100%; }
+  .seg.fill button { padding: 0 4px; min-width: 0; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .dot { animation: none; }
+}
+</style>
+
+<header class="bar-top">
+  <div class="bar-in">
+    <a class="brand" href="#tournaments" id="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="var(--accent)"/><path d="M5.2 7.6c3.4 1.1 6.2 4.4 6.9 9.2" fill="none" stroke="var(--accent-ink)" stroke-width="1.6" stroke-linecap="round" opacity=".7"/></svg>
+      TT Tournaments
+    </a>
+    <span class="spacer"></span>
+    <label class="proto" for="jump">Prototype · jump to</label>
+    <select class="jump" id="jump" aria-label="Jump to screen"></select>
+    <div class="seg" role="group" aria-label="View as">
+      <button type="button" id="r-public" aria-pressed="true">Public</button>
+      <button type="button" id="r-admin" aria-pressed="false">Admin</button>
+    </div>
+    <button type="button" class="icon-btn" id="theme" aria-label="Switch theme"></button>
+  </div>
+</header>
+<div class="wrap"><main id="app"></main></div>
+<div id="dlg" hidden></div>
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+  var I = {
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    back: '<path d="m15 18-6-6 6-6"/>', chev: '<path d="m9 6 6 6-6 6"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>',
+    check: '<path d="m5 12 5 5L20 7"/>', arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+    up: '<path d="m6 15 6-6 6 6"/>', down: '<path d="m6 9 6 6 6-6"/>',
+    img: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    move: '<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>'
+  };
+  function ic(n) { return '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + I[n] + '</svg>'; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var $ = function (s) { return document.querySelector(s); };
+
+  /* ---------- data ---------- */
+  var PAIRS = [[0, 1], [2, 3], [0, 2], [1, 3], [0, 3], [1, 2]];
+  var PRESETS = [['Singles – U12', 'single', 'u12'], ['Singles – U16', 'single', 'u16'], ['Singles – U18', 'single', 'u18'], ['Singles – Open', 'single', 'open'], ['Doubles – Open', 'doubles', 'open'], ['Team', 'team', 'open'], ['Executive', 'executive', 'open']];
+  var TYPE_L = { single: 'Singles', doubles: 'Doubles', team: 'Team', executive: 'Executive' };
+  var CAT_L = { u12: 'U12', u16: 'U16', u18: 'U18', open: 'Open' };
+  var NAMES_E2 = [['Mateo Ruiz', 'Madrid TT', 1], ['Sora Tanabe', 'Osaka Rally', 1], ['Ben Okafor', 'Lagos Spin', 0], ['Lukas Weber', 'Köln TTC', 0], ['Nikhil Rao', 'Pune Paddlers', 0], ['Emil Sørensen', 'Aarhus BTK', 0], ['Hugo Lambert', 'Lyon Pong', 0], ['Yusuf Demir', 'Izmir TT', 0], ['Chen Yu', 'Shenzhen TTA', 0], ['Pablo Núñez', 'Cebu Paddlers', 0]];
+
+  function draftDiv(type, cat) { return { id: 'dv' + Math.random().toString(36).slice(2, 7), type: type || 'single', cat: cat || 'open', display: '', adv: 2, tables: 3, roster: 3, fmt: 'SSS' }; }
+  function divName(d) { if (d.display && d.display.trim()) return d.display.trim(); if (d.type === 'executive') return 'Executive'; return TYPE_L[d.type] + ' – ' + CAT_L[d.cat]; }
+
+  function initial() {
+    var players = [
+      { id: 'p1', name: 'Rafael Domingo', org: 'Quezon City TTC', g: 'A', seed: true },
+      { id: 'p2', name: 'Jun Matsuda', org: 'Osaka Rally', g: 'A' },
+      { id: 'p3', name: 'Kofi Mensah', org: 'Accra Spin Club', g: 'A' },
+      { id: 'p4', name: 'Ilya Petrov', org: 'Kazan TT', g: 'A' },
+      { id: 'p5', name: 'Diego Salcedo', org: 'Cebu Paddlers', g: 'B', seed: true },
+      { id: 'p6', name: 'Wei Lin', org: 'Shenzhen TTA', g: 'B' },
+      { id: 'p7', name: 'Tomás Ferreira', org: 'Porto Pong', g: 'B' },
+      { id: 'p8', name: 'Aarav Nair', org: 'Kochi TT Academy', g: 'B' }
+    ];
+    var ms = [], order = 0;
+    PAIRS.forEach(function (pr, k) {
+      ['A', 'B'].forEach(function (g) {
+        var ps = players.filter(function (p) { return p.g === g; });
+        ms.push({ id: g + (k + 1), g: g, a: ps[pr[0]].id, b: ps[pr[1]].id, status: 'queued', table: null, called: false, sa: null, sb: null, order: order++, seq: 0 });
+      });
+    });
+    var st = {
+      tables: 3, seq: 0, nextOrder: order, nextP: 9, players: players, matches: ms, manual: {}, ko: null, notes: [],
+      cfg: { group: 5, early: 5, quarters: 5, semis: 5, finals: 7, adv: 2, ko: 'cross' },
+      e2: { players: NAMES_E2.map(function (r, i) { return { id: 'q' + (i + 1), name: r[0], org: r[1], seed: !!r[2] }; }), nextP: 11, started: false, groups: null, matches: 0, cfg: { group: 5, early: 5, quarters: 5, semis: 5, finals: 7, adv: 2, ko: 'cross' }, tables: 3 },
+      T: [
+        { id: 't1', name: 'Mecttel Singles Open', venue: 'Mecttel Sports Hall', date: '2026-11-19', status: 'ongoing', divs: [
+          { id: 'd1', name: 'Men’s Singles – Open', type: 'single', cat: 'open', status: 'ongoing', ev: 'event' },
+          { id: 'd2', name: 'Men’s Singles – U16', type: 'single', cat: 'u16', status: 'upcoming', ev: 'event2' },
+          { id: 'd3', name: 'Women’s Singles – Open', type: 'single', cat: 'open', status: 'draft', ev: null }
+        ] },
+        { id: 't2', name: 'Bizdak Doubles Cup', venue: 'Bizdak Gym', date: '2026-12-12', status: 'upcoming', divs: [
+          { id: 'd4', name: 'Doubles – Open', type: 'doubles', cat: 'open', status: 'upcoming', ev: null, n: 14 },
+          { id: 'd5', name: 'Doubles – U18', type: 'doubles', cat: 'u18', status: 'upcoming', ev: null, n: 8 }
+        ] },
+        { id: 't3', name: 'Youth Open', venue: 'Mecttel Sports Hall', date: '2027-01-09', status: 'draft', divs: [] }
+      ]
+    };
+    [['A1', 3, 1], ['B1', 3, 0], ['A2', 2, 3]].forEach(function (r) {
+      var m = ms.filter(function (x) { return x.id === r[0]; })[0];
+      m.status = 'done'; m.sa = r[1]; m.sb = r[2]; m.seq = ++st.seq;
+    });
+    fill(st);
+    ms.forEach(function (m) { if (m.id === 'B2') m.called = true; });
+    return st;
+  }
+
+  /* ---------- scheduling (mirrors src/lib/matchQueue.ts + tableAssignment.ts: FIFO, max 2 in a row) ---------- */
+  function done(s) { return s.matches.filter(function (m) { return m.status === 'done'; }).sort(function (a, b) { return a.seq - b.seq; }); }
+  function consecutive(s, pid) { var d = done(s), n = 0; for (var i = d.length - 1; i >= 0; i--) { if (d[i].a === pid || d[i].b === pid) n++; else break; } return n; }
+  function resting(s, pid) { return consecutive(s, pid) >= 2; }
+  function onTable(s) { return s.matches.filter(function (m) { return m.status === 'table'; }); }
+  function busySet(s) { var o = {}; onTable(s).forEach(function (m) { o[m.a] = m.table; o[m.b] = m.table; }); return o; }
+  function queued(s) { return s.matches.filter(function (m) { return m.status === 'queued'; }).sort(function (a, b) { return a.order - b.order; }); }
+  function fill(s) {
+    var placed = [];
+    for (var t = 1; t <= s.tables; t++) {
+      if (onTable(s).some(function (m) { return m.table === t; })) continue;
+      var b = busySet(s);
+      var next = queued(s).filter(function (m) { return !(m.a in b) && !(m.b in b) && !resting(s, m.a) && !resting(s, m.b); })[0];
+      if (next) { next.status = 'table'; next.table = t; next.called = false; placed.push(next.id); }
+    }
+    if (!onTable(s).length) { var any = queued(s)[0]; if (any) { any.status = 'table'; any.table = 1; any.called = false; placed.push(any.id); } }
+    return placed;
+  }
+  function standings(s, g) {
+    var rows = {};
+    s.players.filter(function (p) { return p.g === g; }).forEach(function (p) { rows[p.id] = { id: p.id, name: p.name, p: 0, w: 0, l: 0, sf: 0, sa: 0 }; });
+    s.matches.forEach(function (m) {
+      if (m.g !== g || m.status !== 'done' || !rows[m.a] || !rows[m.b]) return;
+      var a = rows[m.a], b = rows[m.b];
+      a.p++; b.p++; a.sf += m.sa; a.sa += m.sb; b.sf += m.sb; b.sa += m.sa;
+      if (m.sa > m.sb) { a.w++; b.l++; } else { b.w++; a.l++; }
+    });
+    var list = Object.keys(rows).map(function (k) { return rows[k]; });
+    list.sort(function (x, y) { return (y.w - x.w) || ((y.sf - y.sa) - (x.sf - x.sa)) || (y.sf - x.sf) || x.name.localeCompare(y.name); });
+    var man = s.manual[g];
+    if (man) list.sort(function (x, y) { return man.order.indexOf(x.id) - man.order.indexOf(y.id); });
+    return list;
+  }
+  function groupState(s, g) {
+    var ms = s.matches.filter(function (m) { return m.g === g; });
+    var d = ms.filter(function (m) { return m.status === 'done'; }).length;
+    return d === ms.length ? 'final' : (d > 0 ? 'prov' : 'none');
+  }
+  function groups(s) { var o = {}; s.players.forEach(function (p) { o[p.g] = 1; }); return Object.keys(o).sort(); }
+
+  /* ---------- state ---------- */
+  var S = initial(), PBY = {};
+  function reindex() { PBY = {}; S.players.forEach(function (p) { PBY[p.id] = p; }); }
+  reindex();
+  var U = { view: 'tournaments', admin: false, tab: 'queue', ltab: 'next', q: '', placed: [], curT: 't1', pf: 'all', pq: '', q2: '', e2f: 'all' };
+  var W = { step: 0, name: '', venue: '', date: '', file: '', url: '', err: {}, divs: [] };
+  var AE = { d: draftDiv(), err: '' };
+  var L = { email: '', pw: '', err: '', busy: false };
+  var A = { email: '', pw: '', err: {} };
+  var H = { name: '', venue: '', date: '' };
+  var P2 = { name: '', org: '', seed: false, err: '' };
+  function ROOT() { return { S: S, U: U, W: W, AE: AE, L: L, A: A, H: H, P2: P2 }; }
+  function setPath(path, val) { var p = path.split('.'), o = ROOT()[p[0]]; for (var i = 1; i < p.length - 1; i++) o = o[p[i]]; o[p[p.length - 1]] = val; }
+  function getPath(path) { var p = path.split('.'), o = ROOT()[p[0]]; for (var i = 1; i < p.length; i++) o = o[p[i]]; return o; }
+
+  function nm(id) { return PBY[id] ? PBY[id].name : 'Unknown'; }
+  function curTour() { return S.T.filter(function (t) { return t.id === U.curT; })[0] || S.T[0]; }
+  function counts() { var d = S.matches.filter(function (m) { return m.status === 'done'; }).length; return { done: d, total: S.matches.length, left: S.matches.length - d, playing: onTable(S).length }; }
+  function bestOf() { return S.cfg.group; }
+  function need() { return (S.cfg.group + 1) / 2; }
+  function fmtDate(d) { if (!d) return ''; var x = new Date(d + 'T00:00:00'); return x.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+
+  /* ---------- small builders ---------- */
+  function chip(t, k) { return '<span class="chip' + (k ? ' ' + k : '') + '">' + t + '</span>'; }
+  function statusChip(s) { return s === 'ongoing' ? '<span class="chip live"><span class="dot"></span>Ongoing</span>' : s === 'upcoming' ? chip('Upcoming') : chip('Draft'); }
+  function back(label, go) { return '<a class="crumb" href="#' + go + '" data-go="' + go + '">' + ic('back') + label + '</a>'; }
+  function fld(id, label, val, o) {
+    o = o || {};
+    var desc = o.err ? ' aria-invalid="true" aria-describedby="' + id + '-m"' : (o.help ? ' aria-describedby="' + id + '-m"' : '');
+    return '<div class="f"><label class="lab" for="' + id + '">' + label + (o.opt ? '<span class="opt">optional</span>' : '') + '</label><input class="in' + (o.err ? ' bad' : '') + '" id="' + id + '" type="' + (o.type || 'text') + '" value="' + esc(val) + '"' + (o.ph ? ' placeholder="' + esc(o.ph) + '"' : '') + (o.ac ? ' autocomplete="' + o.ac + '"' : '') + (o.bind ? ' data-bind="' + o.bind + '"' : '') + desc + '>' +
+      (o.err ? '<span class="msg err" id="' + id + '-m" role="alert">' + o.err + '</span>' : (o.help ? '<span class="msg" id="' + id + '-m">' + o.help + '</span>' : '')) + '</div>';
+  }
+  function segSet(path, opts, cur, label) {
+    return '<div class="seg fill" role="radiogroup" aria-label="' + label + '">' + opts.map(function (o) { return '<button type="button" role="radio" aria-checked="' + (String(o[0]) === String(cur)) + '" data-set="' + path + '" data-val="' + o[0] + '"' + (typeof o[0] === 'number' ? ' data-num="1"' : '') + '>' + o[1] + '</button>'; }).join('') + '</div>';
+  }
+  function stepper(path, val, min, max, label) {
+    return '<div class="stepper" role="group" aria-label="' + label + '"><button type="button" class="icon-btn" data-step="' + path + '" data-d="-1" data-min="' + min + '" data-max="' + max + '" aria-label="Decrease ' + label.toLowerCase() + '"' + (val <= min ? ' disabled' : '') + '>' + ic('minus') + '</button><span class="num">' + val + '</span><button type="button" class="icon-btn" data-step="' + path + '" data-d="1" data-min="' + min + '" data-max="' + max + '" aria-label="Increase ' + label.toLowerCase() + '"' + (val >= max ? ' disabled' : '') + '>' + ic('plus') + '</button></div>';
+  }
+  function sw(act, on, label, extra) { return '<button type="button" class="sw" role="switch" aria-checked="' + !!on + '" data-act="' + act + '" ' + (extra || '') + '><i></i><span>' + label + '</span></button>'; }
+  function banner(t, k) { return '<div class="banner' + (k ? ' ' + k : '') + '" role="status">' + ic(k === 'ok' ? 'check' : 'info') + '<span>' + t + '</span></div>'; }
+
+  /* ---------- public views ---------- */
+  function vHome() {
+    var c = counts();
+    var pub = S.T.filter(function (t) { return t.status !== 'draft'; });
+    var og = pub.filter(function (t) { return t.status === 'ongoing'; }), up = pub.filter(function (t) { return t.status === 'upcoming'; });
+    return '<div class="view"><div class="head"><h1>Tournaments</h1><p class="sub">Live scores, groups and brackets from table tennis meets near you.</p></div>' +
+      '<section class="sec"><h2>Ongoing</h2>' + (og.length ? '<div class="cards">' + og.map(function (t) {
+        return '<a class="tcard" href="#tournament" data-go="tournament" data-t="' + t.id + '"><div class="head-row" style="flex-wrap:nowrap"><div style="display:grid;gap:4px"><h3>' + esc(t.name) + '</h3><span class="meta">' + esc(t.venue) + ' · ' + fmtDate(t.date) + '</span></div>' + statusChip('ongoing') + '</div>' +
+          '<div class="tlive"><div><b>' + c.playing + '</b><span>on court now</span></div><div><b>' + c.left + '</b><span>matches to play</span></div><div><b>' + S.tables + '</b><span>tables</span></div></div></a>'; }).join('') + '</div>' : '<div class="panel empty"><strong>Nothing is live right now</strong><span>Check the upcoming list below.</span></div>') + '</section>' +
+      '<section class="sec"><h2>Upcoming</h2>' + (up.length ? '<div class="cards">' + up.map(function (t) {
+        return '<a class="tcard" href="#tournament" data-go="tournament" data-t="' + t.id + '"><div class="head-row" style="flex-wrap:nowrap"><div style="display:grid;gap:4px"><h3>' + esc(t.name) + '</h3><span class="meta">' + esc(t.venue) + ' · ' + fmtDate(t.date) + '</span></div>' + chip('Registration open') + '</div><span class="meta">' + t.divs.length + ' division' + (t.divs.length === 1 ? '' : 's') + '</span></a>'; }).join('') + '</div>' : '<div class="panel empty"><strong>No upcoming tournaments</strong><span>New meets show up here once registration opens.</span></div>') + '</section></div>';
+  }
+  function vTournament() {
+    var t = curTour(), divs = t.divs.filter(function (d) { return d.status !== 'draft'; });
+    return '<div class="view">' + back('Tournaments', 'tournaments') +
+      '<div class="head"><h1>' + esc(t.name) + '</h1><p class="sub">' + esc(t.venue) + ' · ' + fmtDate(t.date) + '</p></div>' +
+      '<section class="sec"><h2>Choose a division</h2>' + (divs.length ? '<div class="panel rows">' + divs.map(function (d) {
+        var n = d.ev === 'event' ? S.players.length : d.ev === 'event2' ? S.e2.players.length : d.n || 0;
+        var inner = '<div class="names"><span class="vs">' + esc(d.name) + '</span><span class="note">' + n + ' players</span></div><div style="display:flex;align-items:center;gap:8px">' + statusChip(d.status) + (d.ev ? ic('chev') : '') + '</div>';
+        return d.ev ? '<a class="row" style="grid-template-columns:1fr auto" href="#' + d.ev + '" data-go="' + d.ev + '">' + inner + '</a>' : '<div class="row" style="grid-template-columns:1fr auto">' + inner + '</div>';
+      }).join('') + '</div>' : '<div class="panel empty"><strong>No public divisions yet</strong><span>Divisions appear once registration opens.</span></div>') + '</section></div>';
+  }
+
+  /* ---------- admin: login, dashboard, hub, wizard, add division, create admin ---------- */
+  function vLogin() {
+    return '<div class="view login"><div class="mark"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="var(--accent-ink)" stroke-width="1.8"/><path d="M5.2 7.6c3.4 1.1 6.2 4.4 6.9 9.2" fill="none" stroke="var(--accent-ink)" stroke-width="1.6" stroke-linecap="round"/></svg></div>' +
+      '<form class="panel" data-form="login" novalidate><div class="head"><h1 style="font-size:22px">Admin sign in</h1><p class="sub">For tournament organizers.</p></div>' +
+      (L.err ? '<div class="banner" role="alert">' + ic('info') + '<span>' + L.err + '</span></div>' : '') +
+      fld('l-email', 'Email', L.email, { type: 'email', ac: 'username', bind: 'L.email', ph: 'you@club.org' }) +
+      fld('l-pw', 'Password', L.pw, { type: 'password', ac: 'current-password', bind: 'L.pw' }) +
+      '<button class="btn btn-primary btn-block" type="submit"' + (L.busy ? ' disabled' : '') + '>' + (L.busy ? 'Signing in…' : 'Sign in') + '</button>' +
+      '<p class="msg">Prototype: any email and password signs in. Use the password “wrong” to see the error.</p></form>' +
+      '<a class="crumb" href="#tournaments" data-go="tournaments">' + ic('back') + 'Public site</a></div>';
+  }
+  function vAdminHome() {
+    return '<div class="view"><div class="head-row"><div class="head"><h1>Your tournaments</h1><p class="sub">Run the queue, score matches and publish brackets.</p></div>' +
+      '<div class="actions"><button class="btn btn-quiet" data-go="createadmin">Add admin</button><button class="btn btn-primary" data-go="wizard">' + ic('plus') + 'New tournament</button></div></div>' +
+      '<div class="panel rows">' + S.T.map(function (t) {
+        var n = t.divs.length;
+        return '<a class="row" style="grid-template-columns:1fr auto" href="#hub" data-go="hub" data-t="' + t.id + '"><div class="names"><span class="vs">' + esc(t.name) + '</span><span class="note">' + esc(t.venue || 'No venue') + ' · ' + fmtDate(t.date) + ' · ' + n + ' division' + (n === 1 ? '' : 's') + '</span></div><div style="display:flex;align-items:center;gap:8px">' + statusChip(t.status) + ic('chev') + '</div></a>'; }).join('') + '</div>' +
+      '<div class="foot"><span>Signed in as organizer@mecttel.org</span><button class="btn btn-ghost btn-sm" data-go="tournaments" data-signout="1">Sign out</button></div></div>';
+  }
+  function vHub() {
+    var t = curTour();
+    return '<div class="view">' + back('Your tournaments', 'admin') +
+      '<div class="head-row"><div class="head"><h1>' + esc(t.name) + '</h1><p class="sub">' + esc(t.venue || 'No venue') + ' · ' + fmtDate(t.date) + '</p></div>' + statusChip(t.status) + '</div>' +
+      '<section class="sec"><h2>Divisions</h2>' + (t.divs.length ? '<div class="panel rows">' + t.divs.map(function (d) {
+        var inner = '<div class="names"><span class="vs">' + esc(d.name) + '</span><span class="note">' + TYPE_L[d.type] + (d.type === 'executive' ? '' : ' · ' + CAT_L[d.cat]) + '</span></div><div style="display:flex;align-items:center;gap:8px">' + statusChip(d.status) + ic('chev') + '</div>';
+        return '<a class="row" style="grid-template-columns:1fr auto" href="#' + (d.ev || 'event2') + '" data-go="' + (d.ev || 'event2') + '"' + (d.ev ? '' : ' data-sample="1"') + '>' + inner + '</a>'; }).join('') + '</div>' : '<div class="panel empty"><strong>No divisions yet</strong><span>Add one to start taking registrations.</span></div>') +
+      '<div><button class="btn btn-quiet" data-go="newevent">' + ic('plus') + 'Add division</button></div></section>' +
+      '<section class="sec"><h2>Tournament details</h2><form class="panel pad" data-form="hub" novalidate><div class="form">' +
+      fld('h-name', 'Tournament name', H.name, { bind: 'H.name' }) + fld('h-venue', 'Venue', H.venue, { bind: 'H.venue', opt: 1 }) + fld('h-date', 'Start date', H.date, { type: 'date', bind: 'H.date' }) +
+      coverField() + '<div><button class="btn btn-primary" type="submit">Save changes</button></div></div></form></section>' +
+      '<section class="sec"><div class="panel danger"><h3>Delete tournament</h3><p class="sub">Removes the tournament, its divisions and every match. You can undo right after.</p><div><button class="btn btn-danger" data-act="del-tour">' + ic('trash') + 'Delete tournament</button></div></div></section></div>';
+  }
+  function coverField() {
+    return '<div class="f"><span class="lab">Cover image<span class="opt">optional</span></span><label class="drop">' + ic('img') + '<strong>' + (W.file ? esc(W.file) : 'Choose an image') + '</strong><span>' + (W.file ? 'Click to replace' : 'JPG or PNG, wide images look best') + '</span><input class="sr" type="file" accept="image/*" data-file="1"></label>' +
+      '<div style="margin-top:4px">' + fld('w-url', 'Or paste an image link', W.url, { bind: 'W.url', ph: 'https://', opt: 1 }) + '</div></div>';
+  }
+  function divForm(path, d, i, removable) {
+    var out = '<div class="panel dcard"><div class="dcard-h"><h3>' + (i != null ? 'Division ' + (i + 1) + ' · ' : '') + esc(divName(d)) + '</h3>' + (removable ? '<button class="btn btn-ghost btn-sm" data-act="rm-div" data-i="' + i + '">' + ic('trash') + 'Remove</button>' : '') + '</div>';
+    out += '<div class="f"><span class="lab">Event type</span>' + segSet(path + '.type', [['single', 'Singles'], ['doubles', 'Doubles'], ['team', 'Team'], ['executive', 'Executive']], d.type, 'Event type') + '</div>';
+    if (d.type !== 'executive') out += '<div class="f"><span class="lab">Category</span>' + segSet(path + '.cat', [['u12', 'U12'], ['u16', 'U16'], ['u18', 'U18'], ['open', 'Open']], d.cat, 'Category') + '</div>';
+    if (d.type === 'team') out += '<div class="f"><span class="lab">Roster size</span>' + segSet(path + '.roster', [[3, '3'], [4, '4']], d.roster, 'Roster size') + '</div><div class="f"><span class="lab">Team format</span>' + segSet(path + '.fmt', [['SSS', 'SSS'], ['SDS', 'SDS'], ['SSDSS', 'SSDSS']], d.fmt, 'Team format') + '</div>';
+    out += fld('dn-' + (i == null ? 'x' : i), 'Display name', d.display, { bind: path + '.display', ph: divName({ type: d.type, cat: d.cat, display: '' }), opt: 1 });
+    out += '<div class="setting" style="padding:0"><div class="names"><span class="vs">Advance per group</span><span class="note">Players who move on to the knockout stage</span></div>' + stepper(path + '.adv', d.adv, 1, 4, 'Advance per group') + '</div>';
+    out += '<div class="setting" style="padding:0"><div class="names"><span class="vs">Tables available</span><span class="note">Matches that can run at the same time</span></div>' + stepper(path + '.tables', d.tables, 1, 8, 'Tables') + '</div></div>';
+    return out;
+  }
+  function vWizard() {
+    var steps = '<div class="steps"><span class="st ' + (W.step === 0 ? 'on' : 'dn') + '"><span class="n">' + (W.step === 0 ? '1' : '✓') + '</span>Details</span><span class="ln"></span><span class="st ' + (W.step === 1 ? 'on' : '') + '"><span class="n">2</span>Divisions</span></div>';
+    var body;
+    if (W.step === 0) {
+      body = '<form class="form" data-form="wiz0" novalidate>' + fld('w-name', 'Tournament name', W.name, { bind: 'W.name', ph: 'Mecttel Table Tennis Championship 2026', err: W.err.name }) + fld('w-venue', 'Venue', W.venue, { bind: 'W.venue', ph: 'Mecttel Sports Hall', opt: 1 }) + fld('w-date', 'Start date', W.date, { type: 'date', bind: 'W.date', err: W.err.date }) + coverField() +
+        '<div class="actions"><button class="btn btn-primary" type="submit" data-then="create">Create tournament</button><button class="btn btn-quiet" type="submit" data-then="divs">Add divisions now</button></div></form>';
+    } else {
+      body = '<div class="form" style="max-width:640px"><div class="sec"><span class="label">Quick add</span><div class="pills">' + PRESETS.map(function (p, i) { return '<button class="pill" type="button" data-act="preset" data-i="' + i + '">' + ic('plus') + p[0] + '</button>'; }).join('') + '</div></div>' +
+        '<div><button class="btn btn-quiet" type="button" data-act="add-div">' + ic('plus') + 'Add custom division</button></div>' +
+        (W.divs.length ? W.divs.map(function (d, i) { return divForm('W.divs.' + i, d, i, true); }).join('') : '<div class="panel empty"><strong>No divisions yet</strong><span>Pick a quick add above, or add a custom one.</span></div>') +
+        (W.err.divs ? '<p class="msg err" role="alert">' + W.err.divs + '</p>' : '') +
+        '<div class="actions"><button class="btn btn-primary" data-act="create-w">Create ' + esc(W.name || 'tournament') + '</button><button class="btn btn-ghost" data-act="w-back">Back</button></div></div>';
+    }
+    return '<div class="view">' + back('Dashboard', 'admin') + '<h1>New tournament</h1>' + steps + body + '</div>';
+  }
+  function vNewEvent() {
+    var t = curTour();
+    return '<div class="view">' + back(t.name, 'hub') + '<h1>Add division</h1><div class="form" style="max-width:640px"><div class="sec"><span class="label">Quick add</span><div class="pills">' + PRESETS.map(function (p, i) { return '<button class="pill" type="button" data-act="ae-preset" data-i="' + i + '">' + p[0] + '</button>'; }).join('') + '</div></div>' + divForm('AE.d', AE.d, null, false) +
+      '<div class="actions"><button class="btn btn-primary" data-act="ae-save">Add division</button><button class="btn btn-ghost" data-go="hub">Cancel</button></div></div></div>';
+  }
+  function vCreateAdmin() {
+    var ok = A.pw.length >= 8;
+    return '<div class="view">' + back('Dashboard', 'admin') + '<div class="head"><h1>Create admin</h1><p class="sub">Admins can run every tournament. Share the password securely.</p></div>' +
+      '<form class="form" data-form="admin" novalidate>' + fld('a-email', 'Email', A.email, { type: 'email', bind: 'A.email', ph: 'newadmin@mecttel.org', ac: 'off', err: A.err.email }) +
+      '<div class="f"><label class="lab" for="a-pw">Password</label><input class="in' + (A.err.pw ? ' bad' : '') + '" id="a-pw" type="password" autocomplete="new-password" data-bind="A.pw" data-pwhelp="1" value="' + esc(A.pw) + '" aria-describedby="a-pw-m"><span class="msg' + (A.err.pw ? ' err' : '') + '" id="a-pw-m" role="' + (A.err.pw ? 'alert' : 'status') + '">' + (A.err.pw || (ok ? 'Good. 8 or more characters.' : 'At least 8 characters.')) + '</span></div>' +
+      '<div><button class="btn btn-primary" type="submit">Create admin</button></div></form></div>';
+  }
+  function vNotFound() {
+    return '<div class="view nf"><div class="big">4<b>0</b>4</div><h1>Page not found</h1><p class="sub">The link may be wrong or the page was removed.</p><button class="btn btn-primary" data-go="tournaments">Back to tournaments</button></div>';
+  }
+
+  /* ---------- division 1 (live) ---------- */
+  function chipLive() { return statusChip('ongoing'); }
+  function e1Tabs() { return U.admin ? [['queue', 'Queue'], ['groups', 'Groups'], ['bracket', 'Bracket'], ['players', 'Entries'], ['settings', 'Settings']] : [['queue', 'Live'], ['groups', 'Groups'], ['bracket', 'Bracket'], ['players', 'Players']]; }
+  function vEvent() {
+    var c = counts(), tabs = e1Tabs();
+    if (!tabs.some(function (t) { return t[0] === U.tab; })) U.tab = 'queue';
+    var body = U.tab === 'queue' ? vQueue() : U.tab === 'groups' ? vGroups() : U.tab === 'bracket' ? vBracket() : U.tab === 'players' ? vPlayers() : vSettings(S.cfg, 'S.cfg', true);
+    return '<div class="view">' + back(U.admin ? 'Mecttel Singles Open' : 'Mecttel Singles Open', U.admin ? 'hub' : 'tournament') +
+      '<div class="head"><div class="head-row"><div class="head"><h1>Men’s Singles – Open</h1><p class="sub">Mecttel Singles Open · Mecttel Sports Hall · Nov 19, 2026</p></div>' + chipLive() + '</div>' +
+      '<div class="progress"><div class="t"><span><span class="num">' + c.done + '</span> of ' + c.total + ' matches played</span><span class="num">' + c.left + ' to go</span></div><div class="meter"><i style="transform:scaleX(' + (c.done / c.total).toFixed(3) + ')"></i></div></div></div>' +
+      '<div class="tabs" role="tablist">' + tabs.map(function (t) { return '<button class="tab" role="tab" data-tab="' + t[0] + '" aria-selected="' + (U.tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>' +
+      '<div style="display:grid;gap:24px">' + S.notes.map(function (n) { return banner(n, 'ok'); }).join('') + body + '</div>' +
+      '<div class="foot"><span>Prototype data. Changes reset when you reload.</span><button class="btn btn-ghost btn-sm" data-act="reset">Reset demo</button></div></div>';
+  }
+  function courtHTML(t) {
+    var m = onTable(S).filter(function (x) { return x.table === t; })[0];
+    if (!m) {
+      var nx = queued(S)[0];
+      return '<div class="court-card"><div class="court-top"><b>Table ' + t + '</b>' + chip('Free') + '</div><div class="court idle"><div class="mid"><b>' + (nx ? 'Waiting for the next match' : 'No match queued') + '</b><span>' + (nx ? 'Players are resting or on another table' : 'Every group match is played') + '</span></div></div></div>';
+    }
+    var enter = U.placed.indexOf(m.id) >= 0 ? ' enter' : '';
+    var acts = U.admin ? '<div class="actions"><button class="btn btn-quiet" data-act="call" data-id="' + m.id + '">' + ic('bell') + (m.called ? 'Call again' : 'Call players') + '</button><button class="btn btn-primary" data-act="score" data-id="' + m.id + '">' + ic('edit') + 'Enter score</button></div>' : '';
+    return '<div class="court-card"><div class="court-top"><b>Table ' + t + '</b>' + (m.called ? chip('Called', 'live') : chip('On court', 'ok')) + '</div><div class="court' + enter + '"><div class="side"><span class="nm">' + nm(m.a) + '</span><span class="og">' + esc(PBY[m.a].org) + '</span></div><div class="side"><span class="nm">' + nm(m.b) + '</span><span class="og">' + esc(PBY[m.b].org) + '</span></div></div><div class="court-meta"><span>Group ' + m.g + ' · Best of ' + bestOf() + '</span></div>' + acts + '</div>';
+  }
+  function nextStep() {
+    var ts = onTable(S).sort(function (a, b) { return a.table - b.table; });
+    var fresh = ts.filter(function (m) { return !m.called; })[0];
+    if (fresh) return '<div class="next"><div class="names"><span class="label">Next step</span><span class="vs">Call Table ' + fresh.table + '</span><span class="note">' + nm(fresh.a) + ' vs ' + nm(fresh.b) + ' are assigned and waiting to be called.</span></div><button class="btn btn-primary" data-act="call" data-id="' + fresh.id + '">' + ic('bell') + 'Call Table ' + fresh.table + '</button></div>';
+    if (ts.length) { var m = ts[0]; return '<div class="next"><div class="names"><span class="label">Next step</span><span class="vs">Table ' + m.table + ' is playing</span><span class="note">Enter the score when ' + nm(m.a) + ' vs ' + nm(m.b) + ' finish.</span></div><button class="btn btn-primary" data-act="score" data-id="' + m.id + '">' + ic('edit') + 'Enter score</button></div>'; }
+    if (queued(S).length) return '<div class="next"><div class="names"><span class="label">Next step</span><span class="vs">No table can start yet</span><span class="note">Every waiting match has a player who needs rest. Score or adjust to continue.</span></div></div>';
+    return '';
+  }
+  function vQueue() {
+    var c = counts();
+    var h = (U.admin && c.left ? nextStep() : '') + '<section class="sec"><div class="sec-h"><h2>Tables</h2>' + (U.admin ? stepper('S.tables', S.tables, 1, 4, 'Tables') : '') + '</div>';
+    if (c.left === 0) return h + '<div class="panel empty"><strong>Group stage complete</strong><span>Every group match is played. The semifinals are set.</span><button class="btn btn-primary" data-tab="bracket">View bracket' + ic('arrow') + '</button></div></section>';
+    var cs = ''; for (var t = 1; t <= S.tables; t++) cs += courtHTML(t);
+    h += '<div class="courts">' + cs + '</div></section>';
+    h += '<section class="sec"><div class="tools"><div class="tabs" style="border:0;gap:2px;margin-left:-12px" role="tablist">' + listTabs() + '</div><label class="field">' + ic('search') + '<span class="sr">Search players</span><input type="search" id="q" placeholder="Find your match" value="' + esc(U.q) + '" autocomplete="off"></label></div><div id="findme">' + findMe() + '</div><div class="panel" id="lists">' + listHTML() + '</div></section>';
+    return h;
+  }
+  function findMe() {
+    var q = U.q.trim().toLowerCase(); if (q.length < 2) return '';
+    var m = S.players.filter(function (p) { return p.name.toLowerCase().indexOf(q) >= 0; });
+    if (m.length !== 1) return '';
+    var p = m[0], qu = queued(S), idx = -1, i;
+    for (i = 0; i < qu.length; i++) { if (qu[i].a === p.id || qu[i].b === p.id) { idx = i; break; } }
+    var cur = onTable(S).filter(function (x) { return x.a === p.id || x.b === p.id; })[0], title, detail;
+    if (cur) { var o = cur.a === p.id ? cur.b : cur.a; title = cur.called ? 'Go to Table ' + cur.table + ' now' : 'You are on Table ' + cur.table; detail = 'vs ' + nm(o) + (cur.called ? ' · you have been called' : ''); }
+    else if (idx >= 0) {
+      var nx = qu[idx], op = nx.a === p.id ? nx.b : nx.a;
+      title = resting(S, p.id) ? 'Resting for one match' : (idx === 0 ? 'You are up next' : idx + ' match' + (idx === 1 ? '' : 'es') + ' before yours');
+      detail = 'Next: vs ' + nm(op) + (idx > 0 ? ' · about ' + Math.max(5, Math.ceil(idx / S.tables) * 12) + ' min (estimate)' : '');
+    } else { title = 'No matches left'; detail = 'Played ' + done(S).filter(function (x) { return x.a === p.id || x.b === p.id; }).length + ' group matches.'; }
+    return '<div class="find" role="status"><span class="label">' + esc(p.name) + ' · Group ' + p.g + '</span><b>' + title + '</b><span class="sub">' + detail + '</span></div>';
+  }
+  function listTabs() {
+    var q = queued(S), rest = q.filter(function (m) { return resting(S, m.a) || resting(S, m.b); });
+    return [['next', 'Up next', q.length - rest.length], ['rest', 'Resting', rest.length], ['wait', 'Waiting', waitList().length], ['played', 'Played', done(S).length]].map(function (t) { return '<button class="tab" role="tab" data-ltab="' + t[0] + '" aria-selected="' + (U.ltab === t[0]) + '">' + t[1] + ' <span class="count">' + t[2] + '</span></button>'; }).join('');
+  }
+  function waitList() {
+    var q = queued(S), b = busySet(S), out = [];
+    S.players.forEach(function (p) {
+      var idx = -1; for (var i = 0; i < q.length; i++) { if (q[i].a === p.id || q[i].b === p.id) { idx = i; break; } }
+      if (p.id in b) out.push({ p: p, text: 'Playing on Table ' + b[p.id], rank: -1 });
+      else if (idx >= 0) out.push({ p: p, text: resting(S, p.id) ? 'Resting after 2 in a row' : (idx === 0 ? 'Up next' : idx + ' matches ahead'), rank: idx });
+    });
+    return out.sort(function (a, b) { return a.rank - b.rank; });
+  }
+  function matchQ(ids) { var q = U.q.trim().toLowerCase(); return !q || ids.some(function (i) { return nm(i).toLowerCase().indexOf(q) >= 0; }); }
+  function listHTML() {
+    var q = queued(S), b = busySet(S), html = '', n = 0;
+    if (U.ltab === 'next' || U.ltab === 'rest') {
+      var wantRest = U.ltab === 'rest';
+      q.forEach(function (m, i) {
+        var rs = resting(S, m.a) || resting(S, m.b);
+        if (rs !== wantRest || !matchQ([m.a, m.b])) return;
+        var note, bz = [m.a, m.b].filter(function (x) { return x in b; });
+        if (rs) note = '<span class="note warn">' + [m.a, m.b].filter(function (x) { return resting(S, x); }).map(nm).join(' & ') + ' played 2 in a row and rests one match</span>';
+        else if (bz.length) note = '<span class="note">' + nm(bz[0]) + ' is on Table ' + b[bz[0]] + '</span>'; else note = '<span class="note">Group ' + m.g + '</span>';
+        n++; html += '<div class="row qrow"><span class="pos">' + (i + 1) + '</span><div class="names"><span class="vs">' + nm(m.a) + ' vs ' + nm(m.b) + '</span>' + note + '</div>' + (rs ? chip('Rest', 'warn') : (bz.length ? chip('Waiting') : chip('Ready', 'ok'))) + '</div>';
+      });
+      if (!n) html = '<div class="empty"><strong>' + (U.q ? 'No match for “' + esc(U.q) + '”' : (wantRest ? 'Nobody is resting' : 'The queue is empty')) + '</strong><span>' + (U.q ? 'Check the spelling, or clear the search.' : (wantRest ? 'Players rest after two matches in a row.' : 'New matches appear here as they are generated.')) + '</span></div>';
+    } else if (U.ltab === 'wait') {
+      waitList().forEach(function (w) { if (!matchQ([w.p.id])) return; n++; html += '<div class="row wrow"><div class="names"><span class="vs">' + w.p.name + '</span><span class="note">Group ' + w.p.g + '</span></div>' + chip(w.text, w.rank === -1 ? 'ok' : (w.text.indexOf('Resting') === 0 ? 'warn' : '')) + '</div>'; });
+      if (!n) html = '<div class="empty"><strong>No player found</strong><span>Clear the search to see everyone still waiting.</span></div>';
+    } else {
+      done(S).slice().reverse().forEach(function (m) {
+        if (!matchQ([m.a, m.b])) return; n++; var aw = m.sa > m.sb;
+        html += '<div class="row" style="grid-template-columns:1fr auto auto"><div class="names"><span class="vs"><span class="' + (aw ? 'win' : 'lose') + '">' + nm(m.a) + '</span> vs <span class="' + (aw ? 'lose' : 'win') + '">' + nm(m.b) + '</span></span><span class="note">Group ' + m.g + '</span></div><span class="score">' + m.sa + ' – ' + m.sb + '</span>' + (U.admin ? '<button class="btn btn-ghost btn-sm" data-act="score" data-id="' + m.id + '">Edit</button>' : '<span></span>') + '</div>';
+      });
+      if (!n) html = '<div class="empty"><strong>No results yet</strong><span>Scored matches appear here.</span></div>';
+    }
+    return html;
+  }
+  function groupTable(g) {
+    var st = standings(S, g), state = groupState(S, g), man = S.manual[g];
+    return '<div class="panel"><div class="ph"><h3>Group ' + g + '</h3><div class="actions" style="gap:8px">' + (man ? chip('Manual ranks', 'warn') : '') + chip(state === 'final' ? 'Complete' : 'Top ' + S.cfg.adv + ' advance', state === 'final' ? 'ok' : '') + (U.admin ? '<button class="btn btn-ghost btn-sm" data-act="ranks" data-g="' + g + '">Set ranks</button>' : '') + '</div></div><div class="scroll"><table><thead><tr><th></th><th>Player</th><th>P</th><th>W</th><th>L</th><th>Sets</th><th>Diff</th></tr></thead><tbody>' +
+      st.map(function (r, i) { var d = r.sf - r.sa; return '<tr><td><span class="rank' + (i < S.cfg.adv ? ' q' : '') + '">' + (i + 1) + '</span></td><td>' + r.name + '</td><td>' + r.p + '</td><td>' + r.w + '</td><td>' + r.l + '</td><td>' + r.sf + '–' + r.sa + '</td><td>' + (d > 0 ? '+' + d : d) + '</td></tr>'; }).join('') + '</tbody></table></div>' + (man && man.note ? '<p class="pnote">' + esc(man.note) + '</p>' : '') + '</div>';
+  }
+  function vGroups() { return '<div class="grid2">' + groups(S).map(groupTable).join('') + '</div>'; }
+  function slot(g, r) {
+    var st = groupState(S, g);
+    if (st === 'none') return '<div class="s"><span class="prov">Group ' + g + ', ' + (r === 0 ? '1st' : '2nd') + '</span><span></span></div>';
+    var row = standings(S, g)[r];
+    return '<div class="s"><span class="' + (st === 'final' ? '' : 'prov') + '">' + row.name + '</span><span class="num prov">' + (st === 'final' ? '' : 'Prov.') + '</span></div>';
+  }
+  var KO = { cross: ['Cross', 'Group winners meet the other group’s runners-up.'], block: ['Block', 'Winners sit in separate halves of the draw.'], mirror: ['Mirror', 'Mirrored pairings across the draw.'] };
+  function vBracket() {
+    var ready = groupState(S, 'A') === 'final' && groupState(S, 'B') === 'final', c = counts();
+    var gen = '';
+    if (U.admin) {
+      gen = S.ko ? '<div class="pad" style="padding-top:0">' + banner('Bracket generated · ' + KO[S.ko.type][0] + ' seeding. Regenerate if standings change.', 'ok') + '<div><button class="btn btn-quiet" data-act="gen-ko">Regenerate bracket</button></div></div>'
+        : '<div class="pad" style="padding-top:0"><div><button class="btn btn-primary" data-act="gen-ko"' + (ready ? '' : ' disabled') + '>Generate knockout bracket</button></div>' + (ready ? '' : '<p class="msg">Finish the remaining ' + c.left + ' group matches first.</p>') + '</div>';
+    }
+    return '<div class="panel"><div class="ph"><h3>Knockout</h3>' + chip(S.ko ? 'Generated' : (ready ? 'Ready' : 'Provisional'), S.ko || ready ? 'ok' : 'warn') + '</div><div class="scroll"><div class="bracket">' +
+      '<div class="bm stub" style="grid-column:1;grid-row:1"><div class="tag">Semifinal 1 · Best of ' + S.cfg.semis + '</div>' + slot('A', 0) + slot('B', 1) + '</div><div class="join"></div>' +
+      '<div class="bm stub" style="grid-column:1;grid-row:2"><div class="tag">Semifinal 2 · Best of ' + S.cfg.semis + '</div>' + slot('B', 0) + slot('A', 1) + '</div>' +
+      '<div class="bm fin"><div class="tag">Final · Best of ' + S.cfg.finals + '</div><div class="s"><span class="prov">Winner semifinal 1</span><span></span></div><div class="s"><span class="prov">Winner semifinal 2</span><span></span></div></div></div></div>' +
+      '<p class="bnote">' + (ready ? 'Group stage is complete. Semifinals are cross-seeded so group winners meet the other group’s runner-up.' : 'Names marked provisional follow the standings today and can change until each group finishes.') + '</p>' + gen + '</div>';
+  }
+  function pFilterOK(p) {
+    var q = U.pq.trim().toLowerCase();
+    if (q && p.name.toLowerCase().indexOf(q) < 0 && (p.org || '').toLowerCase().indexOf(q) < 0) return false;
+    return U.pf === 'all' || (U.pf === 'seed' ? !!p.seed : !p.seed);
+  }
+  function vPlayers() {
+    var tools = '<div class="tools"><label class="field">' + ic('search') + '<span class="sr">Search participants</span><input type="search" id="pq" placeholder="Search by name or club" value="' + esc(U.pq) + '" autocomplete="off"></label><div class="seg" role="group" aria-label="Filter">' + [['all', 'All'], ['seed', 'Seeded'], ['un', 'Unseeded']].map(function (f) { return '<button type="button" data-pf="' + f[0] + '" aria-pressed="' + (U.pf === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div>' + (U.admin ? '<button class="btn btn-primary" data-act="late">' + ic('plus') + 'Late check-in</button>' : '') + '</div>';
+    return tools + '<div class="panel rows" id="plist">' + playersList() + '</div>';
+  }
+  function playersList() {
+    var list = S.players.filter(pFilterOK);
+    if (!list.length) return '<div class="empty"><strong>No participants match</strong><span>Clear the search or switch the filter.</span></div>';
+    return list.map(function (p) {
+      var s = standings(S, p.g).filter(function (r) { return r.id === p.id; })[0];
+      var info = '<div class="names"><span class="vs">' + esc(p.name) + (p.seed ? ' <span class="chip" style="margin-left:6px">Seed</span>' : '') + '</span><span class="note">' + esc(p.org) + ' · Group ' + p.g + '</span></div>';
+      if (U.admin) return '<div class="row erow">' + info + '<div class="ctl"><span class="score" style="margin-right:8px">' + s.w + 'W ' + s.l + 'L</span><button class="btn btn-ghost btn-sm" data-act="edit-p" data-id="' + p.id + '">Edit</button><button class="btn btn-ghost btn-sm" data-act="move-p" data-id="' + p.id + '">Move</button></div></div>';
+      return '<button class="row wrow" data-act="info-p" data-id="' + p.id + '">' + info + '<span style="display:flex;align-items:center;gap:8px"><span class="score">' + s.w + 'W ' + s.l + 'L</span>' + ic('chev') + '</span></button>';
+    }).join('');
+  }
+  var BO = [[3, '3'], [5, '5'], [7, '7']];
+  function vSettings(cfg, path, locked) {
+    var rules = [['group', 'Group stage', BO], ['early', 'Early knockout rounds', BO], ['quarters', 'Quarterfinals', BO], ['semis', 'Semifinals', BO], ['finals', 'Final', [[5, '5'], [7, '7']]]];
+    return '<section class="sec"><h2>Best of</h2><div class="panel">' + rules.map(function (r) { return '<div class="setting"><div class="names"><span class="vs">' + r[1] + '</span></div>' + segSet(path + '.' + r[0], r[2], cfg[r[0]], r[1]) + '</div>'; }).join('') + '<p class="pnote" style="padding-top:12px">Matches already scored keep their results. Changes apply immediately.</p></div></section>' +
+      '<section class="sec"><h2>Knockout stage</h2><div class="panel"><div class="setting"><div class="names"><span class="vs">Advance per group</span><span class="note">' + (locked ? 'Locked once the group stage has started' : 'Players who move on from each group') + '</span></div>' + (locked ? '<span class="num">' + cfg.adv + '</span>' : stepper(path + '.adv', cfg.adv, 1, 4, 'Advance per group')) + '</div>' +
+      '<div class="pad"><span class="lab">Bracket type</span><div class="opts" role="radiogroup" aria-label="Bracket type">' + Object.keys(KO).map(function (k) { return '<button type="button" class="copt" role="radio" aria-checked="' + (cfg.ko === k) + '" data-set="' + path + '.ko" data-val="' + k + '"><b>' + KO[k][0] + '</b><span>' + KO[k][1] + '</span></button>'; }).join('') + '</div><p class="msg">Block and mirror need an even number of groups.</p></div></div></section>' +
+      '<section class="sec"><div class="panel danger"><h3>Delete division data</h3><p class="sub">Removes every entry, group and match in this division. You can undo right after.</p><div><button class="btn btn-danger" data-act="del-div">' + ic('trash') + 'Delete division data</button></div></div></section>';
+  }
+
+  /* ---------- division 2 (registration) ---------- */
+  function e2Tabs() { var t = U.admin ? [['entries', 'Entries']] : [['players', 'Players']]; if (S.e2.started) t.push(['groups2', 'Groups']); if (U.admin) t.push(['settings2', 'Settings']); return t; }
+  function vEvent2() {
+    var e = S.e2, tabs = e2Tabs();
+    if (!tabs.some(function (t) { return t[0] === U.tab; })) U.tab = tabs[0][0];
+    var body = (U.tab === 'entries' || U.tab === 'players') ? vEntries2() : U.tab === 'groups2' ? vGroups2() : vSettings(e.cfg, 'S.e2.cfg', false);
+    return '<div class="view">' + back('Mecttel Singles Open', U.admin ? 'hub' : 'tournament') +
+      '<div class="head"><div class="head-row"><div class="head"><h1>Men’s Singles – U16</h1><p class="sub">Mecttel Singles Open · Mecttel Sports Hall · Nov 19, 2026</p></div>' + (e.started ? statusChip('ongoing') : chip('Registration open', 'ok')) + '</div>' +
+      '<p class="sub"><span class="num">' + e.players.length + '</span> players registered · <span class="num">' + e.players.filter(function (p) { return p.seed; }).length + '</span> seeded' + (e.started ? ' · <span class="num">' + e.matches + '</span> group matches generated' : '') + '</p></div>' +
+      '<div class="tabs" role="tablist">' + tabs.map(function (t) { return '<button class="tab" role="tab" data-tab="' + t[0] + '" aria-selected="' + (U.tab === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>' +
+      '<div style="display:grid;gap:24px">' + body + '</div><div class="foot"><span>Prototype data. Changes reset when you reload.</span><button class="btn btn-ghost btn-sm" data-act="reset">Reset demo</button></div></div>';
+  }
+  function e2Filter(p) { var q = U.q2.trim().toLowerCase(); if (q && p.name.toLowerCase().indexOf(q) < 0 && (p.org || '').toLowerCase().indexOf(q) < 0) return false; return U.e2f === 'all' || (U.e2f === 'seed' ? !!p.seed : !p.seed); }
+  function vEntries2() {
+    var e = S.e2, out = '';
+    if (U.admin && !e.started) {
+      out += '<form class="panel pad" data-form="add2" novalidate><h2 style="font-size:16px">Add a player</h2><div class="inline">' + fld('p2-name', 'Player name', P2.name, { bind: 'P2.name', ac: 'off', err: P2.err }) + fld('p2-org', 'Club', P2.org, { bind: 'P2.org', ac: 'off', opt: 1 }) + '</div><div class="inline" style="justify-content:space-between;align-items:center">' + sw('p2-seed', P2.seed, 'Seeded') + '<button class="btn btn-primary" type="submit">' + ic('plus') + 'Add player</button></div></form>';
+    }
+    if (U.admin && e.started) out += banner('Entries are locked after the group stage starts.');
+    out += '<div class="tools"><label class="field">' + ic('search') + '<span class="sr">Search participants</span><input type="search" id="q2" placeholder="Search by name or club" value="' + esc(U.q2) + '" autocomplete="off"></label><div class="seg" role="group" aria-label="Filter">' + [['all', 'All'], ['seed', 'Seeded'], ['un', 'Unseeded']].map(function (f) { return '<button type="button" data-ef="' + f[0] + '" aria-pressed="' + (U.e2f === f[0]) + '">' + f[1] + '</button>'; }).join('') + '</div></div>';
+    out += '<div class="panel rows" id="e2list">' + e2List() + '</div>';
+    if (U.admin && !e.started) {
+      var enough = e.players.length >= 4;
+      out += '<div class="panel pad"><div class="head"><h2 style="font-size:16px">Ready to start</h2><p class="sub">Splits ' + e.players.length + ' players into groups and creates every round-robin match. Entries lock afterwards.</p></div><div><button class="btn btn-primary" data-act="gen-groups"' + (enough ? '' : ' disabled') + '>Generate group stage</button></div>' + (enough ? '' : '<p class="msg">Add at least 4 players to start.</p>') + '</div>';
+    }
+    return out;
+  }
+  function e2List() {
+    var e = S.e2, list = e.players.filter(e2Filter);
+    if (!list.length) return '<div class="empty"><strong>' + (e.players.length ? 'No participants match' : 'No players yet') + '</strong><span>' + (e.players.length ? 'Clear the search or switch the filter.' : 'Added players appear here.') + '</span></div>';
+    return list.map(function (p) {
+      var info = '<div class="names"><span class="vs">' + esc(p.name) + (p.seed ? ' <span class="chip" style="margin-left:6px">Seed</span>' : '') + '</span><span class="note">' + esc(p.org) + (e.started && p.g ? ' · Group ' + p.g : '') + '</span></div>';
+      if (U.admin && !e.started) return '<div class="row erow">' + info + '<div class="ctl">' + sw('seed2', p.seed, 'Seed', 'data-id="' + p.id + '"') + '<button class="btn btn-ghost btn-sm" data-act="edit2" data-id="' + p.id + '">Edit</button><button class="btn btn-ghost btn-sm" data-act="rm2" data-id="' + p.id + '">Remove</button></div></div>';
+      return '<div class="row wrow">' + info + '<span></span></div>';
+    }).join('');
+  }
+  function layouts(n) {
+    var out = [];
+    for (var g = 2; g <= Math.floor(n / 3); g++) {
+      var base = Math.floor(n / g), extra = n % g, sizes = [];
+      for (var i = 0; i < g; i++) sizes.push(base + (i < extra ? 1 : 0));
+      if (sizes[0] > 6) continue;
+      var m = sizes.reduce(function (a, s) { return a + s * (s - 1) / 2; }, 0);
+      out.push({ g: g, sizes: sizes, m: m });
+    }
+    return out;
+  }
+  function vGroups2() {
+    var e = S.e2;
+    return '<div class="grid2">' + e.groups.map(function (gr) { return '<div class="panel"><div class="ph"><h3>Group ' + gr.label + '</h3>' + chip(gr.ids.length + ' players') + '</div><div class="rows">' + gr.ids.map(function (id) { var p = e.players.filter(function (x) { return x.id === id; })[0]; return '<div class="row wrow" style="padding-block:10px"><span class="vs">' + esc(p.name) + (p.seed ? ' <span class="chip" style="margin-left:6px">Seed</span>' : '') + '</span><span class="note sub">' + esc(p.org) + '</span></div>'; }).join('') + '</div></div>'; }).join('') + '</div>';
+  }
+
+  /* ---------- render + router ---------- */
+  var app = $('#app');
+  var SCREENS = [
+    ['Public', [['home', 'Home'], ['tournament', 'Tournament · divisions'], ['event', 'Division · live'], ['event2', 'Division · registration'], ['nf', 'Not found']]],
+    ['Admin', [['login', 'Sign in'], ['admin', 'Dashboard'], ['wizard', 'New tournament'], ['hub', 'Tournament hub'], ['newevent', 'Add division'], ['createadmin', 'Create admin'], ['aevent', 'Division · queue'], ['aevent2', 'Division · setup']]]
+  ];
+  function buildJump() { $('#jump').innerHTML = SCREENS.map(function (g) { return '<optgroup label="' + g[0] + '">' + g[1].map(function (o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('') + '</optgroup>'; }).join(''); }
+  function jumpValue() {
+    var v = U.view;
+    if (v === 'tournaments') return 'home';
+    if (v === 'event') return U.admin ? 'aevent' : 'event';
+    if (v === 'event2') return U.admin ? 'aevent2' : 'event2';
+    if (v === 'admin') return 'admin';
+    if (v === 'notfound') return 'nf';
+    return v;
+  }
+  function render(keep) {
+    var y = window.scrollY, v = U.view, html;
+    if (v === 'tournaments') html = vHome(); else if (v === 'tournament') html = vTournament(); else if (v === 'event') html = vEvent(); else if (v === 'event2') html = vEvent2();
+    else if (v === 'login') html = vLogin(); else if (v === 'admin') html = vAdminHome(); else if (v === 'hub') html = vHub(); else if (v === 'wizard') html = vWizard(); else if (v === 'newevent') html = vNewEvent(); else if (v === 'createadmin') html = vCreateAdmin(); else html = vNotFound();
+    app.innerHTML = html;
+    if (keep) window.scrollTo(0, y);
+    $('#r-public').setAttribute('aria-pressed', String(!U.admin)); $('#r-admin').setAttribute('aria-pressed', String(U.admin));
+    $('#brand').setAttribute('href', U.admin ? '#admin' : '#tournaments');
+    var j = $('#jump'); if (j.value !== jumpValue()) j.value = jumpValue();
+    U.placed = [];
+    var bad = app.querySelector('[aria-invalid="true"]'); if (bad && U.focusErr) { bad.focus(); } U.focusErr = false;
+  }
+  function go(v, opts) {
+    opts = opts || {};
+    var adminViews = { admin: 1, hub: 1, wizard: 1, newevent: 1, createadmin: 1, login: 1 };
+    if (adminViews[v]) U.admin = true;
+    if (v === 'tournaments' || v === 'tournament') U.admin = false;
+    if (opts.t) U.curT = opts.t;
+    if (v === 'hub') { var t = curTour(); H.name = t.name; H.venue = t.venue || ''; H.date = t.date || ''; }
+    if (v === 'wizard') { W = { step: 0, name: '', venue: '', date: '', file: '', url: '', err: {}, divs: [] }; }
+    if (v === 'newevent') AE = { d: draftDiv(), err: '' };
+    if (v === 'createadmin') A = { email: '', pw: '', err: {} };
+    if (v === 'login') L = { email: '', pw: '', err: '', busy: false };
+    if (v === 'event') U.tab = opts.tab || 'queue';
+    if (v === 'event2') U.tab = opts.tab || (U.admin ? 'entries' : 'players');
+    U.view = v;
+    try { history.replaceState(null, '', '#' + v); } catch (err) { /* sandboxed */ }
+    render(false); window.scrollTo(0, 0);
+  }
+  function setRole(a) {
+    U.admin = a;
+    if (['tournaments', 'tournament'].indexOf(U.view) >= 0 && a) { go('admin'); return; }
+    if (['admin', 'hub', 'wizard', 'newevent', 'createadmin', 'login'].indexOf(U.view) >= 0 && !a) { go('tournaments'); return; }
+    if (U.view === 'event' || U.view === 'event2') { U.tab = U.view === 'event' ? 'queue' : (a ? 'entries' : 'players'); }
+    render(true);
+  }
+  $('#r-public').addEventListener('click', function () { setRole(false); });
+  $('#r-admin').addEventListener('click', function () { setRole(true); });
+  $('#brand').addEventListener('click', function (e) { e.preventDefault(); go(U.admin ? 'admin' : 'tournaments'); });
+  $('#jump').addEventListener('change', function (e) {
+    var v = e.target.value, m = { home: ['tournaments', 0], tournament: ['tournament', 0], event: ['event', 0], event2: ['event2', 0], nf: ['notfound', 0], login: ['login', 1], admin: ['admin', 1], wizard: ['wizard', 1], hub: ['hub', 1], newevent: ['newevent', 1], createadmin: ['createadmin', 1], aevent: ['event', 1], aevent2: ['event2', 1] }[v];
+    U.admin = !!m[1]; go(m[0]);
+  });
+
+  /* theme */
+  function dark() { var d = document.documentElement.getAttribute('data-theme'); return d ? d === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; }
+  function themeIcon() { $('#theme').innerHTML = ic(dark() ? 'sun' : 'moon'); }
+  $('#theme').addEventListener('click', function () {
+    var root = document.documentElement, st = document.createElement('style');
+    st.textContent = '*{transition:none!important}'; document.head.appendChild(st);
+    root.setAttribute('data-theme', dark() ? 'light' : 'dark'); themeIcon();
+    requestAnimationFrame(function () { requestAnimationFrame(function () { st.remove(); }); });
+  });
+  themeIcon();
+
+  /* ---------- dialogs ---------- */
+  var dlg = $('#dlg'), lastFocus = null, closeT = 0;
+  function openDialog(html, h) {
+    clearTimeout(closeT); lastFocus = document.activeElement; h = h || {};
+    dlg.onclick = function (e) { if (h.click && h.click(e) === true) return; if (e.target.closest('[data-close]')) closeDialog(); };
+    dlg.onsubmit = function (e) { e.preventDefault(); if (h.submit) h.submit(e); };
+    dlg.innerHTML = '<div class="scrim" data-close></div><div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dt">' + html + '</div>';
+    dlg.hidden = false; void dlg.offsetWidth; dlg.classList.add('open');
+    var f = dlg.querySelector('[data-first]') || dlg.querySelector('input,select,button'); if (f) f.focus();
+  }
+  function closeDialog() {
+    if (dlg.hidden) return;
+    dlg.classList.remove('open');
+    closeT = setTimeout(function () { dlg.hidden = true; dlg.innerHTML = ''; if (lastFocus && lastFocus.focus && document.body.contains(lastFocus)) lastFocus.focus(); }, 150);
+  }
+  document.addEventListener('keydown', function (e) {
+    if (dlg.hidden) return;
+    if (e.key === 'Escape') { closeDialog(); return; }
+    if (e.key === 'Tab') {
+      var els = Array.prototype.slice.call(dlg.querySelectorAll('button:not([disabled]),input,select'));
+      if (!els.length) return;
+      var i = els.indexOf(document.activeElement);
+      if (e.shiftKey && i <= 0) { e.preventDefault(); els[els.length - 1].focus(); } else if (!e.shiftKey && i === els.length - 1) { e.preventDefault(); els[0].focus(); }
+    }
+  });
+  function mById(id) { return S.matches.filter(function (x) { return x.id === id; })[0]; }
+  function actions(a, b) { return '<div class="dlg-actions">' + a + b + '</div>'; }
+  function cancelBtn() { return '<button type="button" class="btn btn-ghost" data-close>Cancel</button>'; }
+
+  function announce(id) {
+    var m = mById(id); m.called = true; render(true);
+    openDialog('<div class="call"><span class="label">Now calling</span><div class="tb" id="dt">Table ' + m.table + '</div><div class="p">' + nm(m.a) + '</div><div class="v">vs</div><div class="p">' + nm(m.b) + '</div><span class="sub">Group ' + m.g + ' · Best of ' + bestOf() + '</span></div><div class="dlg-actions"><button class="btn btn-primary" data-close data-first>Done</button></div>');
+  }
+  function scoreDialog(id) {
+    var m = mById(id), N = need(), sel = m.status === 'done' ? { a: m.sa, b: m.sb } : { a: null, b: null };
+    function block(winner, pid) {
+      var btns = ''; for (var n = 0; n < N; n++) btns += '<button type="button" role="radio" aria-checked="false" data-w="' + winner + '" data-n="' + n + '">' + N + '–' + n + '</button>';
+      return '<div class="blk"><span>' + nm(pid) + ' wins</span><div class="sets" style="grid-template-columns:repeat(' + N + ',1fr)" role="radiogroup" aria-label="Result if ' + nm(pid) + ' wins">' + btns + '</div></div>';
+    }
+    openDialog('<h2 id="dt">' + (m.status === 'done' ? 'Edit result' : 'Enter result') + (m.table ? ' · Table ' + m.table : '') + '</h2><div class="qres">' + block('a', m.a) + block('b', m.b) + '</div><div class="verdict" id="vd" role="status"></div>' + actions(cancelBtn(), '<button type="button" class="btn btn-primary" id="save" disabled>Save result</button>'), {
+      click: function (e) {
+        var b = e.target.closest('.sets button');
+        if (b) { var w = b.dataset.w, l = +b.dataset.n; sel = w === 'a' ? { a: N, b: l } : { a: l, b: N }; upd(); return true; }
+        if (e.target.closest('#save')) { var a = sel.a, bb = sel.b; closeDialog(); saveScore(id, a, bb); return true; }
+      }
+    });
+    function upd() {
+      dlg.querySelectorAll('.sets button').forEach(function (b) { var w = b.dataset.w, l = +b.dataset.n; b.setAttribute('aria-checked', String(sel.a != null && (w === 'a' ? sel.a === N && sel.b === l : sel.b === N && sel.a === l))); });
+      var v = $('#vd'), ok = sel.a != null;
+      if (ok) { v.className = 'verdict good'; v.textContent = (sel.a > sel.b ? nm(m.a) : nm(m.b)) + ' wins ' + Math.max(sel.a, sel.b) + '–' + Math.min(sel.a, sel.b); }
+      else { v.className = 'verdict'; v.textContent = 'Best of ' + bestOf() + '. Tap who won and the set score.'; }
+      $('#save').disabled = !ok;
+    }
+    upd();
+  }
+  function saveScore(id, a, b) {
+    var snap = JSON.stringify(S), m = mById(id), wasDone = m.status === 'done', freed = m.table;
+    m.sa = a; m.sb = b;
+    if (!wasDone) { m.status = 'done'; m.seq = ++S.seq; m.table = null; m.called = false; U.placed = fill(S); }
+    render(true);
+    toast(nm(a > b ? m.a : m.b) + ' won ' + Math.max(a, b) + '–' + Math.min(a, b) + (wasDone ? ' (edited)' : (freed ? '. Table ' + freed + ' is free for the next match.' : '')), snap);
+  }
+
+  function lateDialog() {
+    var gs = groups(S), sizes = gs.map(function (g) { return [g, S.players.filter(function (p) { return p.g === g; }).length]; }), small = sizes.slice().sort(function (a, b) { return a[1] - b[1]; })[0];
+    var err = '';
+    function html() {
+      return '<h2 id="dt">Late check-in</h2><form>' + fld('lt-name', 'Player name', '', { ac: 'off', err: err }) + fld('lt-org', 'Club', '', { opt: 1, ac: 'off' }) +
+        '<div class="f"><label class="lab" for="lt-g">Group</label><select class="in" id="lt-g"><option value="auto">Auto: smallest group (Group ' + small[0] + ', ' + small[1] + ' players)</option>' + sizes.map(function (s) { return '<option value="' + s[0] + '">Group ' + s[0] + ' (' + s[1] + ' players)</option>'; }).join('') + '</select><span class="msg">The new player gets a match against everyone already in the group, added to the end of the queue.</span></div>' +
+        actions(cancelBtn(), '<button class="btn btn-primary" type="submit">Add player</button>') + '</form>';
+    }
+    openDialog(html(), {
+      submit: function () {
+        var n = $('#lt-name').value.trim(), o = $('#lt-org').value.trim(), g = $('#lt-g').value;
+        if (!n) { var gv = $('#lt-g').value; err = 'Enter the player’s name'; dlg.querySelector('.dialog').innerHTML = html(); $('#lt-g').value = gv; $('#lt-name').focus(); return; }
+        if (S.players.some(function (p) { return p.name.toLowerCase() === n.toLowerCase(); })) { err = n + ' is already in this division'; dlg.querySelector('.dialog').innerHTML = html(); $('#lt-name').value = n; $('#lt-name').focus(); return; }
+        closeDialog(); addLate(n, o, g === 'auto' ? small[0] : g);
+      }
+    });
+  }
+  function addLate(name, org, g) {
+    var snap = JSON.stringify(S), id = 'p' + (S.nextP++);
+    var members = S.players.filter(function (p) { return p.g === g; });
+    S.players.push({ id: id, name: name, org: org || 'Independent', g: g });
+    members.forEach(function (p, i) { S.matches.push({ id: 'L' + id + i, g: g, a: p.id, b: id, status: 'queued', table: null, called: false, sa: null, sb: null, order: S.nextOrder++, seq: 0 }); });
+    S.notes = [name + ' joined Group ' + g + '. ' + members.length + ' new matches were added to the end of the queue.'];
+    reindex(); var p2 = fill(S); U.placed = p2; render(true); toast(name + ' added to Group ' + g, snap);
+  }
+  function moveDialog(pid) {
+    var p = PBY[pid], played = S.matches.some(function (m) { return (m.a === pid || m.b === pid) && (m.status === 'done' || m.status === 'table'); });
+    var others = groups(S).filter(function (g) { return g !== p.g; });
+    openDialog('<h2 id="dt">Move to another group</h2><form><p><strong>' + esc(p.name) + '</strong> is in Group ' + p.g + '.</p>' +
+      (played ? banner(esc(p.name) + ' has already played or is on a table, so they can’t move. Moving would erase real results.') : '<div class="f"><label class="lab" for="mv-g">Target group</label><select class="in" id="mv-g">' + others.map(function (g) { return '<option value="' + g + '">Group ' + g + '</option>'; }).join('') + '</select><span class="msg">Their unplayed matches are replaced with new ones in the target group.</span></div>') +
+      actions(cancelBtn(), '<button class="btn btn-primary" type="submit"' + (played ? ' disabled' : '') + '>Move player</button>') + '</form>', {
+      submit: function () {
+        if (played) return; var g = $('#mv-g').value, snap = JSON.stringify(S);
+        S.matches = S.matches.filter(function (m) { return !((m.a === pid || m.b === pid) && m.status === 'queued'); });
+        p.g = g; S.players.filter(function (x) { return x.g === g && x.id !== pid; }).forEach(function (x, i) { S.matches.push({ id: 'M' + pid + i, g: g, a: x.id, b: pid, status: 'queued', table: null, called: false, sa: null, sb: null, order: S.nextOrder++, seq: 0 }); });
+        closeDialog(); render(true); toast(p.name + ' moved to Group ' + g, snap);
+      }
+    });
+  }
+  function infoDialog(pid) {
+    var p = PBY[pid], ms = S.matches.filter(function (m) { return m.a === pid || m.b === pid; }).sort(function (a, b) { return a.order - b.order; });
+    openDialog('<div class="head"><h2 id="dt">' + esc(p.name) + '</h2><p class="sub">' + esc(p.org) + ' · Group ' + p.g + (p.seed ? ' · Seeded' : '') + '</p></div><div>' + ms.map(function (m) {
+      var opp = m.a === pid ? m.b : m.a, res = m.status === 'done' ? ((m.a === pid ? m.sa : m.sb) + ' – ' + (m.a === pid ? m.sb : m.sa)) : (m.status === 'table' ? 'Table ' + m.table : 'Upcoming'), won = m.status === 'done' && ((m.a === pid) === (m.sa > m.sb));
+      return '<div class="minirow"><span>vs ' + nm(opp) + '</span><span class="score' + (m.status === 'done' ? (won ? ' win' : ' lose') : '') + '">' + res + '</span></div>'; }).join('') + '</div><div class="dlg-actions"><button class="btn btn-primary" data-close data-first>Close</button></div>');
+  }
+  function editDialog(pid, e2) {
+    var arr = e2 ? S.e2.players : S.players, p = arr.filter(function (x) { return x.id === pid; })[0], err = '';
+    function html() { return '<h2 id="dt">Edit entry</h2><form>' + fld('ed-name', 'Player name', p.name, { err: err }) + fld('ed-org', 'Club', p.org, { opt: 1 }) + (e2 ? '<div>' + sw('ed-seed', p.seed, 'Seeded') + '</div>' : '') + actions(cancelBtn(), '<button class="btn btn-primary" type="submit">Save</button>') + '</form>'; }
+    var seed = !!p.seed;
+    openDialog(html(), {
+      click: function (e) { var s = e.target.closest('#ed-seed'); if (s) { seed = !seed; s.setAttribute('aria-checked', String(seed)); return true; } },
+      submit: function () { var n = $('#ed-name').value.trim(), o = $('#ed-org').value.trim(); if (!n) { err = 'Enter the player’s name'; var v = $('#ed-org').value; dlg.querySelector('.dialog').innerHTML = html(); $('#ed-org').value = v; $('#ed-name').focus(); return; } var snap = JSON.stringify(S); p.name = n; p.org = o; if (e2) p.seed = seed; reindex(); closeDialog(); render(true); toast('Saved ' + n, snap); }
+    });
+  }
+  function ranksDialog(g) {
+    var cur = standings(S, g).map(function (r) { return r.id; }), note = (S.manual[g] && S.manual[g].note) || '';
+    function html() { return '<h2 id="dt">Set ranks · Group ' + g + '</h2><p class="sub">Use this when tied players are decided off the system, for example head-to-head on paper. Viewers see your note.</p><div class="order">' + cur.map(function (id, i) { return '<div class="o"><span class="pos">' + (i + 1) + '</span><span>' + nm(id) + '</span><button type="button" class="icon-btn" data-mv="' + i + '" data-d="-1" aria-label="Move ' + esc(nm(id)) + ' up"' + (i === 0 ? ' disabled style="opacity:.3"' : '') + '>' + ic('up') + '</button><button type="button" class="icon-btn" data-mv="' + i + '" data-d="1" aria-label="Move ' + esc(nm(id)) + ' down"' + (i === cur.length - 1 ? ' disabled style="opacity:.3"' : '') + '>' + ic('down') + '</button></div>'; }).join('') + '</div><form>' + fld('rk-note', 'Note for viewers', note, { opt: 1, ph: 'e.g. Decided by head-to-head' }) + actions(S.manual[g] ? '<button type="button" class="btn btn-ghost" id="rk-clear">Use automatic ranks</button>' : cancelBtn(), '<button class="btn btn-primary" type="submit">Save ranks</button>') + '</form>'; }
+    openDialog(html(), {
+      click: function (e) {
+        var b = e.target.closest('[data-mv]');
+        if (b) { note = $('#rk-note').value; var i = +b.dataset.mv, d = +b.dataset.d, t = cur[i]; cur[i] = cur[i + d]; cur[i + d] = t; dlg.querySelector('.dialog').innerHTML = html(); var nb = dlg.querySelector('[data-mv="' + (i + d) + '"][data-d="' + d + '"]') || dlg.querySelector('[data-mv="' + (i + d) + '"]'); if (nb) nb.focus(); return true; }
+        if (e.target.closest('#rk-clear')) { var snap = JSON.stringify(S); delete S.manual[g]; closeDialog(); render(true); toast('Group ' + g + ' uses automatic ranks', snap); return true; }
+      },
+      submit: function () { var snap = JSON.stringify(S); S.manual[g] = { order: cur.slice(), note: $('#rk-note').value.trim() }; closeDialog(); render(true); toast('Group ' + g + ' ranks saved', snap); }
+    });
+  }
+  function koDialog() {
+    var sel = S.ko ? S.ko.type : S.cfg.ko;
+    function html() { return '<h2 id="dt">' + (S.ko ? 'Regenerate' : 'Generate') + ' knockout bracket</h2><p class="sub">Top ' + S.cfg.adv + ' from each group advance: ' + S.cfg.adv * groups(S).length + ' players in total.</p><div class="opts" role="radiogroup" aria-label="Bracket type" style="grid-template-columns:1fr">' + Object.keys(KO).map(function (k) { return '<button type="button" class="copt" role="radio" aria-checked="' + (sel === k) + '" data-k="' + k + '"><b>' + KO[k][0] + '</b><span>' + KO[k][1] + '</span></button>'; }).join('') + '</div>' + actions(cancelBtn(), '<button type="button" class="btn btn-primary" id="ko-go">' + (S.ko ? 'Regenerate' : 'Generate bracket') + '</button>'); }
+    openDialog(html(), {
+      click: function (e) {
+        var c = e.target.closest('[data-k]'); if (c) { sel = c.dataset.k; dlg.querySelectorAll('[data-k]').forEach(function (x) { x.setAttribute('aria-checked', String(x.dataset.k === sel)); }); return true; }
+        if (e.target.closest('#ko-go')) { var snap = JSON.stringify(S); S.ko = { type: sel }; S.cfg.ko = sel; closeDialog(); render(true); toast('Bracket generated · ' + KO[sel][0] + ' seeding', snap); return true; }
+      }
+    });
+  }
+  function genGroupsDialog() {
+    var e = S.e2, opts = layouts(e.players.length), sel = 0;
+    opts.forEach(function (o, i) { if (Math.abs(o.sizes[0] - 4) < Math.abs(opts[sel].sizes[0] - 4)) sel = i; });
+    function html() { return '<h2 id="dt">Generate group stage</h2><div><div class="minirow"><span class="sub">Players</span><span class="num">' + e.players.length + '</span></div><div class="minirow"><span class="sub">Seeded</span><span class="num">' + e.players.filter(function (p) { return p.seed; }).length + '</span></div><div class="minirow"><span class="sub">Advance per group</span><span class="num">' + e.cfg.adv + '</span></div><div class="minirow"><span class="sub">Tables</span><span class="num">' + e.tables + '</span></div></div>' +
+      '<div class="f"><span class="lab">Group layout</span><div class="opts" role="radiogroup" aria-label="Group layout">' + opts.map(function (o, i) { return '<button type="button" class="copt" role="radio" aria-checked="' + (i === sel) + '" data-l="' + i + '"><b>' + o.g + ' groups</b><span>' + o.sizes.join(' + ') + ' players · ' + o.m + ' matches</span></button>'; }).join('') + '</div><span class="msg">Seeds are spread across groups first, then the rest fill in order.</span></div>' + actions(cancelBtn(), '<button type="button" class="btn btn-primary" id="gg-go">Generate group stage</button>'); }
+    openDialog(html(), {
+      click: function (ev) {
+        var c = ev.target.closest('[data-l]'); if (c) { sel = +c.dataset.l; dlg.querySelectorAll('[data-l]').forEach(function (x) { x.setAttribute('aria-checked', String(+x.dataset.l === sel)); }); return true; }
+        if (ev.target.closest('#gg-go')) {
+          var snap = JSON.stringify(S), o = opts[sel], seeds = e.players.filter(function (p) { return p.seed; }), rest = e.players.filter(function (p) { return !p.seed; }), grs = [];
+          for (var i = 0; i < o.g; i++) grs.push({ label: String.fromCharCode(65 + i), ids: [], cap: o.sizes[i] });
+          seeds.concat(rest).forEach(function (p) { var t = grs.filter(function (g) { return g.ids.length < g.cap; }).sort(function (a, b) { return a.ids.length - b.ids.length; })[0]; t.ids.push(p.id); p.g = t.label; });
+          e.groups = grs; e.started = true; e.matches = o.m; closeDialog(); U.tab = 'groups2'; render(true); toast('Group stage generated · ' + o.m + ' matches', snap); return true;
+        }
+      }
+    });
+  }
+  function confirmDelete(title, body, verb, fn) {
+    openDialog('<h2 id="dt">' + title + '</h2><p class="sub">' + body + '</p>' + actions('<button type="button" class="btn btn-quiet" data-close data-first>Cancel</button>', '<button type="button" class="btn btn-danger" id="cd-go">' + verb + '</button>'), { click: function (e) { if (e.target.closest('#cd-go')) { closeDialog(); fn(); return true; } } });
+  }
+
+  /* toast with undo */
+  var toastT = 0;
+  function toast(msg, snap) {
+    var box = $('#toasts'); box.innerHTML = ''; clearTimeout(toastT);
+    var el = document.createElement('div'); el.className = 'toast';
+    el.innerHTML = '<span>' + msg + '</span>' + (snap ? '<button type="button">Undo</button>' : '');
+    box.appendChild(el);
+    function out() { el.classList.add('out'); setTimeout(function () { el.remove(); }, 160); }
+    toastT = setTimeout(out, snap ? 6000 : 3200);
+    if (snap) el.querySelector('button').addEventListener('click', function () { S = JSON.parse(snap); reindex(); clearTimeout(toastT); out(); render(true); });
+  }
+
+  /* ---------- events ---------- */
+  function doSubmit(form) {
+    var f = form.dataset.form;
+    if (f === 'login') {
+      if (L.busy) return; L.err = ''; L.busy = true; render(true);
+      setTimeout(function () { L.busy = false; if (L.pw === 'wrong') { L.err = 'Invalid email or password'; render(true); } else { go('admin'); toast('Signed in'); } }, 650);
+    } else if (f === 'admin') {
+      A.err = {}; if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(A.email.trim())) A.err.email = 'Enter a valid email, like name@club.org'; if (A.pw.length < 8) A.err.pw = 'Use at least 8 characters.';
+      if (A.err.email || A.err.pw) { U.focusErr = true; render(true); return; }
+      var em = A.email.trim(); go('admin'); toast('Admin created for ' + em);
+    } else if (f === 'hub') {
+      var t = curTour(); if (!H.name.trim()) { toast('Tournament name can’t be empty'); return; } var snap = JSON.stringify(S); t.name = H.name.trim(); t.venue = H.venue.trim(); t.date = H.date; render(true); toast('Tournament saved', snap);
+    } else if (f === 'wiz0') {
+      var then = (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.then) || W.then || 'create';
+      W.err = {}; if (!W.name.trim()) W.err.name = 'Give the tournament a name'; if (!W.date) W.err.date = 'Pick a start date';
+      if (W.err.name || W.err.date) { U.focusErr = true; render(true); return; }
+      W.then = null;
+      if (then === 'divs') { W.step = 1; render(false); window.scrollTo(0, 0); } else createTournament();
+    } else if (f === 'add2') {
+      var n = P2.name.trim(); P2.err = '';
+      if (!n) P2.err = 'Enter the player’s name'; else if (S.e2.players.some(function (p) { return p.name.toLowerCase() === n.toLowerCase(); })) P2.err = n + ' is already registered';
+      if (P2.err) { U.focusErr = true; render(true); return; }
+      var s0 = JSON.stringify(S); S.e2.players.push({ id: 'q' + (S.e2.nextP++), name: n, org: P2.org.trim() || 'Independent', seed: P2.seed }); P2.name = ''; P2.org = ''; P2.seed = false; render(true); var nf = $('#p2-name'); if (nf) nf.focus(); toast(n + ' registered', s0);
+    }
+  }
+  function createTournament() {
+    var snap = JSON.stringify(S), id = 't' + (S.T.length + 1) + Math.random().toString(36).slice(2, 4);
+    S.T.push({ id: id, name: W.name.trim(), venue: W.venue.trim(), date: W.date, status: 'draft', divs: W.divs.map(function (d, i) { return { id: 'n' + i + id, name: divName(d), type: d.type, cat: d.cat, status: 'draft', ev: null }; }) });
+    U.curT = id; go('hub', { t: id }); toast('“' + W.name.trim() + '” created', snap);
+  }
+  document.addEventListener('submit', function (e) { var f = e.target.closest('[data-form]'); if (f) { e.preventDefault(); doSubmit(f); } });
+
+  app.addEventListener('click', function (e) {
+    var t;
+    if ((t = e.target.closest('[data-set]'))) { var v = t.dataset.val; setPath(t.dataset.set, t.dataset.num ? +v : v); render(true); return; }
+    if ((t = e.target.closest('[data-step]'))) { if (t.disabled) return; var cur = getPath(t.dataset.step), nv = Math.max(+t.dataset.min, Math.min(+t.dataset.max, cur + +t.dataset.d)); if (t.dataset.step === 'S.tables') { if (+t.dataset.d < 0 && onTable(S).some(function (m) { return m.table === S.tables; })) { toast('Table ' + S.tables + ' is in use. Finish its match first.'); return; } setPath('S.tables', nv); U.placed = fill(S); } else setPath(t.dataset.step, nv); render(true); return; }
+    if ((t = e.target.closest('[data-go]'))) {
+      e.preventDefault(); var g = t.dataset.go;
+      if (t.dataset.signout) { toast('Signed out'); }
+      if (t.dataset.sample) toast('Opening the sample division');
+      go(g, t.dataset.t ? { t: t.dataset.t } : {}); return;
+    }
+    if ((t = e.target.closest('[data-tab]'))) { U.tab = t.dataset.tab; render(true); return; }
+    if ((t = e.target.closest('[data-ltab]'))) { U.ltab = t.dataset.ltab; render(true); return; }
+    if ((t = e.target.closest('[data-pf]'))) { U.pf = t.dataset.pf; render(true); return; }
+    if ((t = e.target.closest('[data-ef]'))) { U.e2f = t.dataset.ef; render(true); return; }
+    if ((t = e.target.closest('[data-act]'))) {
+      var a = t.dataset.act, id = t.dataset.id;
+      if (a === 'call') announce(id);
+      else if (a === 'score') scoreDialog(id);
+      else if (a === 'reset') { S = initial(); reindex(); U.q = ''; U.ltab = 'next'; U.pq = ''; U.q2 = ''; P2 = { name: '', org: '', seed: false, err: '' }; render(true); toast('Demo reset to the start of the day'); }
+      else if (a === 'late') lateDialog();
+      else if (a === 'move-p') moveDialog(id);
+      else if (a === 'info-p') infoDialog(id);
+      else if (a === 'edit-p') editDialog(id, false);
+      else if (a === 'edit2') editDialog(id, true);
+      else if (a === 'ranks') ranksDialog(t.dataset.g);
+      else if (a === 'gen-ko') koDialog();
+      else if (a === 'gen-groups') genGroupsDialog();
+      else if (a === 'p2-seed') { P2.seed = !P2.seed; t.setAttribute('aria-checked', String(P2.seed)); }
+      else if (a === 'seed2') { var p = S.e2.players.filter(function (x) { return x.id === id; })[0]; p.seed = !p.seed; render(true); }
+      else if (a === 'rm2') { var snap = JSON.stringify(S), pl = S.e2.players.filter(function (x) { return x.id === id; })[0]; S.e2.players = S.e2.players.filter(function (x) { return x.id !== id; }); render(true); toast(pl.name + ' removed', snap); }
+      else if (a === 'preset') { var pr = PRESETS[+t.dataset.i]; W.divs.push(draftDiv(pr[1], pr[2])); render(true); }
+      else if (a === 'add-div') { W.divs.push(draftDiv()); render(true); }
+      else if (a === 'rm-div') { W.divs.splice(+t.dataset.i, 1); render(true); }
+      else if (a === 'w-back') { W.step = 0; render(false); window.scrollTo(0, 0); }
+      else if (a === 'create-w') { if (!W.divs.length) { W.err.divs = 'Add at least one division, or go back and create without divisions.'; render(true); return; } createTournament(); }
+      else if (a === 'ae-preset') { var q = PRESETS[+t.dataset.i]; AE.d.type = q[1]; AE.d.cat = q[2]; render(true); }
+      else if (a === 'ae-save') { var tt = curTour(), sn = JSON.stringify(S); tt.divs.push({ id: 'ad' + Date.now(), name: divName(AE.d), type: AE.d.type, cat: AE.d.cat, status: 'draft', ev: null }); go('hub'); toast('“' + divName(AE.d) + '” added', sn); }
+      else if (a === 'del-tour') confirmDelete('Delete “' + esc(curTour().name) + '”?', 'This removes the tournament, its divisions and every match. You can undo right after.', 'Delete tournament', function () { var sn = JSON.stringify(S); S.T = S.T.filter(function (x) { return x.id !== U.curT; }); U.curT = S.T[0] ? S.T[0].id : ''; go('admin'); toast('Tournament deleted', sn); });
+      else if (a === 'del-div') confirmDelete('Delete division data?', 'This removes every entry, group and match in this division. You can undo right after.', 'Delete division data', function () { var sn = JSON.stringify(S); if (U.view === 'event') { S.matches = []; S.players = []; S.notes = []; reindex(); } else { S.e2.players = []; S.e2.started = false; S.e2.groups = null; } go('hub'); toast('Division data deleted', sn); });
+    }
+  });
+  app.addEventListener('change', function (e) { if (e.target.dataset.file) { W.file = e.target.files[0] ? e.target.files[0].name : ''; render(true); } });
+  app.addEventListener('input', function (e) {
+    var t = e.target;
+    if (t.id === 'q') { U.q = t.value; $('#lists').innerHTML = listHTML(); $('#findme').innerHTML = findMe(); return; }
+    if (t.id === 'pq') { U.pq = t.value; $('#plist').innerHTML = playersList(); return; }
+    if (t.id === 'q2') { U.q2 = t.value; $('#e2list').innerHTML = e2List(); return; }
+    if (t.dataset.bind) {
+      setPath(t.dataset.bind, t.value);
+      if (t.dataset.pwhelp) { var m = $('#a-pw-m'); m.className = 'msg'; m.textContent = t.value.length >= 8 ? 'Good. 8 or more characters.' : 'At least 8 characters.'; }
+    }
+  });
+  app.addEventListener('submit', function () { /* handled on document */ });
+  var wizThen = null;
+  app.addEventListener('click', function (e) { var b = e.target.closest('[data-then]'); if (b) W.then = b.dataset.then; }, true);
+
+  /* boot */
+  buildJump();
+  var h = location.hash.replace('#', '');
+  if (h === 'admin') { U.view = 'admin'; U.admin = true; }
+  render(false);
+})();
+</script>

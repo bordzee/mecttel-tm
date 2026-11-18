@@ -12,14 +12,11 @@ import { StatusPopups } from './ui/StatusPopups'
 import { GroupStageNavigator } from './GroupStageNavigator'
 import { MatchScoreDialog } from './MatchScoreDialog'
 import { QueueAnnouncementDialog } from './QueueAnnouncementDialog'
+import { createLiveEventLoader } from '../lib/liveEventData'
 import { useMinLoading } from '../hooks/useMinLoading'
 import { useRealtimeEvent } from '../hooks/useRealtimeEvent'
 import {
   assignMatchTable,
-  fetchEntries,
-  fetchEvent,
-  fetchGroupMatches,
-  fetchGroups,
   fetchKnockoutMatches,
   saveGroupMatchResult,
   saveKnockoutMatchResult,
@@ -28,6 +25,7 @@ import { buildEventMatchQueue } from '../lib/matchQueue'
 import {
   buildEventQueueState,
   filterQueueByName,
+  findPlayerStatus,
   getTableAnnouncement,
   UP_NEXT_DISPLAY_LIMIT,
   type TableAnnouncement,
@@ -36,7 +34,7 @@ import { normalizeTableCount } from '../lib/tableLabels'
 import { setRulesStageForRound } from '../lib/knockoutRounds'
 import { matchEffectiveRound } from '../lib/knockoutTabs'
 import type { QueueMatchView } from '../lib/matchQueue'
-import type { GroupMatch, KnockoutMatch, TournamentEvent } from '../types'
+import type { GroupMatch, KnockoutMatch, TournamentEntry, TournamentEvent } from '../types'
 
 function matchStageLabel(m: QueueMatchView): string {
   if (m.stage === 'group' && m.groupLabel) return `Group ${m.groupLabel}`
@@ -54,11 +52,11 @@ function MatchRow({
   hideTableBadge?: boolean
 }) {
   return (
-    <div className={`text-sm ${highlight ? 'text-text-primary' : 'text-text-bluewhite'}`}>
-      <p className={`font-bold ${highlight ? 'text-text-primary' : ''}`}>
+    <div className="text-sm text-text-primary">
+      <p className={highlight ? 'font-semibold' : 'font-medium'}>
         {match.homeName} vs {match.awayName}
       </p>
-      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+      <div className="flex flex-wrap items-center gap-x-2 mt-0.5">
         {matchStageLabel(match) && (
           <span className="text-xs text-text-steel">{matchStageLabel(match)}</span>
         )}
@@ -66,6 +64,44 @@ function MatchRow({
           <span className="text-xs text-amber">{match.restReason}</span>
         )}
       </div>
+    </div>
+  )
+}
+
+/** A table-tennis table seen from above: green surface, outline, net line down the middle. */
+function Court({ match, animate }: { match: QueueMatchView; animate: boolean }) {
+  const restWaived = !match.playable && Boolean(match.restReason)
+  return (
+    <>
+    <div
+      className={`relative isolate grid grid-cols-2 items-center min-h-[108px] rounded-[10px] bg-court text-on-court px-5 py-3.5 ${
+        animate ? 'animate-tt-place' : ''
+      }`}
+    >
+      <span aria-hidden className="absolute inset-2 -z-10 rounded-[5px] border-[1.5px] border-white/55" />
+      <span aria-hidden className="absolute top-2 bottom-2 left-1/2 -z-10 w-0.5 -ml-px bg-white/85" />
+      <p className="min-w-0 px-3 text-[15px] font-semibold leading-tight [overflow-wrap:anywhere]">
+        {match.homeName}
+      </p>
+      <p className="min-w-0 px-3 text-right text-[15px] font-semibold leading-tight [overflow-wrap:anywhere]">
+        {match.awayName}
+      </p>
+    </div>
+    {restWaived && (
+      <p className="mt-1.5 text-xs text-amber">
+        Rest rule waived: {match.restReason}. No other match could be played.
+      </p>
+    )}
+    </>
+  )
+}
+
+function PlayerStatusCard({ status }: { status: NonNullable<ReturnType<typeof findPlayerStatus>> }) {
+  return (
+    <div role="status" className="animate-tt-place rounded-[14px] bg-brand-100 px-5 py-4 space-y-0.5">
+      <p className="text-xs font-medium uppercase tracking-[0.08em] text-text-faint">{status.name}</p>
+      <p className="text-xl font-semibold tracking-tight text-text-primary">{status.title}</p>
+      <p className="text-sm text-text-steel">{status.detail}</p>
     </div>
   )
 }
@@ -84,9 +120,9 @@ const QUEUE_PANEL_TABS: { id: QueuePanelTab; label: string }[] = [
 ]
 
 function tableGridClass(tableCount: number): string {
-  if (tableCount >= 3) return 'grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-  if (tableCount === 2) return 'grid gap-3 grid-cols-1 sm:grid-cols-2'
-  return 'grid gap-3 grid-cols-1'
+  if (tableCount >= 3) return 'grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+  if (tableCount === 2) return 'grid gap-4 grid-cols-1 sm:grid-cols-2'
+  return 'grid gap-4 grid-cols-1'
 }
 
 export function EventQueueView({
@@ -104,7 +140,7 @@ export function EventQueueView({
   const [groups, setGroups] = useState<{ id: string; label: string }[]>([])
   const [groupMatches, setGroupMatches] = useState<GroupMatch[]>([])
   const [knockoutMatches, setKnockoutMatches] = useState<KnockoutMatch[]>([])
-  const [entries, setEntries] = useState<Awaited<ReturnType<typeof fetchEntries>>>([])
+  const [entries, setEntries] = useState<TournamentEntry[]>([])
   const [loading, setLoading] = useState(true)
   const showSkeleton = useMinLoading(loading)
   const [error, setError] = useState('')
@@ -115,16 +151,15 @@ export function EventQueueView({
   const [saving, setSaving] = useState(false)
   const [queuePanelTab, setQueuePanelTab] = useState<QueuePanelTab>('playing')
   const persistedTableAssignRef = useRef(new Set<string>())
+  const [armed, setArmed] = useState(false)
 
-  const loadQueueData = useCallback(async () => {
+  // Participants are reused between live updates; see createLiveEventLoader.
+  const loader = useRef(createLiveEventLoader({ withMembers: false }))
+
+  const loadQueueData = useCallback(async (options?: { force?: boolean }) => {
     try {
-      const [ev, g, gm, km, e] = await Promise.all([
-        fetchEvent(tournamentId, eventId),
-        fetchGroups(tournamentId, eventId),
-        fetchGroupMatches(tournamentId, eventId),
-        fetchKnockoutMatches(tournamentId, eventId),
-        fetchEntries(tournamentId, eventId),
-      ])
+      const live = await loader.current(tournamentId, eventId, options)
+      const { event: ev, groups: g, groupMatches: gm, knockoutMatches: km, entries: e } = live
       setEvent(ev)
       setGroups(g.map((x) => ({ id: x.id, label: x.label })))
       setGroupMatches(gm)
@@ -144,8 +179,15 @@ export function EventQueueView({
 
   useEffect(() => {
     setLoading(true)
-    loadQueueData().finally(() => setLoading(false))
+    loadQueueData({ force: true }).finally(() => setLoading(false))
   }, [loadQueueData])
+
+  // Entrance motion is for changes people cause, never for the first paint.
+  useEffect(() => {
+    if (loading) return
+    const id = window.setTimeout(() => setArmed(true), 400)
+    return () => window.clearTimeout(id)
+  }, [loading])
 
   useRealtimeEvent(tournamentId, eventId, fetchEventData, (msg) => setError(msg))
 
@@ -164,6 +206,11 @@ export function EventQueueView({
   const queueState = useMemo(() => {
     return filterQueueByName(baseQueueState, search)
   }, [baseQueueState, search])
+
+  const playerStatus = useMemo(
+    () => findPlayerStatus(baseQueueState, search, tableCount),
+    [baseQueueState, search, tableCount],
+  )
 
   useEffect(() => {
     if (!admin || loading) return
@@ -194,6 +241,28 @@ export function EventQueueView({
       cancelled = true
     }
   }, [admin, loading, baseQueueState.tables, loadQueueData])
+
+  // Public screen: when a table's finished match is replaced (live update), call the next match.
+  // Admins get the same popup right after they save a score, so this is for viewers only.
+  const prevTableMatchesRef = useRef<Map<number, string> | null>(null)
+  useEffect(() => {
+    if (admin || loading) return
+    const now = new Map<number, string>()
+    for (const slot of baseQueueState.tables) if (slot.match) now.set(slot.tableNumber, slot.match.matchId)
+    const prev = prevTableMatchesRef.current
+    prevTableMatchesRef.current = now
+    if (!prev || !armed) return
+    const finished = new Set(
+      [...groupMatches, ...knockoutMatches].filter((m) => m.status === 'completed').map((m) => m.id),
+    )
+    let changedTable: number | null = null
+    for (const [table, matchId] of prev) {
+      if (now.get(table) !== matchId && finished.has(matchId)) changedTable = table
+    }
+    if (changedTable === null) return
+    setAnnouncement(getTableAnnouncement(changedTable, baseQueueState))
+    setAnnouncementOpen(true)
+  }, [admin, loading, armed, baseQueueState, groupMatches, knockoutMatches])
 
   const pendingCount = useMemo(() => {
     const onTables = baseQueueState.tables.filter((slot) => slot.match).length
@@ -347,11 +416,15 @@ export function EventQueueView({
       </div>
 
       <TextInput
+        type="search"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search your name…"
+        placeholder="Find your match"
         aria-label="Search queue by player name"
+        autoComplete="off"
       />
+
+      {playerStatus && <PlayerStatusCard status={playerStatus} />}
 
       <GroupStageNavigator
         tabs={queuePanelTabs}
@@ -365,24 +438,29 @@ export function EventQueueView({
             {queueState.tables.map((slot) => (
               <div
                 key={slot.tableNumber}
-                className={`rounded-xl border p-3.5 space-y-3 min-h-[120px] flex flex-col ${
-                  slot.match
-                    ? 'border-brand-500/40 bg-brand-500/10'
-                    : 'border-border bg-card-raised'
-                }`}
+                className="rounded-[14px] bg-card ring-1 ring-border p-4 space-y-3 flex flex-col"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold text-text-primary">{slot.label}</span>
+                  <span className="text-base font-semibold text-text-primary">{slot.label}</span>
                   {slot.match ? (
-                    <TagPill>Now</TagPill>
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-0.5 rounded-full ${
+                        slot.match.calledAt ? 'bg-live-bg text-live-text' : 'bg-green-soft text-winner'
+                      }`}
+                    >
+                      {slot.match.calledAt ? 'Called' : 'On court'}
+                    </span>
                   ) : (
-                    <span className="text-xs text-text-steel">Idle</span>
+                    <TagPill>Free</TagPill>
                   )}
                 </div>
 
                 {slot.match ? (
                   <>
-                    <MatchRow match={slot.match} highlight hideTableBadge />
+                    <Court key={slot.match.matchId} match={slot.match} animate={armed} />
+                    {matchStageLabel(slot.match) && (
+                      <p className="text-[13px] text-text-steel">{matchStageLabel(slot.match)}</p>
+                    )}
                     {admin && (
                       <Button
                         type="button"
@@ -395,13 +473,22 @@ export function EventQueueView({
                       </Button>
                     )}
                   </>
-                ) : slot.nextMatch ? (
-                  <div className="space-y-1 mt-auto">
-                    <p className="text-xs text-text-steel">Next up</p>
-                    <MatchRow match={slot.nextMatch} hideTableBadge />
-                  </div>
                 ) : (
-                  <p className="text-sm text-text-steel mt-auto">No match queued for this table.</p>
+                  <>
+                    <div className="grid place-items-center min-h-[108px] rounded-[10px] bg-court-idle px-4 text-center">
+                      <p className="text-sm text-text-steel">
+                        {slot.nextMatch
+                          ? 'Waiting for the next match'
+                          : 'No match queued for this table.'}
+                      </p>
+                    </div>
+                    {slot.nextMatch && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-text-faint">Next up</p>
+                        <MatchRow match={slot.nextMatch} hideTableBadge />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ))}
@@ -410,20 +497,18 @@ export function EventQueueView({
       )}
 
       {queuePanelTab === 'up-next' && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {upNextVisible.length > 0 ? (
-            <section className="rounded-2xl border border-border-strong bg-card p-4 space-y-2">
+            <section className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-brand-300">Up next</p>
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-text-faint">Up next</p>
                 {upNextHiddenCount > 0 && (
-                  <span className="text-xs text-text-steel">
-                    +{upNextHiddenCount} more in queue
-                  </span>
+                  <span className="text-xs text-text-steel">+{upNextHiddenCount} more in queue</span>
                 )}
               </div>
-              <ul className="space-y-2">
+              <ul className="rounded-[14px] bg-card ring-1 ring-border divide-y divide-border">
                 {upNextVisible.map((m) => (
-                  <li key={m.matchId}>
+                  <li key={m.matchId} className="px-4 py-3">
                     <MatchRow match={m} />
                   </li>
                 ))}
@@ -434,18 +519,16 @@ export function EventQueueView({
           ) : null}
 
           {onDeckVisible.length > 0 && (
-            <section className="rounded-2xl border border-border bg-card-raised p-4 space-y-2">
+            <section className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-text-steel">On deck (rest)</p>
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-text-faint">On deck (rest)</p>
                 {onDeckHiddenCount > 0 && (
-                  <span className="text-xs text-text-steel">
-                    +{onDeckHiddenCount} more on deck
-                  </span>
+                  <span className="text-xs text-text-steel">+{onDeckHiddenCount} more on deck</span>
                 )}
               </div>
-              <ul className="space-y-2">
+              <ul className="rounded-[14px] bg-card ring-1 ring-border divide-y divide-border">
                 {onDeckVisible.map((m) => (
-                  <li key={m.matchId}>
+                  <li key={m.matchId} className="px-4 py-3">
                     <MatchRow match={m} />
                   </li>
                 ))}
@@ -458,19 +541,17 @@ export function EventQueueView({
       {queuePanelTab === 'waiting' && (
         <>
           {waitingVisible.length > 0 ? (
-            <section className="rounded-2xl border border-border bg-navy/40 p-4 space-y-2">
+            <section className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-text-steel">Waiting</p>
+                <p className="text-xs font-medium uppercase tracking-[0.08em] text-text-faint">Waiting</p>
                 {waitingHiddenCount > 0 && (
-                  <span className="text-xs text-text-steel">
-                    +{waitingHiddenCount} more waiting
-                  </span>
+                  <span className="text-xs text-text-steel">+{waitingHiddenCount} more waiting</span>
                 )}
               </div>
-              <ul className="space-y-1.5">
+              <ul className="rounded-[14px] bg-card ring-1 ring-border divide-y divide-border">
                 {waitingVisible.map((e) => (
-                  <li key={e.entryId} className="flex items-start justify-between gap-2 text-sm">
-                    <span className="font-semibold text-text-bluewhite truncate">{e.name}</span>
+                  <li key={e.entryId} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <span className="font-medium text-text-primary truncate">{e.name}</span>
                     <TagPill>{e.reason}</TagPill>
                   </li>
                 ))}
@@ -494,13 +575,12 @@ export function EventQueueView({
         />
       )}
 
-      {admin && (
-        <QueueAnnouncementDialog
-          open={announcementOpen}
-          announcement={announcement}
-          onClose={() => setAnnouncementOpen(false)}
-        />
-      )}
+      <QueueAnnouncementDialog
+        open={announcementOpen}
+        announcement={announcement}
+        title={admin ? 'Score saved' : 'Match finished'}
+        onClose={() => setAnnouncementOpen(false)}
+      />
     </div>
   )
 }
